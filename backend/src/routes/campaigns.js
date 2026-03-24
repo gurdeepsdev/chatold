@@ -1,0 +1,212 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../utils/db');
+const { auth } = require('../middleware/auth');
+
+// ── Helper: build absolute URL for files ──────────────────────
+function absoluteUrl(req, relativePath) {
+  if (!relativePath) return null;
+  if (relativePath.startsWith('http')) return relativePath;
+  return `${req.protocol}://${req.get('host')}${relativePath}`;
+}
+
+// Get available advertisers and campaign_subids for campaign creation
+router.get('/campaign-data', auth, async (req, res) => {
+  try {
+    const crmPool = db.crmPool;
+    
+    if (!crmPool) {
+      return res.status(500).json({ error: 'CRM database not configured' });
+    }
+
+    // Get unique advertisers from CRM campaign_data table by joining with login table
+    const [advertisers] = await crmPool.query(`
+      SELECT DISTINCT l.username
+      FROM campaign_data c
+      INNER JOIN login l ON l.id = c.user_id
+      WHERE c.user_id IS NOT NULL AND l.username IS NOT NULL AND l.username != ''
+      ORDER BY l.username
+    `);
+
+    // Get all campaign_subids from CRM campaign_data table
+    const [subIds] = await crmPool.query(`
+      SELECT DISTINCT sub_campaign_id, campaign_name, user_id
+      FROM campaign_data 
+      WHERE sub_campaign_id IS NOT NULL AND sub_campaign_id != ''
+      ORDER BY sub_campaign_id
+    `);
+
+    res.json({
+      advertisers: advertisers.map(adv => ({
+        id: adv.username, // Use username as ID
+        name: adv.full_name || adv.username, // Show full name if available, otherwise username
+        username: adv.username
+      })),
+      sub_ids: subIds.map(row => ({
+        sub_id: row.sub_campaign_id,
+        campaign_name: row.campaign_name,
+        user_id: row.user_id
+      }))
+    });
+  } catch (err) {
+    console.error('Error fetching campaign data from CRM:', err);
+    res.status(500).json({ error: 'Failed to fetch campaign data' });
+  }
+});
+
+// ── GET /api/campaigns — merge local + CRM source DB ─────────
+router.get('/', auth, async (req, res) => {
+  try {
+    // Always load from local crm_chat.campaigns first
+    const [localCampaigns] = await db.query(
+      `SELECT c.*, u.full_name as advertiser_name
+       FROM campaigns c LEFT JOIN users u ON u.id = c.advertiser_id
+       WHERE c.status != 'archived' ORDER BY c.campaign_name`
+    );
+
+    // If CRM source DB is configured, sync any missing campaigns
+    const crmPool = db.crmPool;
+    if (crmPool) {
+      try {
+        const table = process.env.CRM_CAMPAIGN_TABLE || 'campaigns';
+        const [crmRows] = await crmPool.query(
+          `SELECT * FROM \`${table}\` WHERE status != 'archived' ORDER BY campaign_name`
+        );
+
+        // Upsert CRM campaigns into local DB
+        for (const c of crmRows) {
+          const [exist] = await db.query(
+            'SELECT id FROM campaigns WHERE crm_source_id = ?', [c.id]
+          );
+          if (!exist.length) {
+            await db.query(
+              `INSERT IGNORE INTO campaigns
+               (crm_source_id, campaign_name, geo, payout, payable_event,
+                preview_url, kpi, mmp_tracker, status, package_id, sub_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [c.id, c.campaign_name, c.geo || '', c.payout || 0,
+               c.payable_event || '', c.preview_url || '',
+               c.kpi || '', c.mmp_tracker || '',
+               c.status || 'active', c.package_id || null, c.sub_id || null]
+            ).catch(() => {}); // ignore duplicate errors
+          }
+        }
+
+        // Re-fetch after sync
+        const [refreshed] = await db.query(
+          `SELECT c.*, u.full_name as advertiser_name
+           FROM campaigns c LEFT JOIN users u ON u.id = c.advertiser_id
+           WHERE c.status != 'archived' ORDER BY c.campaign_name`
+        );
+        return res.json({ campaigns: refreshed, synced_from_crm: crmRows.length });
+      } catch (crmErr) {
+        console.warn('CRM sync error (non-fatal):', crmErr.message);
+        // Fall through and return local campaigns
+      }
+    }
+
+    res.json({ campaigns: localCampaigns });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── POST /api/campaigns/sync — manual sync trigger ───────────
+router.post('/sync', auth, async (req, res) => {
+  const crmPool = db.crmPool;
+  if (!crmPool) return res.status(400).json({ error: 'CRM source DB not configured. Set CRM_DB_HOST in .env' });
+
+  try {
+    const table = process.env.CRM_CAMPAIGN_TABLE || 'campaigns';
+    const [crmRows] = await crmPool.query(`SELECT * FROM \`${table}\``);
+    let inserted = 0, updated = 0;
+
+    for (const c of crmRows) {
+      const [exist] = await db.query('SELECT id FROM campaigns WHERE crm_source_id = ?', [c.id]);
+      if (exist.length) {
+        await db.query(
+          `UPDATE campaigns SET campaign_name=?, geo=?, payout=?, payable_event=?,
+           preview_url=?, kpi=?, mmp_tracker=?, status=?, package_id=?, sub_id=?
+           WHERE crm_source_id=?`,
+          [c.campaign_name, c.geo, c.payout, c.payable_event,
+           c.preview_url, c.kpi, c.mmp_tracker, c.status,
+           c.package_id, c.sub_id, c.id]
+        );
+        updated++;
+      } else {
+        await db.query(
+          `INSERT INTO campaigns (crm_source_id, campaign_name, geo, payout, payable_event,
+           preview_url, kpi, mmp_tracker, status, package_id, sub_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [c.id, c.campaign_name, c.geo, c.payout, c.payable_event,
+           c.preview_url, c.kpi, c.mmp_tracker, c.status,
+           c.package_id, c.sub_id]
+        );
+        inserted++;
+      }
+    }
+
+    res.json({ message: `Sync complete: ${inserted} inserted, ${updated} updated`, total: crmRows.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sync failed: ' + err.message });
+  }
+});
+
+// ── GET /api/campaigns/:id ─────────────────────────────────────
+router.get('/:id', auth, async (req, res) => {
+  const [rows] = await db.query(
+    'SELECT c.*, u.full_name as advertiser_name FROM campaigns c LEFT JOIN users u ON u.id = c.advertiser_id WHERE c.id = ?',
+    [req.params.id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Campaign not found' });
+  res.json({ campaign: rows[0] });
+});
+
+// ── PID status ────────────────────────────────────────────────
+router.get('/pid-status/group/:groupId', auth, async (req, res) => {
+  const [pids] = await db.query(
+    `SELECT ps.*, u.full_name as updated_by_name
+     FROM pid_status ps LEFT JOIN users u ON u.id = ps.updated_by
+     WHERE ps.group_id = ? ORDER BY ps.updated_at DESC`,
+    [req.params.groupId]
+  );
+  res.json({ pids });
+});
+
+router.post('/pid-status', auth, async (req, res) => {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { group_id, campaign_id, pub_id, pid, pub_am, status, pause_reason, scenario, feedback } = req.body;
+    const [existing] = await conn.query(
+      'SELECT id FROM pid_status WHERE group_id = ? AND pub_id = ? AND pid = ?',
+      [group_id, pub_id, pid]
+    );
+    if (existing.length) {
+      await conn.query(
+        'UPDATE pid_status SET status=?, pause_reason=?, scenario=?, feedback=?, updated_by=?, updated_at=NOW() WHERE id=?',
+        [status, pause_reason || null, scenario || null, feedback || null, req.user.id, existing[0].id]
+      );
+    } else {
+      await conn.query(
+        'INSERT INTO pid_status (group_id, campaign_id, pub_id, pid, pub_am, status, pause_reason, scenario, feedback, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [group_id, campaign_id || null, pub_id, pid, pub_am || null, status, pause_reason || null, scenario || null, feedback || null, req.user.id]
+      );
+    }
+    await conn.query(
+      'INSERT INTO workflow_summary (group_id, event_type, event_data, triggered_by) VALUES (?, ?, ?, ?)',
+      [group_id, `pid_${status}`, JSON.stringify({ pub_id, pid, reason: pause_reason }), req.user.id]
+    );
+    await conn.commit();
+    const io = req.app.get('io');
+    if (io) io.to(`group_${group_id}`).emit('pid_status_update', { pub_id, pid, status });
+    res.json({ message: 'PID status updated' });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ error: 'Server error' });
+  } finally { conn.release(); }
+});
+
+module.exports = router;

@@ -1,0 +1,1 @@
+SELECT * FROM s2s.publisher_links;
