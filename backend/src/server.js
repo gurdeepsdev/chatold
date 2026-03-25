@@ -23,6 +23,10 @@ const io = new Server(server, {
   transports: ['websocket','polling'],
   pingTimeout: 60000,
   pingInterval: 25000,
+  // Add production-specific settings
+  allowEIO3: true,
+  upgrade: true,
+  rememberUpgrade: true,
 });
 
 app.set('io', io);

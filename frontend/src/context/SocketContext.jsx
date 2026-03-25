@@ -33,12 +33,22 @@ export const SocketProvider = ({ children, token }) => {
   useEffect(() => {
     if (!token) return;
 
-    const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5000', {
+    // Extract the base URL without /api for Socket.IO connection
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    const socketUrl = apiUrl.replace('/api', '');
+
+    console.log('[Socket] Connecting to:', socketUrl);
+    console.log('[Socket] API URL:', apiUrl);
+
+    const socket = io(socketUrl, {
       auth: { token },
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       transports: ['websocket', 'polling'],
+      // Add production-specific options
+      forceNew: true,
+      secure: true,
     });
 
     socket.on('connect', () => {
