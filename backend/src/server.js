@@ -15,7 +15,7 @@ require('fs').mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com',
     methods: ['GET','POST','PUT','PATCH','DELETE'],
     credentials: true,
   },
