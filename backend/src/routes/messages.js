@@ -24,10 +24,15 @@ const upload = multer({
 });
 
 // Returns absolute URL including protocol+host+port
-function absUrl(req,rel){
+function absUrl(req, rel){
   if(!rel)return null;
   if(rel.startsWith('http'))return rel;
-  return `${req.protocol}://${req.get('host')}${rel}`;
+  
+  // Check if behind HTTPS proxy
+  const protocol = req.get('x-forwarded-proto') || req.protocol;
+  const host = req.get('x-forwarded-host') || req.get('host');
+  
+  return `${protocol}://${host}${rel}`;
 }
 
 const checkMember=async(req,res,next)=>{
