@@ -39,8 +39,14 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// Create campaign groups by campaign_subid (auto-detect advertiser)
+// Create campaign groups by campaign_subid (admin, advertiser_manager, advertiser only - auto-detect advertiser)
 router.post('/from-campaign-data', auth, async (req, res) => {
+  // Only admin, advertiser_manager, and advertiser can create campaign groups
+  const allowedRoles = ['admin', 'advertiser_manager', 'advertiser'];
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Only admin, advertiser_manager, and advertiser can create campaign groups' });
+  }
+
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -239,8 +245,14 @@ router.post('/from-campaign-data', auth, async (req, res) => {
   } finally { conn.release(); }
 });
 
-// Create group from campaign (existing - keep for backward compatibility)
+// Create group from campaign (admin, advertiser_manager, advertiser only - existing - keep for backward compatibility)
 router.post('/from-campaign', auth, async (req, res) => {
+  // Only admin, advertiser_manager, and advertiser can create campaign groups
+  const allowedRoles = ['admin', 'advertiser_manager', 'advertiser'];
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Only admin, advertiser_manager, and advertiser can create campaign groups' });
+  }
+
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -352,8 +364,13 @@ router.post('/from-campaign', auth, async (req, res) => {
   } finally { conn.release(); }
 });
 
-// Create custom group
+// Create custom group (admin only)
 router.post('/custom', auth, async (req, res) => {
+  // Only admin can create custom groups
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only admin can create custom groups' });
+  }
+
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();

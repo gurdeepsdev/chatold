@@ -56,7 +56,9 @@ export default function ChatView({group}){
           </div>
           <div className="chat-header-right">
             <button className={`btn btn-xs ${rightPanel==='cd'?'btn-primary':'btn-secondary'}`}
-              onClick={()=>setRightPanel(p=>p==='cd'?null:'cd')}>CD</button>
+              onClick={()=>setRightPanel(p=>p==='cd'?null:'cd')}>
+              {group.group_type==='campaign'?'CD':'GD'}
+            </button>
           </div>
         </div>
 
@@ -89,7 +91,7 @@ export default function ChatView({group}){
 
       {rightPanel==='cd'&&(
         <div className="right-panel">
-          <div className="panel-header">Campaign Details</div>
+          <div className="panel-header">{group.group_type==='campaign'?'Campaign Details':'Group Details'}</div>
           <div className="panel-content"><CampaignDetails group={group}/></div>
         </div>
       )}

@@ -16,8 +16,10 @@ export default function CampaignDetails({ group }) {
   const [members, setMembers] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [selectedUser, setSelectedUser] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState([]);
   const [adding, setAdding] = useState(false);
+  const [showAllMembers, setShowAllMembers] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
 
   useEffect(() => {
     if (!group) return;
@@ -25,18 +27,33 @@ export default function CampaignDetails({ group }) {
     authAPI.getUsers().then(d => setAllUsers(d.users || []));
   }, [group?.id]);
 
-  const addMember = async () => {
-    if (!selectedUser) return;
+  const addMembers = async () => {
+    if (selectedUsers.length === 0) return;
     setAdding(true);
     try {
-      await groupsAPI.addMember(group.id, parseInt(selectedUser));
+      // Add all selected users in parallel
+      await Promise.all(selectedUsers.map(userId => groupsAPI.addMember(group.id, parseInt(userId))));
+      
+      // Refresh members list
       const data = await groupsAPI.getById(group.id);
       setMembers(data.members || []);
-      setSelectedUser('');
+      
+      // Reset form
+      setSelectedUsers([]);
       setShowAddMember(false);
-      toast.success('Member added!');
-    } catch { toast.error('Failed to add member'); }
+      toast.success(`Added ${selectedUsers.length} member${selectedUsers.length > 1 ? 's' : ''}!`);
+    } catch { 
+      toast.error('Failed to add member(s)'); 
+    }
     setAdding(false);
+  };
+
+  const toggleUserSelection = (userId) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
   };
 
   const removeMember = async (userId) => {
@@ -52,6 +69,17 @@ export default function CampaignDetails({ group }) {
 
   const existingIds = new Set(members.map(m => m.id));
   const addableUsers = allUsers.filter(u => !existingIds.has(u.id));
+
+  // Filter members based on search
+  const filteredMembers = members.filter(member => 
+    member.full_name?.toLowerCase().includes(memberSearch.toLowerCase()) ||
+    member.role?.toLowerCase().includes(memberSearch.toLowerCase()) ||
+    member.group_role?.toLowerCase().includes(memberSearch.toLowerCase())
+  );
+
+  // Show limited members initially, expand to show all
+  const displayMembers = showAllMembers ? filteredMembers : filteredMembers.slice(0, 3);
+  const hasMoreMembers = filteredMembers.length > 3;
 
   return (
     <div style={{ padding: 12 }}>
@@ -87,23 +115,97 @@ export default function CampaignDetails({ group }) {
       {/* Members */}
       <div className="card">
         <div className="card-header">
-          <span className="card-title">👥 Members ({members.length})</span>
+          <span className="card-title">👥 Members ({filteredMembers.length})</span>
           <button className="btn-icon" style={{ fontSize: 16 }} onClick={() => setShowAddMember(!showAddMember)} title="Add member">+</button>
         </div>
 
+        {/* Member Search Bar */}
+        <div style={{ marginBottom: 10 }}>
+          <input
+            type="text"
+            className="form-control"
+            style={{ fontSize: 12, padding: '6px 10px' }}
+            placeholder="Search members..."
+            value={memberSearch}
+            onChange={e => setMemberSearch(e.target.value)}
+          />
+        </div>
+
         {showAddMember && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-            <select className="form-control" style={{ flex: 1, fontSize: 12 }} value={selectedUser} onChange={e => setSelectedUser(e.target.value)}>
-              <option value="">Select user...</option>
-              {addableUsers.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>)}
-            </select>
-            <button className="btn btn-primary btn-xs" onClick={addMember} disabled={adding || !selectedUser}>
-              {adding ? '...' : 'Add'}
-            </button>
+          <div style={{ marginBottom: 10 }}>
+            {/* User List with Checkboxes */}
+            <div style={{ 
+              maxHeight: 200, 
+              overflowY: 'auto', 
+              border: '1px solid var(--border)', 
+              borderRadius: 6, 
+              marginBottom: 8,
+              background: 'var(--bg-secondary)'
+            }}>
+              {addableUsers.length > 0 ? (
+                addableUsers.map(u => (
+                  <div 
+                    key={u.id} 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid var(--border)',
+                      transition: 'background-color 0.15s',
+                      background: selectedUsers.includes(u.id) ? 'var(--bg-active)' : 'transparent'
+                    }}
+                    onClick={() => toggleUserSelection(u.id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.includes(u.id)}
+                      onChange={() => toggleUserSelection(u.id)}
+                      style={{ marginRight: 10 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{u.full_name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{u.role}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+                  No users available to add
+                </div>
+              )}
+            </div>
+            
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+                {selectedUsers.length > 0 && `${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''} selected`}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button 
+                  className="btn btn-secondary btn-xs" 
+                  onClick={() => {
+                    setSelectedUsers([]);
+                    setShowAddMember(false);
+                  }}
+                  style={{ fontSize: 11 }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn btn-primary btn-xs" 
+                  onClick={addMembers} 
+                  disabled={adding || selectedUsers.length === 0}
+                  style={{ fontSize: 11 }}
+                >
+                  {adding ? '...' : `Add ${selectedUsers.length > 0 ? `(${selectedUsers.length})` : ''}`}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
-        {members.map(member => (
+        {displayMembers.map(member => (
           <div key={member.id} className="member-item">
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: `${avatarColor(member.full_name)}33`, color: avatarColor(member.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
               {getInitials(member.full_name)}
@@ -124,6 +226,26 @@ export default function CampaignDetails({ group }) {
             </div>
           </div>
         ))}
+
+        {/* Show All/Hide Members Button */}
+        {hasMoreMembers && (
+          <div style={{ textAlign: 'center', marginTop: 8 }}>
+            <button
+              className="btn btn-secondary btn-xs"
+              style={{ fontSize: 11, padding: '4px 12px' }}
+              onClick={() => setShowAllMembers(!showAllMembers)}
+            >
+              {showAllMembers ? `Hide ${filteredMembers.length - 3} members` : `Show all ${filteredMembers.length} members`}
+            </button>
+          </div>
+        )}
+
+        {/* No members found message */}
+        {filteredMembers.length === 0 && memberSearch && (
+          <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: 12 }}>
+            No members found matching "{memberSearch}"
+          </div>
+        )}
       </div>
     </div>
   );

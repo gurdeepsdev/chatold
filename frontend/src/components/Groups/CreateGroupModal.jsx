@@ -91,11 +91,28 @@ export default function CreateGroupModal({ onClose, onCreated }) {
         <div className="modal-body">
           {/* Mode tabs */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-            <button className={`btn ${mode === 'campaign' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setMode('campaign')} style={{ flex: 1 }}>📊 From Campaign</button>
-            {(user?.role === 'admin' || user?.role === 'advertiser_manager') && (
+            {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser') && (
+              <button className={`btn ${mode === 'campaign' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setMode('campaign')} style={{ flex: 1 }}>📊 From Campaign</button>
+            )}
+            {user?.role === 'admin' && (
               <button className={`btn ${mode === 'custom' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setMode('custom')} style={{ flex: 1 }}>✏️ Custom Group</button>
+            )}
+            {!['admin', 'advertiser_manager', 'advertiser'].includes(user?.role) && (
+              <div style={{ 
+                textAlign: 'center', 
+                color: 'var(--text-muted)', 
+                padding: '20px',
+                background: 'var(--bg-secondary)',
+                borderRadius: 8,
+                border: '1px solid var(--border)'
+              }}>
+                <div style={{ fontSize: 24, marginBottom: 8 }}>🔒</div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>Group Creation Restricted</div>
+                <div style={{ fontSize: 12 }}>Only administrators, advertiser managers, and advertisers can create campaign groups</div>
+                <div style={{ fontSize: 12 }}>Only administrators can create custom groups</div>
+              </div>
             )}
           </div>
 

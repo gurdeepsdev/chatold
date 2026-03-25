@@ -133,29 +133,68 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
   }catch(e){console.error(e);res.status(500).json({error:'Failed to load messages'});}
 });
 
-/* POST send text */
+/* POST send text or forwarded message */
 router.post('/:groupId',auth,checkMember,async(req,res)=>{
   try{
     const{groupId}=req.params;
-    const{content,reply_to_id,message_type='text'}=req.body;
-    if(!content?.trim())return res.status(400).json({error:'Content required'});
-    const{encrypted,iv}=encrypt(content);
-    const[r]=await db.query(
-      'INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,reply_to_id) VALUES(?,?,?,?,?,?)',
-      [groupId,req.user.id,message_type,encrypted,iv,reply_to_id||null]
-    );
-    const[[grp]]=await db.query('SELECT group_name FROM chat_groups WHERE id=?',[groupId]).catch(()=>[[{}]]);
-    const message={
-      id:r.insertId,group_id:Number(groupId),
-      sender_id:req.user.id,sender_name:req.user.full_name,
-      username:req.user.username,sender_role:req.user.role,
-      message_type,content,reply_to_id:reply_to_id||null,
-      is_deleted:false,sent_at:new Date(),
-    };
-    const io=req.app.get('io');
-    if(io)io.to(`group_${groupId}`).emit('new_message',message);
-    await pushToMembers(io,groupId,req.user.id,message,grp?.group_name||'');
-    res.status(201).json({message});
+    const{content,reply_to_id,message_type='text',file_url,file_name,file_size,mime_type}=req.body;
+    
+    // Handle forwarded files
+    if(file_url && file_name){
+      // Forwarding a file message
+      console.log('Forwarding file:', { file_url, file_name, message_type });
+      
+      // Convert absolute URL to relative path if needed for storage
+      let storedFileUrl = file_url;
+      if(file_url.startsWith('http')) {
+        // Extract relative path from absolute URL
+        const url = new URL(file_url);
+        storedFileUrl = url.pathname; // e.g., "/uploads/image.jpg"
+      }
+      
+      const{encrypted,iv}=encrypt(content||file_name);
+      const[r]=await db.query(
+        'INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,file_url,file_name,file_size,mime_type,reply_to_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
+        [groupId,req.user.id,message_type,encrypted,iv,storedFileUrl,file_name,file_size,mime_type,reply_to_id||null]
+      );
+      const[[grp]]=await db.query('SELECT group_name FROM chat_groups WHERE id=?',[groupId]).catch(()=>[[{}]]);
+      const message={
+        id:r.insertId,group_id:Number(groupId),
+        sender_id:req.user.id,sender_name:req.user.full_name,
+        username:req.user.username,sender_role:req.user.role,
+        message_type,
+        content:content||file_name,
+        file_url:absUrl(req,storedFileUrl),
+        file_name,file_size,mime_type,
+        reply_to_id:reply_to_id||null,
+        is_deleted:false,sent_at:new Date(),
+      };
+      console.log('Forwarded message:', { message });
+      const io=req.app.get('io');
+      if(io)io.to(`group_${groupId}`).emit('new_message',message);
+      await pushToMembers(io,groupId,req.user.id,message,grp?.group_name||'');
+      res.status(201).json({message});
+    } else {
+      // Regular text message
+      if(!content?.trim())return res.status(400).json({error:'Content required'});
+      const{encrypted,iv}=encrypt(content);
+      const[r]=await db.query(
+        'INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,reply_to_id) VALUES(?,?,?,?,?,?)',
+        [groupId,req.user.id,message_type,encrypted,iv,reply_to_id||null]
+      );
+      const[[grp]]=await db.query('SELECT group_name FROM chat_groups WHERE id=?',[groupId]).catch(()=>[[{}]]);
+      const message={
+        id:r.insertId,group_id:Number(groupId),
+        sender_id:req.user.id,sender_name:req.user.full_name,
+        username:req.user.username,sender_role:req.user.role,
+        message_type,content,reply_to_id:reply_to_id||null,
+        is_deleted:false,sent_at:new Date(),
+      };
+      const io=req.app.get('io');
+      if(io)io.to(`group_${groupId}`).emit('new_message',message);
+      await pushToMembers(io,groupId,req.user.id,message,grp?.group_name||'');
+      res.status(201).json({message});
+    }
   }catch(e){console.error(e);res.status(500).json({error:'Failed to send'});}
 });
 

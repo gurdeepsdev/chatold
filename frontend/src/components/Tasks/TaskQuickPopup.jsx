@@ -45,7 +45,14 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
   }, [onClose]);
 
   const handleCreate = async () => {
-    if (!form.title.trim()) return toast.error('Title required');
+    // Title is required for all tasks except share_link
+    if (form.task_type !== 'share_link' && !form.title.trim()) {
+      return toast.error('Title required');
+    }
+    // For share_link, require at least one field to be filled
+    if (form.task_type === 'share_link' && !form.pub_id.trim() && !form.pid.trim() && !form.link.trim()) {
+      return toast.error('Please fill in at least one field (PubID, PID, or Link)');
+    }
     setCreating(true);
     try {
       let payload;
@@ -75,52 +82,49 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
      */
     <div style={{
       position: 'absolute',
-      bottom: '100%',          /* sits directly above whatever renders this */
-      left: 0,
-      right: 0,
+      top: '-500%',              /* center vertically in chat area */
+      left: '50%',              /* center horizontally */
+      transform: 'translate(-50%, -50%)',  /* perfect center */
       zIndex: 100,
-      background: 'var(--bg-secondary)',
-      border: '1px solid var(--border)',
-      borderBottom: 'none',
-      borderRadius: '14px 14px 0 0',
-      boxShadow: '0 -6px 32px rgba(0,0,0,.45)',
-      display: 'flex',
-      flexDirection: 'column',
-      maxHeight: '72vh',
-      animation: 'slideUp .22s cubic-bezier(.22,.68,0,1.2)',
+      background: 'rgba(0, 0, 0, 0.15)',  /* Fully transparent with dark tint */
+      border: '1px solid rgba(255, 255, 255, 0.2)',  /* Subtle white border */
+      borderRadius: '12px',  /* Rounded corners */
+      boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)',  /* Dark shadow */
+      backdropFilter: 'blur(12px)',  /* Strong glass effect */
+      width: '340px',  /* Slightly wider */
+      maxHeight: '320px',  /* Slightly taller */
+      animation: 'slideUp .25s ease-out',
     }}>
 
       {/* ── Header ── */}
-      <div style={{display:'flex',alignItems:'center',gap:10,padding:'13px 16px',
-        borderBottom:'1px solid var(--border)',flexShrink:0}}>
-        <span style={{fontSize:20}}>{type?.icon || '📋'}</span>
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',
+        borderBottom:'1px solid rgba(255, 255, 255, 0.1)',flexShrink:0}}>
+        <span style={{fontSize:16,color:'#fff'}}>{type?.icon || '📋'}</span>
         <div style={{flex:1}}>
-          <div style={{fontWeight:700,fontSize:14}}>Create Task</div>
-          <div style={{fontSize:11,color:'var(--text-muted)'}}>{group?.group_name}</div>
+          <div style={{fontWeight:600,fontSize:12,color:'#fff'}}>Create Task</div>
         </div>
-        <button onClick={onClose}
-          style={{background:'var(--bg-active)',border:'1px solid var(--border)',
-            borderRadius:7,width:28,height:28,cursor:'pointer',fontSize:14,
-            color:'var(--text-secondary)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <button 
+          onClick={onClose}
+          style={{background:'none',border:'none',fontSize:16,cursor:'pointer',color:'rgba(255,255,255,0.7)',padding:2}}
+        >
           ✕
         </button>
       </div>
 
       {/* ── Body ── */}
-      <div style={{overflowY:'auto',padding:'14px 16px',flex:1}}>
+      <div style={{overflowY:'auto',padding:'10px 12px',flex:1}}>
 
         {/* Task type pills */}
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
           {Object.entries(TASK_TYPES).map(([k, v]) => {
             const active = form.task_type === k;
             return (
-              <button key={k} onClick={() => f('task_type', k)}
-                style={{display:'flex',alignItems:'center',gap:5,padding:'5px 13px',
-                  borderRadius:20,fontFamily:'inherit',fontSize:12,cursor:'pointer',transition:'all .13s',
-                  border:`1.5px solid ${active ? v.color : 'var(--border)'}`,
-                  background: active ? `${v.color}20` : 'var(--bg-active)',
-                  color: active ? v.color : 'var(--text-secondary)',
-                  fontWeight: active ? 700 : 400}}>
+              <button key={k} onClick={() => setForm(empty(k))}
+                style={{padding:'4px 8px',borderRadius:'6px',fontSize:11,fontWeight:500,
+                  background: active ? v.color : 'rgba(255, 255, 255, 0.1)',
+                  color: active ? '#fff' : 'rgba(255, 255, 255, 0.8)',
+                  border: active ? 'none' : '1px solid rgba(255, 255, 255, 0.2)',
+                  cursor: 'pointer',transition:'all .15s'}}>
                 {v.icon} {v.label}
               </button>
             );
@@ -128,39 +132,50 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
         </div>
 
         {/* Title + Assign — always shown */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9,marginBottom:10}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
+          {/* Only show title and description for non-share_link tasks */}
+          {form.task_type !== 'share_link' && (
+            <div style={{gridColumn:'1/-1'}}>
+              <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>Title *</label>
+              <input className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} autoFocus value={form.title}
+                onChange={e => f('title', e.target.value)} placeholder="Task title…"/>
+            </div>
+          )}
+          {form.task_type !== 'share_link' && (
+            <div style={{gridColumn:'1/-1'}}>
+              <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>Description</label>
+              <textarea className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff',minHeight:40,resize:'vertical'}}
+                value={form.description} onChange={e => f('description', e.target.value)} placeholder="Optional…"/>
+            </div>
+          )}
           <div style={{gridColumn:'1/-1'}}>
-            <label className="form-label">Title *</label>
-            <input className="form-control" autoFocus value={form.title}
-              onChange={e => f('title', e.target.value)} placeholder="Task title…"/>
-          </div>
-          <div style={{gridColumn:'1/-1'}}>
-            <label className="form-label">Assign To</label>
-            <select className="form-control" value={form.assigned_to} onChange={e => f('assigned_to', e.target.value)}>
+            <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>Assign To</label>
+            <select className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} value={form.assigned_to} onChange={e => f('assigned_to', e.target.value)}>
               <option value="">Unassigned</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>)}
             </select>
-          </div>
-          <div style={{gridColumn:'1/-1'}}>
-            <label className="form-label">Description</label>
-            <textarea className="form-control" style={{minHeight:44,resize:'vertical'}}
-              value={form.description} onChange={e => f('description', e.target.value)} placeholder="Optional…"/>
           </div>
         </div>
 
         {/* ── Share Link ── */}
         {form.task_type === 'share_link' && (
-          <div style={{padding:'10px 13px',background:'rgba(79,125,255,.06)',borderRadius:9,
-            border:'1px solid rgba(79,125,255,.2)',marginBottom:8}}>
-            <div style={{fontSize:11,color:'#4f7dff',fontWeight:700,marginBottom:9}}>🔗 Link Details</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-              <div><label className="form-label">PubID</label>
-                <input className="form-control" placeholder="Publisher ID" value={form.pub_id} onChange={e=>f('pub_id',e.target.value)}/></div>
-              <div><label className="form-label">PID</label>
-                <input className="form-control" placeholder="PID" value={form.pid} onChange={e=>f('pid',e.target.value)}/></div>
+          <div style={{padding:'8px 10px',background:'rgba(79,125,255,0.1)',borderRadius:6,
+            border:'1px solid rgba(79,125,255,0.2)',marginBottom:8}}>
+            <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>🔗 Link Details</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+              <div>
+                <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>PubID</label>
+                <input className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} placeholder="Publisher ID" value={form.pub_id} onChange={e=>f('pub_id',e.target.value)}/>
+              </div>
+              <div>
+                <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>PID</label>
+                <input className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} placeholder="PID" value={form.pid} onChange={e=>f('pid',e.target.value)}/>
+              </div>
             </div>
-            <label className="form-label">Tracking Link</label>
-            <input className="form-control" placeholder="https://…" value={form.link} onChange={e=>f('link',e.target.value)}/>
+            <div>
+              <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>Tracking Link</label>
+              <input className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} placeholder="https://…" value={form.link} onChange={e=>f('link',e.target.value)}/>
+            </div>
           </div>
         )}
 
@@ -241,11 +256,13 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
       </div>
 
       {/* ── Footer ── */}
-      <div style={{padding:'12px 16px',borderTop:'1px solid var(--border)',
-        display:'flex',gap:8,flexShrink:0}}>
-        <button className="btn btn-secondary" style={{flex:1}} onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" style={{flex:2}} onClick={handleCreate} disabled={creating}>
-          {creating ? 'Creating…' : `✓ Create ${type?.label || 'Task'}`}
+      <div style={{padding:'8px 12px',borderTop:'1px solid rgba(255, 255, 255, 0.1)',
+        display:'flex',gap:8,justifyContent:'flex-end',background:'rgba(0, 0, 0, 0.2)'}}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onClose} 
+          style={{fontSize:11,padding:'4px 8px',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'rgba(255,255,255,0.8)'}}>Cancel</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={handleCreate} disabled={creating}
+          style={{fontSize:11,padding:'4px 8px',background:'rgba(79,125,255,0.8)',border:'1px solid rgba(79,125,255,0.3)',color:'#fff'}}>
+          {creating ? '⏳ Creating...' : '✓ Create'}
         </button>
       </div>
     </div>

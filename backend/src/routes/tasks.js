@@ -42,8 +42,9 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
           pub_id,pid,link,pause_reason,request_type,request_details,
           fp,f1,f2,optimise_scenario,due_date}=b;
 
-    if(!group_id||!task_type||!title)
-      return res.status(400).json({error:'group_id, task_type, title required'});
+    // Title is required for all tasks except share_link
+    if(!group_id||!task_type||(task_type!=='share_link'&&!title))
+      return res.status(400).json({error:'group_id, task_type, title required (except for share_link tasks)'});
 
     const attachment_url=req.file?`/uploads/${req.file.filename}`:null;
     const attachment_name=req.file?req.file.originalname:null;
@@ -54,7 +55,7 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
          request_type,request_details,fp,f1,f2,optimise_scenario,
          attachment_url,attachment_name,due_date)
        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [group_id,campaign_id||null,task_type,title,description||null,
+      [group_id,campaign_id||null,task_type,task_type==='share_link'?null:title,description||null,
        assigned_to||null,req.user.id,pub_id||null,pid||null,link||null,
        pause_reason||null,request_type||null,request_details||null,
        fp||null,f1||null,f2||null,optimise_scenario||null,

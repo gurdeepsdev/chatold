@@ -58,7 +58,7 @@ export const messagesAPI = {
   }),
   deleteMessage: (groupId, messageId) => api.delete(`/messages/${groupId}/${messageId}`),
   addReaction: (groupId, messageId, emoji) => api.post(`/messages/${groupId}/${messageId}/reaction`, { emoji }),
-  removeReaction: (groupId, messageId) => api.delete(`/messages/${groupId}/${messageId}/reaction`),
+  removeReaction: (groupId, messageId, emoji) => api.delete(`/messages/${groupId}/${messageId}/reaction`, { data: { emoji } }),
 };
 
 export const tasksAPI = {

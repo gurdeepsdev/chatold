@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import toast from 'react-hot-toast';
+import ForwardModal from './ForwardModal';
 import TaskQuickPopup from '../Tasks/TaskQuickPopup';
 
 /* ── helpers ───────────────────────────────────────────────── */
@@ -37,6 +38,8 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
   const {user} = useAuth();
   const [showOptions, setShowOptions] = useState(false);
   const [localReactions, setLocalReactions] = useState(msg.reactions || []);
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [onDeleteMessageState, setOnDeleteMessageState] = useState(onDeleteMessage);
   const messageRef = useRef(null);
   
   // Sync local reactions with message reactions when they change
@@ -57,15 +60,25 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
   };
   
   const handleForward = () => {
-    // Store message for forwarding
-    const forwardData = {
-      content: msg.content,
-      file_url: msg.file_url,
-      file_name: msg.file_name,
-      message_type: msg.message_type
-    };
-    localStorage.setItem('forwardMessage', JSON.stringify(forwardData));
-    toast.success('Message ready to forward - paste in any chat');
+    setShowForwardModal(true);
+  };
+  
+  const handleForwardMessage = async (groupId, message) => {
+    try {
+      const messageData = {
+        content: message.content,
+        file_url: message.file_url,
+        file_name: message.file_name,
+        file_size: message.file_size,
+        mime_type: message.mime_type,
+        message_type: message.message_type
+      };
+      
+      await messagesAPI.sendMessage(groupId, messageData);
+    } catch (error) {
+      console.error('Failed to forward message:', error);
+      throw error;
+    }
   };
   
   const handleReact = async (reaction) => {
@@ -79,6 +92,20 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
     } catch (error) {
       console.error('Failed to add reaction:', error);
       toast.error('Failed to add reaction');
+    }
+  };
+  
+  const handleRemoveReaction = async (emoji) => {
+    try {
+      const response = await messagesAPI.removeReaction(group.id, msg.id, emoji);
+      
+      // Update local reactions with backend response
+      setLocalReactions(response.reactions);
+      
+      toast.success(`Removed ${emoji} reaction`);
+    } catch (error) {
+      console.error('Failed to remove reaction:', error);
+      toast.error('Failed to remove reaction');
     }
   };
   
@@ -170,7 +197,12 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
         )}
         
         {/* Message Reactions */}
-        <MessageReactions reactions={localReactions} />
+        <MessageReactions 
+          reactions={localReactions} 
+          onAddReaction={handleReact}
+          onRemoveReaction={handleRemoveReaction}
+          currentUserId={user.id}
+        />
         <div className="message-time">
           <span>{ft(msg.sent_at)}</span>
           {isOwn&&<span style={{color:'var(--success)',marginLeft:4}}>✓✓</span>}
@@ -203,6 +235,21 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
             onForward={handleForward}
             onReact={handleReact}
             onDelete={handleDelete}
+          />
+        )}
+        
+        {showForwardModal && (
+          <ForwardModal
+            message={{
+              content: msg.content,
+              file_url: msg.file_url,
+              file_name: msg.file_name,
+              file_size: msg.file_size,
+              mime_type: msg.mime_type,
+              message_type: msg.message_type
+            }}
+            onClose={() => setShowForwardModal(false)}
+            onForward={handleForwardMessage}
           />
         )}
       </div>
@@ -435,63 +482,188 @@ function MessageOptionsMenu({ msg, isOwn, onClose, onCopy, onForward, onReact, o
 }
 
 /* ── Message Reactions Display ───────────────────────────── */
-function MessageReactions({ reactions }) {
-  if (!reactions || reactions.length === 0) return null;
+function MessageReactions({ reactions, onAddReaction, onRemoveReaction, currentUserId, messageId }) {
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [hoveredReaction, setHoveredReaction] = useState(null);
+  const pickerTimeoutRef = useRef(null);
+  
+  // Available reactions
+  const availableReactions = ['👍', '❤️', '😂', '😮', '😢', '😡'];
   
   // Group reactions by emoji and count
-  const groupedReactions = reactions.reduce((acc, reaction) => {
+  const groupedReactions = reactions?.reduce((acc, reaction) => {
     const emoji = reaction.emoji;
     if (!acc[emoji]) {
       acc[emoji] = {
         emoji,
         count: 0,
-        users: []
+        users: [],
+        userReacted: false
       };
     }
     acc[emoji].count++;
     acc[emoji].users.push(reaction.user_name);
+    if (reaction.user_id === currentUserId) {
+      acc[emoji].userReacted = true;
+    }
     return acc;
-  }, {});
+  }, {}) || {};
+  
+  const handleReactionClick = (emoji) => {
+    const reaction = groupedReactions[emoji];
+    if (reaction?.userReacted) {
+      // Remove reaction if user already reacted
+      onRemoveReaction(emoji);
+    } else {
+      // Add reaction
+      onAddReaction(emoji);
+    }
+  };
+  
+  const handleMouseEnter = () => {
+    // Clear any existing timeout
+    if (pickerTimeoutRef.current) {
+      clearTimeout(pickerTimeoutRef.current);
+    }
+    setShowReactionPicker(true);
+  };
+  
+  const handleMouseLeave = () => {
+    // Add a small delay before hiding to allow moving to picker
+    pickerTimeoutRef.current = setTimeout(() => {
+      setShowReactionPicker(false);
+    }, 200);
+  };
+  
+  const handlePickerMouseEnter = () => {
+    // Keep picker visible when hovering over it
+    if (pickerTimeoutRef.current) {
+      clearTimeout(pickerTimeoutRef.current);
+    }
+  };
+  
+  const handlePickerMouseLeave = () => {
+    setShowReactionPicker(false);
+  };
   
   return (
-    <div style={{
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 6,
-      marginTop: 8,
-      alignItems: 'center'
-    }}>
-      {Object.values(groupedReactions).map((group, index) => (
-        <div
-          key={index}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            background: 'var(--bg-active)',
-            border: '1px solid var(--border)',
-            borderRadius: 12,
-            padding: '4px 8px',
-            fontSize: 12,
-            cursor: 'pointer',
-            transition: 'all 0.15s'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = 'var(--accent-dim)';
-            e.currentTarget.style.borderColor = 'var(--accent)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = 'var(--bg-active)';
-            e.currentTarget.style.borderColor = 'var(--border)';
-          }}
-          title={group.users.join(', ')}
-        >
-          <span>{group.emoji}</span>
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-            {group.count}
-          </span>
+    <div 
+      style={{ 
+        position: 'relative',
+        padding: '4px 0', // Add padding to increase hover area
+        minHeight: '32px' // Ensure minimum height for hover area even without reactions
+      }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* Show existing reactions if any */}
+      {reactions && reactions.length > 0 && (
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 6,
+          alignItems: 'center'
+        }}>
+          {Object.values(groupedReactions).map((group, index) => (
+            <div
+              key={index}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: group.userReacted ? 'var(--accent-dim)' : 'var(--bg-active)',
+                border: group.userReacted ? '1px solid var(--accent)' : '1px solid var(--border)',
+                borderRadius: 12,
+                padding: '4px 8px',
+                fontSize: 12,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                position: 'relative'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                setHoveredReaction(group.emoji);
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+                setHoveredReaction(null);
+              }}
+              onClick={() => handleReactionClick(group.emoji)}
+              title={group.users.join(', ') + (group.userReacted ? ' (Click to remove)' : '')}
+            >
+              <span>{group.emoji}</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {group.count}
+              </span>
+              {group.userReacted && (
+                <span style={{ 
+                  fontSize: 10, 
+                  marginLeft: 2, 
+                  color: 'var(--accent)',
+                  fontWeight: 700 
+                }}>✓</span>
+              )}
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+      
+      {/* Reaction Picker on Hover - Always show on hover */}
+      {showReactionPicker && (
+        <div 
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: 0,
+            marginBottom: 8,
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 20,
+            padding: '6px 8px',
+            display: 'flex',
+            gap: 4,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            zIndex: 1000
+          }}
+          onMouseEnter={handlePickerMouseEnter}
+          onMouseLeave={handlePickerMouseLeave}
+        >
+          {availableReactions.map(emoji => {
+            const hasReacted = groupedReactions[emoji]?.userReacted || false;
+            return (
+              <button
+                key={emoji}
+                onClick={() => handleReactionClick(emoji)}
+                style={{
+                  fontSize: 18,
+                  padding: '4px',
+                  border: hasReacted ? '1px solid var(--accent)' : '1px solid transparent',
+                  borderRadius: '50%',
+                  background: hasReacted ? 'var(--accent-dim)' : 'transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.2)';
+                  e.currentTarget.style.background = 'var(--bg-hover)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.background = hasReacted ? 'var(--accent-dim)' : 'transparent';
+                }}
+                title={hasReacted ? 'Remove reaction' : `React with ${emoji}`}
+              >
+                {emoji}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

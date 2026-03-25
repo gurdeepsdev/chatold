@@ -251,14 +251,19 @@ export default function TasksPanel({group, taskTarget}){
             </div>
           </div>
 
-          <div style={{marginBottom:10}}>
-            <label className="form-label">Title *</label>
-            <input className="form-control" value={form.title} onChange={e=>f('title',e.target.value)} placeholder="Task title…"/>
-          </div>
-          <div style={{marginBottom:10}}>
-            <label className="form-label">Description</label>
-            <textarea className="form-control" style={{minHeight:50}} value={form.description} onChange={e=>f('description',e.target.value)} placeholder="Optional details…"/>
-          </div>
+          {/* Only show title and description for non-share_link tasks */}
+          {form.task_type !== 'share_link' && (
+            <div style={{marginBottom:10}}>
+              <label className="form-label">Title *</label>
+              <input className="form-control" value={form.title} onChange={e=>f('title',e.target.value)} placeholder="Task title…"/>
+            </div>
+          )}
+          {form.task_type !== 'share_link' && (
+            <div style={{marginBottom:10}}>
+              <label className="form-label">Description</label>
+              <textarea className="form-control" style={{minHeight:50}} value={form.description} onChange={e=>f('description',e.target.value)} placeholder="Optional details…"/>
+            </div>
+          )}
 
           {/* Share Link */}
           {form.task_type==='share_link'&&(

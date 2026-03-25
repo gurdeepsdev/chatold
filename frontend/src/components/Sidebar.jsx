@@ -107,10 +107,12 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
           <span style={{ marginLeft: 4 }} className={`status-dot ${connected ? 'online' : 'offline'}`} />
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          <button className="btn-icon tooltip" onClick={() => setShowCreateModal(true)} title="New Group">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            <span className="tooltip-text">New Group</span>
-          </button>
+          {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser') && (
+            <button className="btn-icon tooltip" onClick={() => setShowCreateModal(true)} title="New Group">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span className="tooltip-text">New Group</span>
+            </button>
+          )}
           <button className="btn-icon tooltip" onClick={logout}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
             <span className="tooltip-text">Logout</span>
@@ -184,9 +186,21 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
           <div className="empty-state" style={{ padding: 40 }}>
             <div className="empty-state-icon">🗂️</div>
             <p>No groups yet.<br/>Create one from a campaign.</p>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
-              Create Group
-            </button>
+            {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser') && (
+              <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
+                Create Group
+              </button>
+            )}
+            {!['admin', 'advertiser_manager', 'advertiser'].includes(user?.role) && (
+              <div style={{ 
+                textAlign: 'center', 
+                color: 'var(--text-muted)', 
+                fontSize: 12,
+                marginTop: 10
+              }}>
+                Only administrators, advertiser managers, and advertisers can create campaign groups
+              </div>
+            )}
           </div>
         )}
       </div>
