@@ -30,16 +30,21 @@ ALTER TABLE chat_groups
   ADD COLUMN IF NOT EXISTS campaign_type ENUM('agency','direct') NOT NULL DEFAULT 'agency',
   ADD COLUMN IF NOT EXISTS platform VARCHAR(10) NULL, -- 'ios', 'android', or null
   ADD COLUMN IF NOT EXISTS adv_name VARCHAR(255) NULL, -- advertiser name from CRM
+  ADD COLUMN IF NOT EXISTS advertiser_id INT NULL, -- advertiser user_id from CRM campaign_data
   ADD COLUMN IF NOT EXISTS crm_campaign_data JSON NULL; -- full CRM campaign data
 
 -- campaigns: crm_source_id for external DB sync
 ALTER TABLE campaigns
   ADD COLUMN IF NOT EXISTS crm_source_id INT NULL UNIQUE;
 
--- users: expanded roles
+-- users: expanded roles and password_hash column
 ALTER TABLE users MODIFY COLUMN role ENUM(
   'admin','advertiser_manager','publisher_manager','advertiser','publisher','am'
 ) NOT NULL DEFAULT 'am';
+
+-- Add password_hash column for bcrypt authentication
+ALTER TABLE users 
+  ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) NULL AFTER email;
 
 -- notifications: message_id column
 ALTER TABLE notifications

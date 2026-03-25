@@ -13,7 +13,6 @@ export default function CreateGroupModal({ onClose, onCreated }) {
   const [mode, setMode] = useState('campaign'); // 'campaign' | 'custom'
   const [campaignData, setCampaignData] = useState({ advertisers: [], sub_ids: [] });
   const [users, setUsers] = useState([]);
-  const [selectedAdvName, setSelectedAdvName] = useState('');
   const [selectedSubId, setSelectedSubId] = useState('');
   const [campaignType, setCampaignType] = useState('agency'); // 'agency' | 'direct'
   const [groupName, setGroupName] = useState('');
@@ -21,8 +20,20 @@ export default function CreateGroupModal({ onClose, onCreated }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Load campaign data (advertisers and sub_ids)
-    campaignsAPI.getCampaignData().then(d => setCampaignData(d || { advertisers: [], sub_ids: [] }));
+    const fetchCampaignData = async () => {
+      try {
+        const data = await campaignsAPI.getCampaignData();
+        setCampaignData(data);
+        
+        // Auto-select first sub_id when data loads
+        if (data.sub_ids && data.sub_ids.length > 0) {
+          setSelectedSubId(data.sub_ids[0].sub_id);
+        }
+      } catch (error) {
+        toast.error('Failed to fetch campaign data');
+      }
+    };
+    fetchCampaignData();
     authAPI.getUsers().then(d => setUsers(d.users || []));
   }, []);
 
@@ -35,11 +46,9 @@ export default function CreateGroupModal({ onClose, onCreated }) {
     try {
       let group;
       if (mode === 'campaign') {
-        if (!selectedAdvName) { toast.error('Select advertiser name'); setLoading(false); return; }
         if (!selectedSubId) { toast.error('Select campaign sub ID'); setLoading(false); return; }
         
         const data = await groupsAPI.createFromCampaignData({
-          adv_name: selectedAdvName,
           campaign_subid: selectedSubId,
           campaign_type: campaignType,
           additional_members: selectedMembers
@@ -112,22 +121,6 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 4 }}>
                   {defaultLabel}
                 </div>
-              </div>
-
-              {/* Advertiser Name Selector */}
-              <div style={{ marginBottom: 16 }}>
-                <label className="form-label">Advertiser Name</label>
-                <select
-                  value={selectedAdvName}
-                  onChange={(e) => setSelectedAdvName(e.target.value)}
-                  className="form-select"
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)' }}
-                >
-                  <option value="">Select advertiser...</option>
-                  {campaignData.advertisers.map((adv, index) => (
-                    <option key={`adv_${adv.username}_${index}`} value={adv.username}>{adv.username}</option>
-                  ))}
-                </select>
               </div>
 
               {/* Campaign Sub ID Selector */}

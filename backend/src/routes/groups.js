@@ -39,13 +39,13 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// Create campaign groups by adv_name and campaign_subid (separate iOS/Android)
+// Create campaign groups by campaign_subid (auto-detect advertiser)
 router.post('/from-campaign-data', auth, async (req, res) => {
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
 
-    const { adv_name, campaign_subid, campaign_type = 'agency', additional_members = [] } = req.body;
+    const { campaign_subid, campaign_type = 'agency', additional_members = [] } = req.body;
 
     // Get CRM pool
     const crmPool = db.crmPool;
@@ -54,65 +54,28 @@ router.post('/from-campaign-data', auth, async (req, res) => {
     }
 
     // Debug: Show what we're looking for
-    console.log('Looking for campaign with:', { adv_name, campaign_subid });
+    console.log('Looking for campaign with sub_campaign_id:', campaign_subid);
 
-    // Debug: Check what advertisers exist
-    const [allAdvertisers] = await crmPool.query(`
-      SELECT DISTINCT l.username FROM campaign_data c
-      INNER JOIN login l ON l.id = c.user_id
-      WHERE l.username IS NOT NULL AND l.username != ''
-      LIMIT 10
-    `);
-    console.log('Available advertisers:', allAdvertisers.map(a => a.username));
-
-    // Debug: Check what sub_ids exist
-    const [allSubIds] = await crmPool.query(`
-      SELECT DISTINCT sub_campaign_id FROM campaign_data 
-      WHERE sub_campaign_id IS NOT NULL AND sub_campaign_id != ''
-      LIMIT 10
-    `);
-    console.log('Available sub_ids:', allSubIds.map(s => s.sub_campaign_id));
-
-    // Debug: Check what campaigns exist for this specific advertiser
-    const [advertiserCampaigns] = await crmPool.query(`
-      SELECT c.sub_campaign_id, c.campaign_name, l.username
-      FROM campaign_data c
-      INNER JOIN login l ON l.id = c.user_id
-      WHERE l.username = ?
-    `, [adv_name]);
-    console.log('Campaigns for advertiser', adv_name, ':', advertiserCampaigns);
-
-    // Debug: Check what campaigns exist for this specific sub_id
-    const [subIdCampaigns] = await crmPool.query(`
-      SELECT c.sub_campaign_id, c.campaign_name, l.username
-      FROM campaign_data c
-      INNER JOIN login l ON l.id = c.user_id
-      WHERE c.sub_campaign_id = ?
-    `, [campaign_subid]);
-    console.log('Campaigns for sub_id', campaign_subid, ':', subIdCampaigns);
-
-    // Find campaign in CRM campaign_data table
+    // Find campaign in CRM campaign_data table - auto-get advertiser
     const [crmCampaigns] = await crmPool.query(`
       SELECT c.*, l.username
       FROM campaign_data c
       INNER JOIN login l ON l.id = c.user_id
-      WHERE c.sub_campaign_id = ? AND l.username = ?
-    `, [campaign_subid, adv_name]);
+      WHERE c.sub_campaign_id = ?
+    `, [campaign_subid]);
 
     console.log('Found campaigns:', crmCampaigns.length);
 
     if (!crmCampaigns.length) {
       return res.status(404).json({ 
-        error: 'Campaign not found in CRM data with given advertiser username and sub campaign ID',
-        debug: {
-          looking_for: { adv_name, campaign_subid },
-          available_advertisers: allAdvertisers.map(a => a.username),
-          available_sub_ids: allSubIds.map(s => s.sub_campaign_id)
-        }
+        error: 'Campaign not found in CRM data with given sub campaign ID',
+        debug: { looking_for: { campaign_subid } }
       });
     }
 
     const crmCampaign = crmCampaigns[0];
+    const adv_name = crmCampaign.username; // Auto-extracted advertiser name
+    const advertiser_id = crmCampaign.user_id; // Save user_id as advertiser_id
     const createdGroups = [];
 
     // Extract package_id from preview_url
@@ -173,8 +136,8 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
       // Create group
       const [result] = await conn.query(
-        `INSERT INTO chat_groups (group_name, campaign_id, package_id, sub_id, group_type, campaign_type, created_by, platform, adv_name, crm_campaign_data) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO chat_groups (group_name, campaign_id, package_id, sub_id, group_type, campaign_type, created_by, platform, adv_name, advertiser_id, crm_campaign_data) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           groupName, 
           null, // No local campaign_id since we're using CRM data
@@ -185,6 +148,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
           req.user.id, 
           platform,
           adv_name, // Use username as adv_name
+          advertiser_id, // Use user_id as advertiser_id
           JSON.stringify(crmCampaignData) // Store full CRM campaign data with extracted package_id as JSON
         ]
       );
