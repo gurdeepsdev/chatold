@@ -25,8 +25,9 @@ const OPTIMISE_SCENARIOS=[
 const REQUEST_TYPES=['geo','payout','link','budget'];
 
 const emptyForm=(type='share_link')=>({
-  task_type:type, title:'', description:'', assigned_to:'',
-  pub_id:'', pid:'', link:'',
+  task_type:type, description:'', assigned_to:'',
+  entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' }],
+  pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'' }],
   pause_reason:'', request_type:'geo', request_details:'',
   fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
 });
@@ -52,7 +53,6 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup}){
         <span style={{fontSize:20}}>{type.icon}</span>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
-            <span style={{fontWeight:700,fontSize:13}}>{task.title}</span>
             <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:20,background:`${sc[task.status]}20`,color:sc[task.status],border:`1px solid ${sc[task.status]}40`,textTransform:'uppercase',letterSpacing:'.5px'}}>{task.status}</span>
             <span style={{fontSize:10,padding:'2px 7px',borderRadius:20,background:`${type.color}15`,color:type.color}}>{type.label}</span>
           </div>
@@ -119,6 +119,54 @@ export default function TasksPanel({group, taskTarget}){
   const fileRef=useRef(null);
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
 
+  // Entry management functions
+  const addEntry = () => {
+    setForm(p => ({
+      ...p,
+      entries: [...p.entries, { pub_id:'', pid:'', link:'', assigned_to:'', note:'' }]
+    }));
+  };
+
+  const removeEntry = (index) => {
+    setForm(p => ({
+      ...p,
+      entries: p.entries.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateEntry = (index, field, value) => {
+    setForm(p => ({
+      ...p,
+      entries: p.entries.map((entry, i) => 
+        i === index ? { ...entry, [field]: value } : entry
+      )
+    }));
+  };
+
+  // Pause entry management functions
+  const addPauseEntry = () => {
+    setForm(p => ({
+      ...p,
+      pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:'', pause_reason:'' }]
+    }));
+  };
+
+  const removePauseEntry = (index) => {
+    setForm(p => ({
+      ...p,
+      pause_entries: p.pause_entries.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updatePauseEntry = (index, field, value) => {
+    setForm(p => ({
+      ...p,
+      pause_entries: p.pause_entries.map((entry, i) => 
+        i === index ? { ...entry, [field]: value } : entry
+      )
+    }));
+  };
+
   const load=useCallback(async()=>{
     if(!group)return;
     const data=await tasksAPI.getByGroup(group.id);
@@ -164,22 +212,47 @@ export default function TasksPanel({group, taskTarget}){
   },[taskTarget]);// re-runs each time taskTarget changes (new ts)
 
   const handleCreate=async()=>{
-    if(!form.title)return toast.error('Title required');
+    // Validate share_link entries
+    if (form.task_type === 'share_link') {
+      const validEntries = form.entries.filter(entry => 
+        entry.pub_id.trim() || entry.pid.trim() || entry.link.trim()
+      );
+      if (validEntries.length === 0) {
+        return toast.error('Please fill in at least one entry (PubID, PID, or Link)');
+      }
+    }
+    // Validate pause_pid entries
+    if (form.task_type === 'pause_pid') {
+      const validPauseEntries = form.pause_entries.filter(entry => 
+        entry.pub_id.trim() || entry.pid.trim() || entry.pause_reason.trim()
+      );
+      if (validPauseEntries.length === 0) {
+        return toast.error('Please fill in at least one entry (PubID, PID, or Pause Reason)');
+      }
+    }
     setCreating(true);
     try{
       let payload;
       if(form.attachment){
         payload=new FormData();
         Object.entries({group_id:group.id,campaign_id:group.campaign_id||'',...form}).forEach(([k,v])=>{
-          if(k!=='attachment'&&v!==null&&v!==undefined)payload.append(k,String(v));
+          if(k!=='attachment'&&k!=='entries'&&k!=='pause_entries'&&v!==null&&v!==undefined)payload.append(k,String(v));
         });
+        if(form.task_type === 'share_link') payload.append('entries',JSON.stringify(form.entries));
+        if(form.task_type === 'pause_pid') payload.append('pause_entries',JSON.stringify(form.pause_entries));
         payload.append('attachment',form.attachment);
       }else{
         payload={group_id:group.id,campaign_id:group.campaign_id,...form};
         delete payload.attachment;
+        if(form.task_type !== 'share_link') delete payload.entries;
+        if(form.task_type !== 'pause_pid') delete payload.pause_entries;
       }
       const data=await tasksAPI.create(payload);
-      setTasks(prev=>[data.task,...prev]);
+      if(data.subTasks && data.subTasks.length > 0){
+        setTasks(prev=>[data.task,...prev,...data.subTasks]);
+      }else{
+        setTasks(prev=>[data.task,...prev]);
+      }
       setShowCreate(false);
       setForm(emptyForm());
       toast.success('Task created!');
@@ -193,7 +266,7 @@ export default function TasksPanel({group, taskTarget}){
   };
 
   const handleFollowup=async(task)=>{
-    const msg=prompt(`Follow-up for: "${task.title}"`);
+    const msg=prompt(`Follow-up for: ${type.label} task`);
     if(!msg)return;
     await tasksAPI.createFollowup({group_id:group.id,task_id:task.id,message:msg});
     toast.success('Follow-up added!');
@@ -251,49 +324,224 @@ export default function TasksPanel({group, taskTarget}){
             </div>
           </div>
 
-          {/* Only show title and description for non-share_link tasks */}
-          {form.task_type !== 'share_link' && (
-            <div style={{marginBottom:10}}>
-              <label className="form-label">Title *</label>
-              <input className="form-control" value={form.title} onChange={e=>f('title',e.target.value)} placeholder="Task title…"/>
-            </div>
-          )}
-          {form.task_type !== 'share_link' && (
-            <div style={{marginBottom:10}}>
-              <label className="form-label">Description</label>
-              <textarea className="form-control" style={{minHeight:50}} value={form.description} onChange={e=>f('description',e.target.value)} placeholder="Optional details…"/>
-            </div>
-          )}
-
           {/* Share Link */}
           {form.task_type==='share_link'&&(
-            <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-                <div><label className="form-label">PubID</label><input className="form-control" placeholder="Publisher ID" value={form.pub_id} onChange={e=>f('pub_id',e.target.value)}/></div>
-                <div><label className="form-label">PID</label><input className="form-control" placeholder="PID" value={form.pid} onChange={e=>f('pid',e.target.value)}/></div>
+            <div style={{padding:'8px 10px',background:'rgba(79,125,255,0.1)',borderRadius:6,
+              border:'1px solid rgba(79,125,255,0.2)',marginBottom:10}}>
+              <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>🔗 Link Details</div>
+              
+              {/* Table Header */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.5fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+                <div>Assign To</div>
+                <div>PubID</div>
+                <div>PID</div>
+                <div>Tracking Link</div>
+                <div>Note</div>
+                <div></div>
               </div>
-              <div style={{marginBottom:10}}>
-                <label className="form-label">Tracking Link</label>
-                <input className="form-control" placeholder="https://…" value={form.link} onChange={e=>f('link',e.target.value)}/>
+              
+              {/* Table Entries */}
+              <div style={{maxHeight:'200px',overflowY:'auto'}}>
+                {form.entries.map((entry, index) => (
+                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.5fr auto',gap:4,marginBottom:6}}>
+                    <select 
+                      className="form-control" 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                      value={entry.assigned_to} 
+                      onChange={e => updateEntry(index, 'assigned_to', e.target.value)}
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                    </select>
+                    <input 
+                      className="form-control" 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                      placeholder="PubID" 
+                      value={entry.pub_id} 
+                      onChange={e => updateEntry(index, 'pub_id', e.target.value)}
+                    />
+                    <input 
+                      className="form-control" 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                      placeholder="PID" 
+                      value={entry.pid} 
+                      onChange={e => updateEntry(index, 'pid', e.target.value)}
+                    />
+                    <input 
+                      className="form-control" 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                      placeholder="Link" 
+                      value={entry.link} 
+                      onChange={e => updateEntry(index, 'link', e.target.value)}
+                    />
+                    <input 
+                      className="form-control" 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                      placeholder="Note" 
+                      value={entry.note} 
+                      onChange={e => updateEntry(index, 'note', e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeEntry(index)}
+                      style={{
+                        background:'rgba(239,68,68,0.2)',
+                        border:'1px solid rgba(239,68,68,0.3)',
+                        color:'#ef4444',
+                        borderRadius:'4px',
+                        padding:'4px 8px',
+                        fontSize:'12px',
+                        cursor:'pointer',
+                        transition:'all 0.15s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background='rgba(239,68,68,0.3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background='rgba(239,68,68,0.2)';
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
-            </>
+              
+              {/* Add Entry Button */}
+              <button
+                type="button"
+                onClick={addEntry}
+                style={{
+                  background:'rgba(79,125,255,0.2)',
+                  border:'1px solid rgba(79,125,255,0.3)',
+                  color:'#4f7dff',
+                  borderRadius:'6px',
+                  padding:'6px 12px',
+                  fontSize:'11px',
+                  cursor:'pointer',
+                  transition:'all 0.15s',
+                  display:'flex',
+                  alignItems:'center',
+                  gap:'6px',
+                  marginTop:'8px'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background='rgba(79,125,255,0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background='rgba(79,125,255,0.2)';
+                }}
+              >
+                ➕ Add Entry
+              </button>
+            </div>
           )}
 
           {/* Pause PID */}
           {form.task_type==='pause_pid'&&(
-            <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-                <div><label className="form-label">PubID</label><input className="form-control" value={form.pub_id} onChange={e=>f('pub_id',e.target.value)}/></div>
-                <div><label className="form-label">PID</label><input className="form-control" value={form.pid} onChange={e=>f('pid',e.target.value)}/></div>
+            <div style={{padding:'8px 10px',background:'rgba(245,158,11,0.1)',borderRadius:6,
+              border:'1px solid rgba(245,158,11,0.2)',marginBottom:10}}>
+              <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>⏸️ Pause Details</div>
+              
+              {/* Table Header */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+                <div>Assign To</div>
+                <div>PubID</div>
+                <div>PID</div>
+                <div>Pause Scenario</div>
+                <div></div>
               </div>
-              <div style={{marginBottom:10}}>
-                <label className="form-label">Pause Scenario</label>
-                <select className="form-control" value={form.pause_reason} onChange={e=>f('pause_reason',e.target.value)}>
-                  <option value="">Select scenario…</option>
-                  {PAUSE_SCENARIOS.map(s=><option key={s} value={s}>{s}</option>)}
-                </select>
+              
+              {/* Table Entries */}
+              <div style={{maxHeight:'200px',overflowY:'auto'}}>
+                {form.pause_entries.map((entry, index) => (
+                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
+                    <select 
+                      className="form-control" 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                      value={entry.assigned_to} 
+                      onChange={e => updatePauseEntry(index, 'assigned_to', e.target.value)}
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                    </select>
+                    <input 
+                      className="form-control" 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                      placeholder="PubID" 
+                      value={entry.pub_id} 
+                      onChange={e => updatePauseEntry(index, 'pub_id', e.target.value)}
+                    />
+                    <input 
+                      className="form-control" 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                      placeholder="PID" 
+                      value={entry.pid} 
+                      onChange={e => updatePauseEntry(index, 'pid', e.target.value)}
+                    />
+                    <select 
+                      className="form-control" 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                      value={entry.pause_reason} 
+                      onChange={e => updatePauseEntry(index, 'pause_reason', e.target.value)}
+                    >
+                      <option value="">Select scenario…</option>
+                      {PAUSE_SCENARIOS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => removePauseEntry(index)}
+                      style={{
+                        background:'rgba(239,68,68,0.2)',
+                        border:'1px solid rgba(239,68,68,0.3)',
+                        color:'#ef4444',
+                        borderRadius:'4px',
+                        padding:'4px 8px',
+                        fontSize:'12px',
+                        cursor:'pointer',
+                        transition:'all 0.15s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background='rgba(239,68,68,0.3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background='rgba(239,68,68,0.2)';
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
-            </>
+              
+              {/* Add Entry Button */}
+              <button
+                type="button"
+                onClick={addPauseEntry}
+                style={{
+                  background:'rgba(245,158,11,0.2)',
+                  border:'1px solid rgba(245,158,11,0.3)',
+                  color:'#f59e0b',
+                  borderRadius:'6px',
+                  padding:'6px 12px',
+                  fontSize:'11px',
+                  cursor:'pointer',
+                  transition:'all 0.15s',
+                  display:'flex',
+                  alignItems:'center',
+                  gap:'6px',
+                  marginTop:'8px'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background='rgba(245,158,11,0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background='rgba(245,158,11,0.2)';
+                }}
+              >
+                ➕ Add Entry
+              </button>
+            </div>
           )}
 
           {/* Raise Request */}

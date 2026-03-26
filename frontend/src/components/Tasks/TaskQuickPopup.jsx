@@ -14,8 +14,9 @@ const OPTIMISE_SCENARIOS = ['Increase Budget','Decrease Budget','Expand GEO','Re
 const REQUEST_TYPES = ['geo','payout','link','budget'];
 
 const empty = (type='share_link') => ({
-  task_type:type, title:'', description:'', assigned_to:'',
-  pub_id:'', pid:'', link:'',
+  task_type:type, description:'', assigned_to:'',
+  entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' }],
+  pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'' }],
   pause_reason:'', request_type:'geo', request_details:'',
   fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
 });
@@ -34,6 +35,54 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
   const fileRef = useRef(null);
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+  // Entry management functions
+  const addEntry = () => {
+    setForm(p => ({
+      ...p,
+      entries: [...p.entries, { pub_id:'', pid:'', link:'', assigned_to:'', note:'' }]
+    }));
+  };
+
+  const removeEntry = (index) => {
+    setForm(p => ({
+      ...p,
+      entries: p.entries.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateEntry = (index, field, value) => {
+    setForm(p => ({
+      ...p,
+      entries: p.entries.map((entry, i) => 
+        i === index ? { ...entry, [field]: value } : entry
+      )
+    }));
+  };
+
+  // Pause entry management functions
+  const addPauseEntry = () => {
+    setForm(p => ({
+      ...p,
+      pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:'', pause_reason:'' }]
+    }));
+  };
+
+  const removePauseEntry = (index) => {
+    setForm(p => ({
+      ...p,
+      pause_entries: p.pause_entries.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updatePauseEntry = (index, field, value) => {
+    setForm(p => ({
+      ...p,
+      pause_entries: p.pause_entries.map((entry, i) => 
+        i === index ? { ...entry, [field]: value } : entry
+      )
+    }));
+  };
+
   useEffect(() => { authAPI.getUsers().then(d => setUsers(d.users || [])); }, []);
   useEffect(() => { if (initialType) setForm(empty(initialType)); }, [initialType]);
 
@@ -45,13 +94,23 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
   }, [onClose]);
 
   const handleCreate = async () => {
-    // Title is required for all tasks except share_link
-    if (form.task_type !== 'share_link' && !form.title.trim()) {
-      return toast.error('Title required');
+    // For share_link, validate entries
+    if (form.task_type === 'share_link') {
+      const validEntries = form.entries.filter(entry => 
+        entry.pub_id.trim() || entry.pid.trim() || entry.link.trim()
+      );
+      if (validEntries.length === 0) {
+        return toast.error('Please fill in at least one entry (PubID, PID, or Link)');
+      }
     }
-    // For share_link, require at least one field to be filled
-    if (form.task_type === 'share_link' && !form.pub_id.trim() && !form.pid.trim() && !form.link.trim()) {
-      return toast.error('Please fill in at least one field (PubID, PID, or Link)');
+    // For pause_pid, validate pause entries
+    if (form.task_type === 'pause_pid') {
+      const validPauseEntries = form.pause_entries.filter(entry => 
+        entry.pub_id.trim() || entry.pid.trim() || entry.pause_reason.trim()
+      );
+      if (validPauseEntries.length === 0) {
+        return toast.error('Please fill in at least one entry (PubID, PID, or Pause Reason)');
+      }
     }
     setCreating(true);
     try {
@@ -59,11 +118,28 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
       if (form.attachment) {
         payload = new FormData();
         Object.entries({ group_id: group.id, campaign_id: group.campaign_id || '', ...form })
-          .forEach(([k, v]) => { if (k !== 'attachment' && v !== null && v !== undefined) payload.append(k, String(v)); });
+          .forEach(([k, v]) => { 
+            if (k !== 'attachment' && k !== 'entries' && k !== 'pause_entries' && v !== null && v !== undefined) {
+              payload.append(k, String(v));
+            }
+          });
+        // Add entries as JSON string
+        if (form.task_type === 'share_link') {
+          payload.append('entries', JSON.stringify(form.entries));
+        }
+        if (form.task_type === 'pause_pid') {
+          payload.append('pause_entries', JSON.stringify(form.pause_entries));
+        }
         payload.append('attachment', form.attachment);
       } else {
-        payload = { group_id: group.id, campaign_id: group.campaign_id, ...form };
+        payload = { 
+          group_id: group.id, 
+          campaign_id: group.campaign_id, 
+          ...form
+        };
         delete payload.attachment;
+        if (form.task_type !== 'share_link') delete payload.entries;
+        if (form.task_type !== 'pause_pid') delete payload.pause_entries;
       }
       await tasksAPI.create(payload);
       toast.success('Task created!');
@@ -131,24 +207,9 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
           })}
         </div>
 
-        {/* Title + Assign — always shown */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
-          {/* Only show title and description for non-share_link tasks */}
-          {form.task_type !== 'share_link' && (
-            <div style={{gridColumn:'1/-1'}}>
-              <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>Title *</label>
-              <input className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} autoFocus value={form.title}
-                onChange={e => f('title', e.target.value)} placeholder="Task title…"/>
-            </div>
-          )}
-          {form.task_type !== 'share_link' && (
-            <div style={{gridColumn:'1/-1'}}>
-              <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>Description</label>
-              <textarea className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff',minHeight:40,resize:'vertical'}}
-                value={form.description} onChange={e => f('description', e.target.value)} placeholder="Optional…"/>
-            </div>
-          )}
-          <div style={{gridColumn:'1/-1'}}>
+        {/* Assign To */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr',gap:6,marginBottom:8}}>
+          <div>
             <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>Assign To</label>
             <select className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} value={form.assigned_to} onChange={e => f('assigned_to', e.target.value)}>
               <option value="">Unassigned</option>
@@ -162,39 +223,218 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
           <div style={{padding:'8px 10px',background:'rgba(79,125,255,0.1)',borderRadius:6,
             border:'1px solid rgba(79,125,255,0.2)',marginBottom:8}}>
             <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>🔗 Link Details</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-              <div>
-                <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>PubID</label>
-                <input className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} placeholder="Publisher ID" value={form.pub_id} onChange={e=>f('pub_id',e.target.value)}/>
-              </div>
-              <div>
-                <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>PID</label>
-                <input className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} placeholder="PID" value={form.pid} onChange={e=>f('pid',e.target.value)}/>
-              </div>
+            
+            {/* Table Header */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.5fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+              <div>Assign To</div>
+              <div>PubID</div>
+              <div>PID</div>
+              <div>Tracking Link</div>
+              <div>Note</div>
+              <div></div>
             </div>
-            <div>
-              <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>Tracking Link</label>
-              <input className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} placeholder="https://…" value={form.link} onChange={e=>f('link',e.target.value)}/>
+            
+            {/* Table Entries */}
+            <div style={{maxHeight:'200px',overflowY:'auto'}}>
+              {form.entries.map((entry, index) => (
+                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.5fr auto',gap:4,marginBottom:6}}>
+                  <select 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                    value={entry.assigned_to} 
+                    onChange={e => updateEntry(index, 'assigned_to', e.target.value)}
+                  >
+                    <option value="">Unassigned</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                  </select>
+                  <input 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                    placeholder="PubID" 
+                    value={entry.pub_id} 
+                    onChange={e => updateEntry(index, 'pub_id', e.target.value)}
+                  />
+                  <input 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                    placeholder="PID" 
+                    value={entry.pid} 
+                    onChange={e => updateEntry(index, 'pid', e.target.value)}
+                  />
+                  <input 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                    placeholder="Link" 
+                    value={entry.link} 
+                    onChange={e => updateEntry(index, 'link', e.target.value)}
+                  />
+                  <input 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                    placeholder="Note" 
+                    value={entry.note} 
+                    onChange={e => updateEntry(index, 'note', e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeEntry(index)}
+                    style={{
+                      background:'rgba(239,68,68,0.2)',
+                      border:'1px solid rgba(239,68,68,0.3)',
+                      color:'#ef4444',
+                      borderRadius:'4px',
+                      padding:'4px 8px',
+                      fontSize:'12px',
+                      cursor:'pointer',
+                      transition:'all 0.15s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background='rgba(239,68,68,0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background='rgba(239,68,68,0.2)';
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
             </div>
+            
+            {/* Add Entry Button */}
+            <button
+              type="button"
+              onClick={addEntry}
+              style={{
+                background:'rgba(79,125,255,0.2)',
+                border:'1px solid rgba(79,125,255,0.3)',
+                color:'#4f7dff',
+                borderRadius:'6px',
+                padding:'6px 12px',
+                fontSize:'11px',
+                cursor:'pointer',
+                transition:'all 0.15s',
+                display:'flex',
+                alignItems:'center',
+                gap:'6px',
+                marginTop:'8px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background='rgba(79,125,255,0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background='rgba(79,125,255,0.2)';
+              }}
+            >
+              ➕ Add Entry
+            </button>
           </div>
         )}
 
         {/* ── Pause PID ── */}
         {form.task_type === 'pause_pid' && (
-          <div style={{padding:'10px 13px',background:'rgba(245,158,11,.06)',borderRadius:9,
-            border:'1px solid rgba(245,158,11,.2)',marginBottom:8}}>
-            <div style={{fontSize:11,color:'#f59e0b',fontWeight:700,marginBottom:9}}>⏸️ Pause Details</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-              <div><label className="form-label">PubID</label>
-                <input className="form-control" value={form.pub_id} onChange={e=>f('pub_id',e.target.value)}/></div>
-              <div><label className="form-label">PID</label>
-                <input className="form-control" value={form.pid} onChange={e=>f('pid',e.target.value)}/></div>
+          <div style={{padding:'8px 10px',background:'rgba(245,158,11,0.1)',borderRadius:6,
+            border:'1px solid rgba(245,158,11,0.2)',marginBottom:8}}>
+            <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>⏸️ Pause Details</div>
+            
+            {/* Table Header */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+              <div>Assign To</div>
+              <div>PubID</div>
+              <div>PID</div>
+              <div>Pause Scenario</div>
+              <div></div>
             </div>
-            <label className="form-label">Reason</label>
-            <select className="form-control" value={form.pause_reason} onChange={e=>f('pause_reason',e.target.value)}>
-              <option value="">Select scenario…</option>
-              {PAUSE_SCENARIOS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            
+            {/* Table Entries */}
+            <div style={{maxHeight:'200px',overflowY:'auto'}}>
+              {form.pause_entries.map((entry, index) => (
+                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
+                  <select 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                    value={entry.assigned_to} 
+                    onChange={e => updatePauseEntry(index, 'assigned_to', e.target.value)}
+                  >
+                    <option value="">Unassigned</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                  </select>
+                  <input 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                    placeholder="PubID" 
+                    value={entry.pub_id} 
+                    onChange={e => updatePauseEntry(index, 'pub_id', e.target.value)}
+                  />
+                  <input 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                    placeholder="PID" 
+                    value={entry.pid} 
+                    onChange={e => updatePauseEntry(index, 'pid', e.target.value)}
+                  />
+                  <select 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                    value={entry.pause_reason} 
+                    onChange={e => updatePauseEntry(index, 'pause_reason', e.target.value)}
+                  >
+                    <option value="">Select scenario…</option>
+                    {PAUSE_SCENARIOS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => removePauseEntry(index)}
+                    style={{
+                      background:'rgba(239,68,68,0.2)',
+                      border:'1px solid rgba(239,68,68,0.3)',
+                      color:'#ef4444',
+                      borderRadius:'4px',
+                      padding:'4px 8px',
+                      fontSize:'12px',
+                      cursor:'pointer',
+                      transition:'all 0.15s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background='rgba(239,68,68,0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background='rgba(239,68,68,0.2)';
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            
+            {/* Add Entry Button */}
+            <button
+              type="button"
+              onClick={addPauseEntry}
+              style={{
+                background:'rgba(245,158,11,0.2)',
+                border:'1px solid rgba(245,158,11,0.3)',
+                color:'#f59e0b',
+                borderRadius:'6px',
+                padding:'6px 12px',
+                fontSize:'11px',
+                cursor:'pointer',
+                transition:'all 0.15s',
+                display:'flex',
+                alignItems:'center',
+                gap:'6px',
+                marginTop:'8px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background='rgba(245,158,11,0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background='rgba(245,158,11,0.2)';
+              }}
+            >
+              ➕ Add Entry
+            </button>
           </div>
         )}
 
