@@ -916,16 +916,73 @@ export default function ChatMessages({group,onTaskClick}){
   },[detectMention, group.id, sendTyping]);
 
   const uploadFile=async e=>{
-    const file=e.target.files[0];if(!file)return;
-    if(file.size>52428800){toast.error('Max 50 MB');return;}
-    const fd=new FormData();fd.append('file',file);
-    const tid=toast.loading(`Uploading ${file.name}…`);
-    try{
-      const data=await messagesAPI.uploadFile(group.id,fd);
-      setMessages(prev=>prev.some(m=>m.id===data.message.id)?prev:[...prev,data.message]);
-      bottomRef.current?.scrollIntoView({behavior:'smooth'});toast.success('Done!',{id:tid});
-    }catch{toast.error('Upload failed',{id:tid});}
-    e.target.value='';
+    const files=Array.from(e.target.files);
+    if(!files.length)return;
+    
+    // Check total size (max 50MB per file, but we'll allow multiple files up to 100MB total)
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    if(totalSize > 104857600){ // 100MB total
+      toast.error('Total files size must be less than 100 MB');
+      return;
+    }
+    
+    // Check individual file sizes
+    const oversizedFiles = files.filter(file => file.size > 52428800); // 50MB per file
+    if(oversizedFiles.length > 0){
+      toast.error('Each file must be less than 50 MB');
+      return;
+    }
+    
+    // Upload files one by one
+    const uploadPromises = files.map(async (file) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      
+      try {
+        const data = await messagesAPI.uploadFile(group.id, fd);
+        return { success: true, message: data.message, file };
+      } catch (error) {
+        return { success: false, error, file };
+      }
+    });
+    
+    // Show loading toast
+    const fileNames = files.map(f => f.name).join(', ');
+    const tid = toast.loading(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`);
+    
+    try {
+      const results = await Promise.all(uploadPromises);
+      
+      // Separate successful and failed uploads
+      const successful = results.filter(r => r.success);
+      const failed = results.filter(r => !r.success);
+      
+      // Add successful messages to chat
+      if (successful.length > 0) {
+        const newMessages = successful.map(r => r.message);
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
+          return [...prev, ...uniqueNewMessages];
+        });
+        bottomRef.current?.scrollIntoView({behavior: 'smooth'});
+      }
+      
+      // Show appropriate toast message
+      if (failed.length === 0) {
+        toast.success(`${files.length} file${files.length > 1 ? 's' : ''} uploaded successfully!`, { id: tid });
+      } else if (successful.length === 0) {
+        toast.error(`Failed to upload ${failed.length} file${failed.length > 1 ? 's' : ''}`, { id: tid });
+      } else {
+        toast.success(`${successful.length} of ${files.length} files uploaded successfully`, { id: tid });
+      }
+      
+    } catch (error) {
+      toast.error('Upload failed', { id: tid });
+    }
+    
+    // Clear input
+    e.target.value = '';
   };
 
   const startRec=async()=>{
@@ -1034,6 +1091,7 @@ export default function ChatMessages({group,onTaskClick}){
             />
             <div className="input-actions">
               <input ref={fileRef} type="file" style={{display:'none'}} onChange={uploadFile}
+                multiple
                 accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip"/>
 
               {/* Task — first, before attach */}

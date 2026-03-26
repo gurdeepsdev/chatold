@@ -34,16 +34,17 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
   const [expandedThreads, setExpandedThreads] = useState({});
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [pinnedGroups, setPinnedGroups] = useState([]);
 
   const loadGroups = useCallback(async () => {
     try {
       const data = await groupsAPI.getAll();
       setGroups(data.groups || []);
       setThreads(data.threads || []);
-      // Expand first thread by default
-      if (data.threads?.length) {
-        setExpandedThreads(prev => ({ [data.threads[0].package_id]: true, ...prev }));
-      }
+      // Don't expand any threads by default - keep them collapsed
+      // if (data.threads?.length) {
+      //   setExpandedThreads(prev => ({ [data.threads[0].package_id]: true, ...prev }));
+      // }
     } catch (err) {
       console.error('Failed to load groups');
     } finally {
@@ -51,14 +52,78 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
     }
   }, []);
 
+  // Load pinned groups from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('pinnedGroups');
+    if (saved) {
+      try {
+        setPinnedGroups(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to load pinned groups:', e);
+      }
+    }
+  }, []);
+  
+  // Save pinned groups to localStorage whenever they change
+  useEffect(() => {
+    if (pinnedGroups.length > 0) {
+      localStorage.setItem('pinnedGroups', JSON.stringify(pinnedGroups));
+    }
+  }, [pinnedGroups]);
+
+  // Pin/unpin group functionality
+  const togglePinGroup = useCallback((groupId) => {
+    setPinnedGroups(prev => {
+      const isPinned = prev.includes(groupId);
+      if (isPinned) {
+        // Remove from pinned groups
+        return prev.filter(id => id !== groupId);
+      } else {
+        // Add to pinned groups
+        return [...prev, groupId];
+      }
+    });
+  }, []);
+
+  // Check if a group is pinned
+  const isGroupPinned = useCallback((groupId) => {
+    return pinnedGroups.includes(groupId);
+  }, [pinnedGroups]);
+
   useEffect(() => { loadGroups(); }, [loadGroups]);
 
   useEffect(() => {
     const unsub = on('new_message', (msg) => {
       setGroups(prev => prev.map(g => g.id === msg.group_id ? { ...g, last_message_at: msg.sent_at } : g));
     });
-    return unsub;
-  }, [on]);
+
+    const unsubGroupCreated = on('group_created', (data) => {
+      // Only add the group if the current user is a member
+      if (data.group && (data.group.created_by === user?.full_name || data.group.member_ids?.includes(user?.id))) {
+        setGroups(prev => {
+          // Check if group already exists to avoid duplicates
+          const existingIndex = prev.findIndex(g => g.id === data.group.id);
+          if (existingIndex >= 0) {
+            // Update existing group
+            return prev.map((g, index) => 
+              index === existingIndex ? { ...g, ...data.group } : g
+            );
+          } else {
+            // Add new group at the beginning
+            return [data.group, ...prev];
+          }
+        });
+        
+        // Refresh groups list to get latest data
+        loadGroups();
+      }
+    });
+
+    return () => {
+      unsub();
+      unsubGroupCreated();
+    };
+  }, [on, user?.full_name, user?.id, loadGroups]);
 
   const toggleThread = (key) => {
     setExpandedThreads(prev => ({ ...prev, [key]: !prev[key] }));
@@ -68,7 +133,20 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
     ? groups.filter(g => g.group_name?.toLowerCase().includes(search.toLowerCase()) || g.campaign_name?.toLowerCase().includes(search.toLowerCase()))
     : null;
 
-  const renderGroup = (group) => (
+  // Sort groups: pinned groups first, then by last message time
+  const sortedGroups = filteredGroups || groups;
+  const groupsToRender = sortedGroups ? 
+    [...sortedGroups].sort((a, b) => {
+      // Pinned groups come first
+      const aPinned = isGroupPinned(a.id);
+      const bPinned = isGroupPinned(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      // If both pinned or both not pinned, sort by last message time
+      return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+    }) : sortedGroups;
+
+  const renderGroup = (group, isThreadGroup = false) => (
     <div
       key={group.id}
       className={`group-item ${selectedGroupId === group.id ? 'active' : ''}`}
@@ -92,6 +170,25 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatTime(group.last_message_at)}</span>
         {group.pending_tasks > 0 && (
           <span className="group-badge" style={{ background: 'var(--warning)' }}>{group.pending_tasks}</span>
+        )}
+        {/* Pin button - only for groups NOT inside threads */}
+        {!isThreadGroup && (
+          <button
+            className={`btn-icon ${isGroupPinned(group.id) ? 'pinned' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePinGroup(group.id);
+            }}
+            style={{
+              fontSize: 10,
+              padding: 2,
+              opacity: isGroupPinned(group.id) ? 1 : 0.5,
+              color: isGroupPinned(group.id) ? 'var(--warning)' : 'var(--text-muted)'
+            }}
+            title={isGroupPinned(group.id) ? 'Unpin group' : 'Pin group'}
+          >
+            📌
+          </button>
         )}
       </div>
     </div>
@@ -147,39 +244,85 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       <div className="sidebar-groups">
         {loading ? (
           <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading groups...</div>
-        ) : filteredGroups ? (
-          filteredGroups.length ? filteredGroups.map(renderGroup) : (
-            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No results</div>
-          )
         ) : (
-          threads.map(thread => (
-            <div key={thread.package_id} className="thread-section">
-              {thread.package_id && !thread.package_id.startsWith('custom_') && (
-                <div className="thread-header" onClick={() => toggleThread(thread.package_id)}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                  </svg>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {thread.package_id.replace(/^com\./, '')}
-                  </span>
-                  <span style={{ fontSize: 10, background: 'var(--bg-active)', padding: '1px 5px', borderRadius: 4 }}>
-                    {thread.groups.length}
-                  </span>
-                  <svg
-                    className={`thread-chevron ${expandedThreads[thread.package_id] ? 'open' : ''}`}
-                    width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                  >
-                    <polyline points="9 18 15 12 9 6"/>
-                  </svg>
+          <>
+            {/* Pinned Groups Section - Always at Top */}
+            {!search && pinnedGroups.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ 
+                  fontSize: 11, 
+                  fontWeight: 600, 
+                  color: 'var(--text-muted)', 
+                  marginBottom: 8,
+                  padding: '0 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}>
+                  📌 Pinned Groups ({pinnedGroups.length})
                 </div>
-              )}
-              {(expandedThreads[thread.package_id] || thread.package_id?.startsWith('custom_')) && (
-                <div>
-                  {thread.groups.map(renderGroup)}
-                </div>
-              )}
-            </div>
-          ))
+                {groups
+                  .filter(g => pinnedGroups.includes(g.id))
+                  .sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0))
+                  .map(group => renderGroup(group, false))}
+              </div>
+            )}
+
+            {search ? (
+              // Show filtered groups when searching
+              groupsToRender.length ? groupsToRender.map(renderGroup) : (
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No results</div>
+              )
+            ) : (
+              // Show threads and remaining individual groups when not searching
+              <>
+                {threads.map(thread => (
+                  <div key={thread.package_id} className="thread-section">
+                    {thread.package_id && !thread.package_id.startsWith('custom_') && (
+                      <div className="thread-header" onClick={() => toggleThread(thread.package_id)}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                        </svg>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {(() => {
+                            // Extract campaign name from crm_campaign_data JSON field
+                            const firstGroup = thread.groups?.[0];
+                            if (firstGroup?.crm_campaign_data) {
+                              try {
+                                const crmData = typeof firstGroup.crm_campaign_data === 'string' 
+                                  ? JSON.parse(firstGroup.crm_campaign_data) 
+                                  : firstGroup.crm_campaign_data;
+                                if (crmData?.campaign_name) {
+                                  return crmData.campaign_name;
+                                }
+                              } catch (e) {
+                                console.error('Failed to parse crm_campaign_data:', e);
+                              }
+                            }
+                            // Fallback to package_id if no campaign name found
+                            return thread.package_id.replace(/^com\./, '');
+                          })()}
+                        </span>
+                        <span style={{ fontSize: 10, background: 'var(--bg-active)', padding: '1px 5px', borderRadius: 4 }}>
+                          {thread.groups.length}
+                        </span>
+                        <svg
+                          className={`thread-chevron ${expandedThreads[thread.package_id] ? 'open' : ''}`}
+                          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                        >
+                          <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                      </div>
+                    )}
+                    {expandedThreads[thread.package_id] && thread.groups.map(group => renderGroup(group, true))}
+                  </div>
+                ))}
+                
+                {/* Show ALL individual groups with pin buttons (excluding pinned ones to avoid duplication) */}
+                {groupsToRender.filter(g => !pinnedGroups.includes(g.id)).map(renderGroup)}
+              </>
+            )}
+          </>
         )}
 
         {!loading && groups.length === 0 && !search && (
@@ -190,16 +333,6 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
               <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
                 Create Group
               </button>
-            )}
-            {!['admin', 'advertiser_manager', 'advertiser'].includes(user?.role) && (
-              <div style={{ 
-                textAlign: 'center', 
-                color: 'var(--text-muted)', 
-                fontSize: 12,
-                marginTop: 10
-              }}>
-                Only administrators, advertiser managers, and advertisers can create campaign groups
-              </div>
             )}
           </div>
         )}

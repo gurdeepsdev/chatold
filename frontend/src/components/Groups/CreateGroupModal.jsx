@@ -14,10 +14,28 @@ export default function CreateGroupModal({ onClose, onCreated }) {
   const [campaignData, setCampaignData] = useState({ advertisers: [], sub_ids: [] });
   const [users, setUsers] = useState([]);
   const [selectedSubId, setSelectedSubId] = useState('');
+  const [campaignSearch, setCampaignSearch] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
   const [campaignType, setCampaignType] = useState('agency'); // 'agency' | 'direct'
   const [groupName, setGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Filter campaigns based on search
+  const filteredCampaigns = campaignData.sub_ids.filter(row => 
+    row.sub_id.toLowerCase().includes(campaignSearch.toLowerCase()) ||
+    row.campaign_name.toLowerCase().includes(campaignSearch.toLowerCase())
+  );
+
+  // Filter users based on search
+  const filteredUsers = users.filter(u => 
+    u.id !== user.id && (
+      u.full_name.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      u.email.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      u.role.toLowerCase().includes(memberSearch.toLowerCase())
+    )
+  );
 
   useEffect(() => {
     const fetchCampaignData = async () => {
@@ -26,9 +44,10 @@ export default function CreateGroupModal({ onClose, onCreated }) {
         setCampaignData(data);
         
         // Auto-select first sub_id when data loads
-        if (data.sub_ids && data.sub_ids.length > 0) {
-          setSelectedSubId(data.sub_ids[0].sub_id);
-        }
+        // if (data.sub_ids && data.sub_ids.length > 0) {
+        //   setSelectedSubId(data.sub_ids[0].sub_id);
+        //   setCampaignSearch(`${data.sub_ids[0].sub_id} - ${data.sub_ids[0].campaign_name}`);
+        // }
       } catch (error) {
         toast.error('Failed to fetch campaign data');
       }
@@ -36,6 +55,18 @@ export default function CreateGroupModal({ onClose, onCreated }) {
     fetchCampaignData();
     authAPI.getUsers().then(d => setUsers(d.users || []));
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showDropdown && !event.target.closest('.campaign-search-container')) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDropdown]);
 
   const toggleMember = (id) => {
     setSelectedMembers(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]);
@@ -143,19 +174,102 @@ export default function CreateGroupModal({ onClose, onCreated }) {
               {/* Campaign Sub ID Selector */}
               <div style={{ marginBottom: 16 }}>
                 <label className="form-label">Campaign Sub ID</label>
-                <select
-                  value={selectedSubId}
-                  onChange={(e) => setSelectedSubId(e.target.value)}
-                  className="form-select"
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)' }}
-                >
-                  <option value="">Select campaign sub ID...</option>
-                  {campaignData.sub_ids.map((row, index) => (
-                    <option key={`sub_${row.sub_id}_${index}`} value={row.sub_id}>
-                      {row.sub_id} - {row.campaign_name}
-                    </option>
-                  ))}
-                </select>
+                <div className="campaign-search-container" style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={campaignSearch}
+                    onChange={(e) => {
+                      setCampaignSearch(e.target.value);
+                      setShowDropdown(true);
+                    }}
+                    onFocus={() => setShowDropdown(true)}
+                    placeholder="Search campaign sub ID or name..."
+                    className="form-control"
+                    style={{ 
+                      width: '100%', 
+                      padding: '8px 12px', 
+                      borderRadius: 8, 
+                      border: '1px solid var(--border)',
+                      paddingRight: '30px'
+                    }}
+                  />
+                  {selectedSubId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSubId('');
+                        setCampaignSearch('');
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-muted)',
+                        fontSize: '16px'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                  
+                  {/* Dropdown */}
+                  {showDropdown && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      background: 'var(--bg-primary)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      marginTop: 4,
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      zIndex: 1000,
+                      boxShadow: 'var(--shadow-md)'
+                    }}>
+                      {filteredCampaigns.length === 0 ? (
+                        <div style={{ padding: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                          No campaigns found
+                        </div>
+                      ) : (
+                        filteredCampaigns.map((row, index) => (
+                          <div
+                            key={`sub_${row.sub_id}_${index}`}
+                            onClick={() => {
+                              setSelectedSubId(row.sub_id);
+                              setCampaignSearch(`${row.sub_id} - ${row.campaign_name}`);
+                              setShowDropdown(false);
+                            }}
+                            style={{
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid var(--border)',
+                              transition: 'background 0.15s'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'var(--bg-secondary)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>
+                              {row.sub_id}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              {row.campaign_name}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: 8, marginBottom: 16 }}>
@@ -183,18 +297,38 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                 <span style={{ marginLeft: 6, background: '#4f7dff', color: 'white', borderRadius: 10, padding: '1px 7px', fontSize: 10, fontWeight: 700 }}>{selectedMembers.length}</span>
               )}
             </label>
+            <input
+              type="text"
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+              placeholder="Search by name, email, or role..."
+              className="form-control"
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                borderRadius: 8, 
+                border: '1px solid var(--border)',
+                marginBottom: 8
+              }}
+            />
             <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-              {users.filter(u => u.id !== user.id).map(u => (
-                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', background: selectedMembers.includes(u.id) ? 'var(--accent-dim)' : 'transparent', borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
-                  onClick={() => toggleMember(u.id)}
-                >
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: selectedMembers.includes(u.id) ? 'var(--accent)' : 'var(--border)', flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{u.full_name}</div>
-                    <div style={{ fontSize: 11, color: ROLE_COLORS[u.role] || 'var(--text-muted)' }}>{u.role} · {u.email}</div>
-                  </div>
+              {filteredUsers.length === 0 ? (
+                <div style={{ padding: '20px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                  {memberSearch ? 'No users found matching your search' : 'No additional users available'}
                 </div>
-              ))}
+              ) : (
+                filteredUsers.map(u => (
+                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', background: selectedMembers.includes(u.id) ? 'var(--accent-dim)' : 'transparent', borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
+                    onClick={() => toggleMember(u.id)}
+                  >
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: selectedMembers.includes(u.id) ? 'var(--accent)' : 'var(--border)', flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{u.full_name}</div>
+                      <div style={{ fontSize: 11, color: ROLE_COLORS[u.role] || 'var(--text-muted)' }}>{u.role} · {u.email}</div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

@@ -20,6 +20,11 @@ export default function CampaignDetails({ group }) {
   const [adding, setAdding] = useState(false);
   const [showAllMembers, setShowAllMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
+  
+  // Parse CRM campaign data
+  const crmData = group.crm_campaign_data ? 
+    (typeof group.crm_campaign_data === 'string' ? JSON.parse(group.crm_campaign_data) : group.crm_campaign_data) 
+    : null;
 
   useEffect(() => {
     if (!group) return;
@@ -94,22 +99,54 @@ export default function CampaignDetails({ group }) {
           )}
         </div>
         <div className="campaign-detail-row"><span className="campaign-detail-label">Group</span><span className="campaign-detail-value" style={{ fontWeight: 600 }}>{group.group_name}</span></div>
-        {group.campaign_name && <div className="campaign-detail-row"><span className="campaign-detail-label">Campaign</span><span className="campaign-detail-value">{group.campaign_name}</span></div>}
+        
+        {/* CRM Campaign Data */}
+        {crmData && (
+          <>
+            <div className="campaign-detail-row"><span className="campaign-detail-label">Campaign</span><span className="campaign-detail-value">{crmData.campaign_name || 'N/A'}</span></div>
+            <div className="campaign-detail-row"><span className="campaign-detail-label">KPI</span><span className="campaign-detail-value">{crmData.kpi || 'N/A'}</span></div>
+            <div className="campaign-detail-row"><span className="campaign-detail-label">Payable Event</span><span className="campaign-detail-value">{crmData.payable_event || 'N/A'}</span></div>
+            <div className="campaign-detail-row"><span className="campaign-detail-label">GEO</span><span className="campaign-detail-value">
+              {Array.isArray(crmData.geo) ? crmData.geo.join(', ') : crmData.geo || 'N/A'}
+            </span></div>
+            {crmData.preview_url && crmData.preview_url !== 'NA' && (
+              <div className="campaign-detail-row">
+                <span className="campaign-detail-label">Preview</span>
+                <a href={crmData.preview_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontSize: 12, flex: 1, wordBreak: 'break-all' }}>
+                  Open ↗
+                </a>
+              </div>
+            )}
+            <div className="campaign-detail-row"><span className="campaign-detail-label">MMP Tracker</span><span className="campaign-detail-value">{crmData.mmp_tracker || 'N/A'}</span></div>
+            <div className="campaign-detail-row"><span className="campaign-detail-label">Payout</span><span className="campaign-detail-value" style={{ color: 'var(--success)', fontWeight: 600 }}>
+              {crmData.adv_payout ? `$${crmData.adv_payout}` : (group.payout ? `$${group.payout}` : 'N/A')}
+            </span></div>
+          </>
+        )}
+        
+        {/* Fallback to regular group data if no CRM data */}
+        {!crmData && (
+          <>
+            {group.campaign_name && <div className="campaign-detail-row"><span className="campaign-detail-label">Campaign</span><span className="campaign-detail-value">{group.campaign_name}</span></div>}
+            {group.geo && <div className="campaign-detail-row"><span className="campaign-detail-label">GEO</span><span className="campaign-detail-value">{group.geo}</span></div>}
+            {group.payout && <div className="campaign-detail-row"><span className="campaign-detail-label">Payout</span><span className="campaign-detail-value" style={{ color: 'var(--success)', fontWeight: 600 }}>${group.payout}</span></div>}
+            {group.payable_event && <div className="campaign-detail-row"><span className="campaign-detail-label">Event</span><span className="campaign-detail-value">{group.payable_event}</span></div>}
+            {group.kpi && <div className="campaign-detail-row"><span className="campaign-detail-label">KPI</span><span className="campaign-detail-value">{group.kpi}</span></div>}
+            {group.mmp_tracker && <div className="campaign-detail-row"><span className="campaign-detail-label">MMP</span><span className="campaign-detail-value">{group.mmp_tracker}</span></div>}
+            {group.preview_url && (
+              <div className="campaign-detail-row">
+                <span className="campaign-detail-label">Preview</span>
+                <a href={group.preview_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontSize: 12, flex: 1, wordBreak: 'break-all' }}>
+                  Open ↗
+                </a>
+              </div>
+            )}
+          </>
+        )}
+        
+        {/* Additional fields */}
         {group.sub_id && <div className="campaign-detail-row"><span className="campaign-detail-label">Sub ID</span><span className="campaign-detail-value"><span className="tag">{group.sub_id}</span></span></div>}
         {group.package_id && <div className="campaign-detail-row"><span className="campaign-detail-label">Package</span><span className="campaign-detail-value"><span className="tag">{group.package_id}</span></span></div>}
-        {group.geo && <div className="campaign-detail-row"><span className="campaign-detail-label">GEO</span><span className="campaign-detail-value">{group.geo}</span></div>}
-        {group.payout && <div className="campaign-detail-row"><span className="campaign-detail-label">Payout</span><span className="campaign-detail-value" style={{ color: 'var(--success)', fontWeight: 600 }}>${group.payout}</span></div>}
-        {group.payable_event && <div className="campaign-detail-row"><span className="campaign-detail-label">Event</span><span className="campaign-detail-value">{group.payable_event}</span></div>}
-        {group.kpi && <div className="campaign-detail-row"><span className="campaign-detail-label">KPI</span><span className="campaign-detail-value">{group.kpi}</span></div>}
-        {group.mmp_tracker && <div className="campaign-detail-row"><span className="campaign-detail-label">MMP</span><span className="campaign-detail-value">{group.mmp_tracker}</span></div>}
-        {group.preview_url && (
-          <div className="campaign-detail-row">
-            <span className="campaign-detail-label">Preview</span>
-            <a href={group.preview_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontSize: 12, flex: 1, wordBreak: 'break-all' }}>
-              Open ↗
-            </a>
-          </div>
-        )}
       </div>
 
       {/* Members */}

@@ -10,7 +10,7 @@ router.get('/', auth, async (req, res) => {
     const [groups] = await db.query(`
       SELECT
         g.id, g.group_name, g.group_type, g.package_id, g.sub_id, g.campaign_type,
-        g.created_at, g.is_archived, g.campaign_id,
+        g.created_at, g.is_archived, g.campaign_id, g.crm_campaign_data,
         c.campaign_name, c.geo, c.payout, c.payable_event, c.preview_url, c.kpi, c.mmp_tracker, c.status as campaign_status,
         u.full_name as created_by_name,
         (SELECT COUNT(*) FROM messages m WHERE m.group_id = g.id AND m.is_deleted = FALSE) as message_count,
@@ -24,6 +24,19 @@ router.get('/', auth, async (req, res) => {
       WHERE g.is_archived = FALSE
       ORDER BY last_message_at DESC, g.created_at DESC
     `, [req.user.id]);
+
+    // Get group members for each group
+    for (const group of groups) {
+      const [members] = await db.query(`
+        SELECT u.id, u.full_name, u.email, u.role, gm.role as group_role
+        FROM group_members gm
+        INNER JOIN users u ON u.id = gm.user_id
+        WHERE gm.group_id = ?
+        ORDER BY u.full_name
+      `, [group.id]);
+      
+      group.group_members = members;
+    }
 
     const threads = {};
     groups.forEach(g => {
@@ -233,6 +246,34 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
     await conn.commit();
 
+    // Emit real-time notifications to group members
+    const io = req.app.get('io');
+    if (io) {
+      for (const group of createdGroups) {
+        // Get all members of the created group
+        const [members] = await conn.query(
+          'SELECT user_id FROM group_members WHERE group_id = ?',
+          [group.id]
+        );
+        
+        // Notify each member about the new group
+        members.forEach(member => {
+          io.to(`user_${member.user_id}`).emit('group_created', {
+            type: 'group_created',
+            group: {
+              id: group.id,
+              group_name: group.group_name,
+              group_type: group.group_type,
+              campaign_name: group.campaign_name,
+              platform: group.platform,
+              created_by: req.user.full_name,
+              created_at: new Date()
+            }
+          });
+        });
+      }
+    }
+
     res.status(201).json({ 
       message: `Created ${createdGroups.length} campaign groups from CRM data`,
       groups: createdGroups
@@ -356,6 +397,31 @@ router.post('/from-campaign', auth, async (req, res) => {
       [groupId]
     );
 
+    // Emit real-time notifications to group members
+    const io = req.app.get('io');
+    if (io && newGroup[0]) {
+      // Get all members of the created group
+      const [members] = await conn.query(
+        'SELECT user_id FROM group_members WHERE group_id = ?',
+        [groupId]
+      );
+      
+      // Notify each member about the new group
+      members.forEach(member => {
+        io.to(`user_${member.user_id}`).emit('group_created', {
+          type: 'group_created',
+          group: {
+            id: newGroup[0].id,
+            group_name: newGroup[0].group_name,
+            group_type: newGroup[0].group_type,
+            campaign_name: newGroup[0].campaign_name,
+            created_by: req.user.full_name,
+            created_at: new Date()
+          }
+        });
+      });
+    }
+
     res.status(201).json({ group: newGroup[0], message: 'Group created successfully' });
   } catch (err) {
     await conn.rollback();
@@ -390,6 +456,31 @@ router.post('/custom', auth, async (req, res) => {
       );
     }
     await conn.commit();
+
+    // Emit real-time notifications to group members
+    const io = req.app.get('io');
+    if (io) {
+      // Get all members of the created group
+      const [members] = await conn.query(
+        'SELECT user_id FROM group_members WHERE group_id = ?',
+        [groupId]
+      );
+      
+      // Notify each member about the new group
+      members.forEach(member => {
+        io.to(`user_${member.user_id}`).emit('group_created', {
+          type: 'group_created',
+          group: {
+            id: groupId,
+            group_name: group_name,
+            group_type: 'custom',
+            created_by: req.user.full_name,
+            created_at: new Date()
+          }
+        });
+      });
+    }
+
     res.status(201).json({ group: { id: groupId, group_name }, message: 'Group created' });
   } catch (err) {
     await conn.rollback();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { tasksAPI, authAPI, getFileUrl } from '../../utils/api';
+import { tasksAPI, authAPI, groupsAPI, getFileUrl } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { format } from 'date-fns';
@@ -40,8 +40,9 @@ const emptyForm=(type='share_link')=>({
   task_type:type, description:'', assigned_to:'',
   entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' }],
   pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'' }],
-  optimise_entries: [{ assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }],
-  pause_reason:'', request_type:'geo', request_details:'',
+optimise_entries: [{
+  assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null
+}],  pause_reason:'', request_type:'geo', request_details:'',
   fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
 });
 
@@ -59,6 +60,8 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup}){
     catch{toast.error('Failed to update');}
     setBusy(false);
   };
+
+  
 
   return(
     <div style={{marginBottom:10,borderRadius:10,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderLeft:`3px solid ${type.color}`,padding:'12px 14px'}}>
@@ -127,10 +130,18 @@ export default function TasksPanel({group, taskTarget}){
   const [filter,setFilter]=useState('all');
   const [showCreate,setShowCreate]=useState(false);
   const [users,setUsers]=useState([]);
+  const [members,setMembers]=useState([]);
   const [form,setForm]=useState(emptyForm());
   const [creating,setCreating]=useState(false);
   const fileRef=useRef(null);
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  // API call to get group members
+  useEffect(() => {
+    if (!group) return;
+    groupsAPI.getById(group.id).then(d => setMembers(d.members || []));
+    authAPI.getUsers().then(d => setUsers(d.users || []));
+  }, [group?.id]);
 
   // Entry management functions
   const addEntry = () => {
@@ -203,6 +214,137 @@ export default function TasksPanel({group, taskTarget}){
       )
     }));
   };
+
+  const renderEntryField = (field, entry, entryIndex) => {
+                switch(field) {
+                  case 'assigned_to':
+                    return (
+                      <select 
+                        className="form-control" 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                        value={entry.assigned_to} 
+                        onChange={e => updateOptimiseEntry(entryIndex, 'assigned_to', e.target.value)}
+                      >
+                        <option value="">Unassigned</option>
+                        {members.map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
+                      </select>
+                    );
+                  case 'pub_id':
+                    return (
+                      <input 
+                        className="form-control" 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        placeholder="PubID" 
+                        value={entry.pub_id} 
+                        onChange={e => updateOptimiseEntry(entryIndex, 'pub_id', e.target.value)}
+                      />
+                    );
+                  case 'pid':
+                    return (
+                      <input 
+                        className="form-control" 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        placeholder="PID" 
+                        value={entry.pid} 
+                        onChange={e => updateOptimiseEntry(entryIndex, 'pid', e.target.value)}
+                      />
+                    );
+                  case 'fp':
+                    return (
+                      <input 
+                        className="form-control" 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        placeholder="FP" 
+                        value={entry.fp} 
+                        onChange={e => updateOptimiseEntry(entryIndex, 'fp', e.target.value)}
+                      />
+                    );
+                  case 'fa':
+                    return (
+                      <select 
+                        className="form-control" 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                        value={entry.fa} 
+                        onChange={e => updateOptimiseEntry(entryIndex, 'fa', e.target.value)}
+                      >
+                        <option value="">Select FA</option>
+                        {FA_OPTIONS.map(fa => <option key={fa} value={fa}>{fa}</option>)}
+                      </select>
+                    );
+                  case 'f1':
+                    return (
+                      <input 
+                        className="form-control" 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        placeholder="F1" 
+                        value={entry.f1} 
+                        onChange={e => updateOptimiseEntry(entryIndex, 'f1', e.target.value)}
+                      />
+                    );
+                  case 'f2':
+                    return (
+                      <input 
+                        className="form-control" 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        placeholder="F2" 
+                        value={entry.f2} 
+                        onChange={e => updateOptimiseEntry(entryIndex, 'f2', e.target.value)}
+                      />
+                    );
+                  case 'optimise_scenario':
+                    return (
+                      <select 
+                        className="form-control" 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                        value={entry.optimise_scenario} 
+                        onChange={e => updateOptimiseEntry(entryIndex, 'optimise_scenario', e.target.value)}
+                      >
+                        <option value="">Select scenario…</option>
+                        {OPTIMISE_SCENARIOS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    );
+                  case 'attachment':
+                    return (
+                      <div style={{display:'flex',alignItems:'center',gap:4}}>
+                        <input 
+                          type="file" 
+                          style={{display:'none'}} 
+                          id={`file-${entryIndex}`}
+                          onChange={e => updateOptimiseEntry(entryIndex, 'attachment', e.target.files[0])}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById(`file-${entryIndex}`).click()}
+                          style={{
+                            background:'rgba(255,255,255,0.2)',
+                            border:'1px solid rgba(255,255,255,0.3)',
+                            color:'#fff',
+                            borderRadius:'4px',
+                            padding:'4px 8px',
+                            fontSize:'10px',
+                            cursor:'pointer'
+                          }}
+                        >
+                          📎 Choose
+                        </button>
+                        {entry.attachment && (
+                          <span style={{fontSize:9,color:'rgba(255,255,255,0.7)'}}>
+                            {entry.attachment.name}
+                            <button
+                              type="button"
+                              onClick={() => updateOptimiseEntry(entryIndex, 'attachment', null)}
+                              style={{background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.5)',marginLeft:2}}
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  default:
+                    return null;
+                }
+              };
 
   const load=useCallback(async()=>{
     if(!group)return;
@@ -363,13 +505,13 @@ export default function TasksPanel({group, taskTarget}){
                 ))}
               </select>
             </div>
-            <div>
+            {/* <div>
               <label className="form-label">Assign To</label>
               <select className="form-control" value={form.assigned_to} onChange={e=>f('assigned_to',e.target.value)}>
                 <option value="">Unassigned</option>
                 {users.map(u=><option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>)}
               </select>
-            </div>
+            </div> */}
           </div>
 
           {/* Share Link */}
@@ -399,7 +541,7 @@ export default function TasksPanel({group, taskTarget}){
                       onChange={e => updateEntry(index, 'assigned_to', e.target.value)}
                     >
                       <option value="">Unassigned</option>
-                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                      {members.map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
                     </select>
                     <input 
                       className="form-control" 
@@ -454,34 +596,34 @@ export default function TasksPanel({group, taskTarget}){
                   </div>
                 ))}
               </div>
-              
-              {/* Add Entry Button */}
-              <button
-                type="button"
-                onClick={addEntry}
-                style={{
-                  background:'rgba(79,125,255,0.2)',
-                  border:'1px solid rgba(79,125,255,0.3)',
-                  color:'#4f7dff',
-                  borderRadius:'6px',
-                  padding:'6px 12px',
-                  fontSize:'11px',
-                  cursor:'pointer',
-                  transition:'all 0.15s',
-                  display:'flex',
-                  alignItems:'center',
-                  gap:'6px',
-                  marginTop:'8px'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background='rgba(79,125,255,0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background='rgba(79,125,255,0.2)';
-                }}
-              >
-                ➕ Add Entry
-              </button>
+                  
+                  {/* Add Entry Button */}
+                  <button
+                    type="button"
+                    onClick={addEntry}
+                    style={{
+                      background:'rgba(79,125,255,0.2)',
+                      border:'1px solid rgba(79,125,255,0.3)',
+                      color:'#4f7dff',
+                      borderRadius:'6px',
+                      padding:'6px 12px',
+                      fontSize:'11px',
+                      cursor:'pointer',
+                      transition:'all 0.15s',
+                      display:'flex',
+                      alignItems:'center',
+                      gap:'6px',
+                      marginTop:'8px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background='rgba(79,125,255,0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background='rgba(79,125,255,0.2)';
+                    }}
+                  >
+                    ➕ Add Entry
+                  </button>
             </div>
           )}
 
@@ -511,7 +653,7 @@ export default function TasksPanel({group, taskTarget}){
                       onChange={e => updatePauseEntry(index, 'assigned_to', e.target.value)}
                     >
                       <option value="">Unassigned</option>
-                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                      {members.map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
                     </select>
                     <input 
                       className="form-control" 
@@ -596,6 +738,13 @@ export default function TasksPanel({group, taskTarget}){
           {form.task_type==='raise_request'&&(
             <>
               <div style={{marginBottom:10}}>
+                <label className="form-label">Assign To</label>
+                <select className="form-control" value={form.assigned_to} onChange={e=>f('assigned_to',e.target.value)}>
+                  <option value="">Unassigned</option>
+                  {members.map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
+                </select>
+              </div>
+              <div style={{marginBottom:10}}>
                 <label className="form-label">Request Type</label>
                 <select className="form-control" value={form.request_type} onChange={e=>f('request_type',e.target.value)}>
                   {REQUEST_TYPES.map(t=><option key={t} value={t}>{t.toUpperCase()}</option>)}
@@ -609,30 +758,111 @@ export default function TasksPanel({group, taskTarget}){
           )}
 
           {/* Optimise */}
-          {form.task_type==='optimise'&&(
-            <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
-                <div><label className="form-label">FP</label><input className="form-control" placeholder="e.g. 12%" value={form.fp} onChange={e=>f('fp',e.target.value)}/></div>
-                <div><label className="form-label">F1</label><input className="form-control" value={form.f1} onChange={e=>f('f1',e.target.value)}/></div>
-                <div><label className="form-label">F2</label><input className="form-control" value={form.f2} onChange={e=>f('f2',e.target.value)}/></div>
-              </div>
-              <div style={{marginBottom:10}}>
-                <label className="form-label">Scenario</label>
-                <select className="form-control" value={form.optimise_scenario} onChange={e=>f('optimise_scenario',e.target.value)}>
-                  <option value="">Select…</option>
-                  {OPTIMISE_SCENARIOS.map(s=><option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div style={{marginBottom:10}}>
-                <label className="form-label">Attach File</label>
-                <input ref={fileRef} type="file" style={{display:'none'}} onChange={e=>f('attachment',e.target.files[0])}/>
-                <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>fileRef.current?.click()}>📎 Choose</button>
-                  {form.attachment&&<span style={{fontSize:12,color:'var(--text-secondary)'}}>{form.attachment.name} <button type="button" style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)'}} onClick={()=>f('attachment',null)}>✕</button></span>}
-                </div>
-              </div>
-            </>
-          )}
+       {form.task_type === 'optimise' && (() => {
+  const userFields = OPTIMISE_FIELDS[user?.role] || OPTIMISE_FIELDS.am;
+
+  const renderHeader = (field) => {
+    const labels = {
+      assigned_to: 'Assign To',
+      pub_id: 'PubID',
+      pid: 'PID',
+      fp: 'FP',
+      fa: 'FA',
+      f1: 'F1',
+      f2: 'F2',
+      optimise_scenario: 'Scenario',
+      attachment: 'Attachment'
+    };
+    return (
+      <div key={field} style={{fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+        {labels[field]}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{
+      padding:'8px 10px',
+      background:'rgba(6,182,212,0.1)',
+      borderRadius:6,
+      border:'1px solid rgba(6,182,212,0.2)',
+      marginBottom:10
+    }}>
+      <div style={{
+        fontSize:10,
+        color:'rgba(255,255,255,0.9)',
+        fontWeight:600,
+        marginBottom:6
+      }}>
+        ⚡ Optimise
+      </div>
+
+      {/* Header */}
+      <div style={{
+        display:'grid',
+        gridTemplateColumns:`repeat(${userFields.length}, 1fr) auto`,
+        gap:4,
+        marginBottom:6
+      }}>
+        {userFields.map(renderHeader)}
+        <div></div>
+      </div>
+
+      {/* Rows */}
+      <div style={{maxHeight:'200px',overflowY:'auto'}}>
+        {form.optimise_entries.map((entry, index) => (
+          <div key={index} style={{
+            display:'grid',
+            gridTemplateColumns:`repeat(${userFields.length}, 1fr) auto`,
+            gap:4,
+            marginBottom:6
+          }}>
+            {userFields.map(field =>
+              renderEntryField(field, entry, index)
+            )}
+
+            <button
+              type="button"
+              onClick={() => removeOptimiseEntry(index)}
+              style={{
+                background:'rgba(239,68,68,0.2)',
+                border:'1px solid rgba(239,68,68,0.3)',
+                color:'#ef4444',
+                borderRadius:'4px',
+                padding:'4px 8px',
+                fontSize:'12px',
+                cursor:'pointer'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Add Row */}
+      <button
+        type="button"
+        onClick={addOptimiseEntry}
+        style={{
+          background:'rgba(6,182,212,0.2)',
+          border:'1px solid rgba(6,182,212,0.3)',
+          color:'#06b6d4',
+          borderRadius:'6px',
+          padding:'6px 12px',
+          fontSize:'11px',
+          cursor:'pointer',
+          display:'flex',
+          alignItems:'center',
+          gap:'6px',
+          marginTop:'8px'
+        }}
+      >
+        ➕ Add Entry
+      </button>
+    </div>
+  );
+})()}
 
           <button className="btn btn-primary" style={{width:'100%',marginTop:4}} onClick={handleCreate} disabled={creating}>
             {creating?'Creating…':'✓ Create Task'}
@@ -646,7 +876,14 @@ export default function TasksPanel({group, taskTarget}){
           <div className="empty-state" style={{padding:40}}><div style={{fontSize:32}}>✅</div><p>No {filter!=='all'?filter:''} tasks</p></div>
         ):filtered.map(task=>(
           <div id={`task-${task.id}`} key={task.id}>
-            <TaskItem task={task} currentUser={user} onStatusUpdate={handleStatusUpdate} onFollowup={handleFollowup}/>
+            <TaskItem 
+              key={task.id} 
+              task={task} 
+              currentUser={user} 
+              onStatusUpdate={handleStatusUpdate} 
+              onFollowup={handleFollowup}
+              group={group} 
+            />
           </div>
         ))}
       </div>

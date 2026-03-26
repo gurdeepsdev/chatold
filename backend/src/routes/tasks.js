@@ -161,7 +161,7 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
             `INSERT INTO tasks (group_id,campaign_id,task_type,title,description,
                assigned_to,assigned_by,pub_id,pid,link,pause_reason,
                fp,f1,f2,optimise_scenario,parent_task_id)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [group_id,campaign_id||null,task_type,null,null,
              entry.assigned_to||null,req.user.id,entry.pub_id||null,entry.pid||null,
              null,null,entry.fp||null,entry.f1||null,entry.f2||null,entry.optimise_scenario||null,taskId]

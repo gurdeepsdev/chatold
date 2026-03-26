@@ -1,0 +1,31 @@
+id,username,password,role
+5,paramveer,$2a$10$Dr6u/hid2Znmq59typE3w.ZDM6ofN.rFpsDObN1yV7OpY.QF8HFlW,admin
+18,Anvesha,$2a$10$qVI2pBNYQ8ya9KuFuuh/Uems1.AN06jwzRPcsDcwnY9BLWNhjBvYK,publisher_manager
+20,Tarun,$2a$10$.lw/E9Udbg37LOABb5EIRuGw8iY/ASD834sE6cyI0iK3zecyoAIDG,publisher
+21,Monika,$2a$10$axA3vtjkUhBLw7WFdpbfm.z.sEU8gKLasxxhzOu4GlWORk1vhsdRm,publisher
+23,Prayag,$2a$10$axA3vtjkUhBLw7WFdpbfm.z.sEU8gKLasxxhzOu4GlWORk1vhsdRm,publisher
+24,Atique,$2a$10$A36gnxFuR28S2lDVnQz6UujcJ9qqdsieXIN.vlU0uK0PidWS2JPW.,""publisher_manager""
+25,Rohan,$2a$10$/RO2ljh5PfEIcu1vjxufiOFeOJD3D4V5/.Zs/bI7G52CCslwTtV36,advertiser_manager
+26,Priyanka,$2a$10$VnhAbFlRDrekBO/y2BWuiuBa0n99rzx7ITcLCxLuSiYpNDsJ41a5m,advertiser_manager
+31,Akshat,$2a$10$aPuOvudKswbltYj7jnONh.30ntv13Hz5eVdPmFqnkDRfJiMOx5KU2,advertiser
+32,gurdeep,$2a$10$5/b44yd7MzhL3MK4hgxjNuUZQHijBtoavy2Xq4LYzK97JIelG.4Wa,advertiser_manager
+40,Ipsita,$2a$10$qvHQXNWrCT8CGwPT3IZMr.dywUa6ibyhhT6176HzhbNRuCAhR23OS,advertiser
+44,Abhay,$2a$10$qVI2pBNYQ8ya9KuFuuh/Uems1.AN06jwzRPcsDcwnY9BLWNhjBvYK,advertiser_manager
+45,AtiqueADV,$2a$10$z151aQEdAVDJk5IVslwPROmNrgf4dfOfXbCk.qvkzuHdAkYrrRPkq,advertiser_manager
+46,AnveshaADV,$2a$10$Dr6u/hid2Znmq59typE3w.ZDM6ofN.rFpsDObN1yV7OpY.QF8HFlW,advertiser_manager
+48,Ananya,$2a$10$izxsvdQm/kn.XyvvZBn1b.vYLNsZT.fP0utHcM1EC9J3otpZd/eEq,advertiser
+49,Aniket,$2a$10$gHlSQOoXhqBLy2iHOEVTJuinrZHo1sSIrwNMpNgXzWuXg6SAzehF6,advertiser
+51,Piyush,$2a$10$aPuOvudKswbltYj7jnONh.30ntv13Hz5eVdPmFqnkDRfJiMOx5KU2,advertiser
+52,"Khushi Jaiswal",$2a$10$eLBSF4BMUv7V4giFG9oFV.6gVbuzQTHw8kiu/E4BzmhXx7tNVTC8i,publisher
+53,test,$2a$10$5/b44yd7MzhL3MK4hgxjNuUZQHijBtoavy2Xq4LYzK97JIelG.4Wa,admin
+54,Abhishek,$2a$10$Uty0D.wQjGHIkFdgWSUU.OORXfEHR8v4Nm8zWXHmXm58784DM8Asi,advertiser
+55,Suhani,$2a$10$RlELypO7S2WNyYAjMt/pDelH1A9gbc7WZjr6JaRygBwCkvePuNHG6,advertiser
+56,Vratika,$2a$10$/RO2ljh5PfEIcu1vjxufiOFeOJD3D4V5/.Zs/bI7G52CCslwTtV36,publisher
+57,Deepak,$2a$10$tWKzHGMpuD/xbC93YXI32OBlyW3R7o8/KuLgH6b6ieQSAJH3w8RAe,publisher
+58,Pankaj,$2a$10$G7PIbusr20ZcQvQ/wKXANeyiN.TUqMadn4sZgB8GYU9i1fAQ5IIwy,publisher_manager
+66,Ishu,$2a$10$/RO2ljh5PfEIcu1vjxufiOFeOJD3D4V5/.Zs/bI7G52CCslwTtV36,advertiser
+67,Vaibhav,$2a$10$usSUBtEsxIgm.yshljlVM.KMpNJckKm6kBsPcfKqRpsjXmcQKRPdq,advertiser
+68,"test account",$2a$10$QKfWTBsVll.irBH4Ll1xAek20ZqcthPzhSmhxL.BOkOO8YIfcIO/2,accounts
+70,Manisha,$2a$10$S2z2MPFD9MF245xV9R80ZO8HGTGDFE266CU5Lc3.FMMgG2oC.rpKa,advertiser
+71,Dipanshu,$2a$10$utCm/N2WqTrEG9HZbK6Xee9QHF5xsg7tN7ld.h37lADATjZfyQ/iK,advertiser
+72,Bhumika,$2a$10$9Gf8HyseLcv07NcRjeiMiePU6Hx5OnLBUY4vdcMa2RLi9QBuerBC2,publisher

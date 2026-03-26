@@ -1,0 +1,8 @@
+id,crm_user_id,username,full_name,email,password_hash,role,avatar_url,is_online,last_seen,created_at,updated_at
+1,admin_001,atique,"Atique Admin",atique@crm.com,NULL,admin,NULL,1,"2026-03-25 12:47:57","2026-02-19 16:31:56","2026-03-25 12:54:34"
+2,admin_002,anvisha,"Anvisha Admin",anvisha@crm.com,NULL,admin,NULL,0,"2026-02-19 16:31:56","2026-02-19 16:31:56","2026-02-19 16:31:56"
+3,adv_001,john_adv,"John Advertiser",john@advertiser.com,NULL,advertiser,NULL,1,"2026-03-25 12:54:34","2026-02-19 16:31:56","2026-03-25 13:00:05"
+4,pub_001,pub_mike,"Mike Publisher",mike@publisher.com,NULL,publisher,NULL,0,"2026-02-25 12:51:30","2026-02-19 16:31:56","2026-02-25 12:51:30"
+5,am_001,sarah_am,"Sarah AM",sarah@crm.com,NULL,am,NULL,0,"2026-02-19 16:31:56","2026-02-19 16:31:56","2026-02-19 16:31:56"
+6,adv_004,Akshat,akshat,akshat@publisher.com,$2a$10$aPuOvudKswbltYj7jnONh.30ntv13Hz5eVdPmFqnkDRfJiMOx5KU2,advertiser,NULL,1,"2026-02-25 12:51:30","2026-02-19 16:31:56","2026-03-25 13:00:03"
+7,adv_005,ipsita,ipsita,ipsita@publisher.com,NULL,advertiser,NULL,0,"2026-02-25 12:51:30","2026-02-19 16:31:56","2026-03-24 15:20:26"

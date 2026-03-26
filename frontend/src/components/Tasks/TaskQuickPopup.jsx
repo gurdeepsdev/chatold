@@ -123,6 +123,16 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
   useEffect(() => { authAPI.getUsers().then(d => setUsers(d.users || [])); }, []);
   useEffect(() => { if (initialType) setForm(empty(initialType)); }, [initialType]);
 
+  // Ensure optimise_entries is never empty for optimise tasks
+  useEffect(() => {
+    if (form.task_type === 'optimise' && (!form.optimise_entries || form.optimise_entries.length === 0)) {
+      setForm(p => ({
+        ...p,
+        optimise_entries: [{ assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }]
+      }));
+    }
+  }, [form.task_type, form.optimise_entries]);
+
   // Close on Escape
   useEffect(() => {
     const h = e => e.key === 'Escape' && onClose();
