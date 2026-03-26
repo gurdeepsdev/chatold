@@ -2,9 +2,11 @@ import React, { useState, useCallback } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/Chat/ChatView';
 import Login from './components/Login';
+import ThemeToggle from './components/ThemeToggle';
 import { PWAInstallButton, useNotifications } from './utils/NotificationManager';
 import './styles/globals.css';
 
@@ -64,6 +66,9 @@ function AppInner({ selectedGroup, setSelectedGroup }) {
 
   return (
     <>
+      {/* Theme Toggle */}
+      <ThemeToggle />
+      
       <div className="app-layout">
         <Sidebar
           selectedGroupId={selectedGroup?.id}
@@ -103,12 +108,14 @@ function ChatApp() {
 
   // SocketProvider wraps AppInner so useSocket() is available inside it
   return (
-    <SocketProvider token={token}>
-      <AppInner
-        selectedGroup={selectedGroup}
-        setSelectedGroup={setSelectedGroup}
-      />
-    </SocketProvider>
+    <ThemeProvider>
+      <SocketProvider token={token}>
+        <AppInner
+          selectedGroup={selectedGroup}
+          setSelectedGroup={setSelectedGroup}
+        />
+      </SocketProvider>
+    </ThemeProvider>
   );
 }
 
