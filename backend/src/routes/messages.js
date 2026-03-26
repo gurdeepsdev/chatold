@@ -28,11 +28,42 @@ function absUrl(req, rel){
   if(!rel)return null;
   if(rel.startsWith('http'))return rel;
   
-  // Check if behind HTTPS proxy
-  const protocol = req.get('x-forwarded-proto') || req.protocol;
-  const host = req.get('x-forwarded-host') || req.get('host');
+  // Check if behind HTTPS proxy - multiple ways to detect HTTPS
+  const forwardedProto = req.get('x-forwarded-proto');
+  const forwardedSsl = req.get('x-forwarded-ssl');
+  const cloudflareVisitor = req.get('cf-visitor');
   
-  return `${protocol}://${host}${rel}`;
+  let protocol = req.protocol; // Default to request protocol
+  
+  // Check various HTTPS indicators
+  if (forwardedProto === 'https') {
+    protocol = 'https';
+  } else if (forwardedSsl === 'on') {
+    protocol = 'https';
+  } else if (cloudflareVisitor && JSON.parse(cloudflareVisitor).scheme === 'https') {
+    protocol = 'https';
+  } else if (req.get('x-forwarded-host')) {
+    // If x-forwarded-host is present, assume HTTPS in production
+    protocol = 'https';
+  }
+  
+  const host = req.get('x-forwarded-host') || req.get('host');
+  const url = `${protocol}://${host}${rel}`;
+  
+  // Debug logging in production
+  if (process.env.NODE_ENV === 'production') {
+    console.log('absUrl debug:', {
+      originalProtocol: req.protocol,
+      forwardedProto,
+      forwardedSsl,
+      cloudflareVisitor,
+      finalProtocol: protocol,
+      host,
+      finalUrl: url
+    });
+  }
+  
+  return url;
 }
 
 const checkMember=async(req,res,next)=>{
