@@ -24,10 +24,23 @@ const OPTIMISE_SCENARIOS=[
 ];
 const REQUEST_TYPES=['geo','payout','link','budget'];
 
+// Role-based field definitions for optimise task
+const OPTIMISE_FIELDS = {
+  admin: ['assigned_to', 'pub_id', 'pid', 'fp', 'f1', 'f2', 'optimise_scenario', 'attachment'],
+  advertiser: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment'],
+  advertiser_manager: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment'],
+  publisher: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment'],
+  publisher_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment'],
+  am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment']
+};
+
+const FA_OPTIONS = ['FA1', 'FA2', 'FA3', 'FA4'];
+
 const emptyForm=(type='share_link')=>({
   task_type:type, description:'', assigned_to:'',
   entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' }],
   pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'' }],
+  optimise_entries: [{ assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }],
   pause_reason:'', request_type:'geo', request_details:'',
   fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
 });
@@ -167,6 +180,30 @@ export default function TasksPanel({group, taskTarget}){
     }));
   };
 
+  // Optimise entry management functions
+  const addOptimiseEntry = () => {
+    setForm(p => ({
+      ...p,
+      optimise_entries: [...p.optimise_entries, { assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }]
+    }));
+  };
+
+  const removeOptimiseEntry = (index) => {
+    setForm(p => ({
+      ...p,
+      optimise_entries: p.optimise_entries.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateOptimiseEntry = (index, field, value) => {
+    setForm(p => ({
+      ...p,
+      optimise_entries: p.optimise_entries.map((entry, i) => 
+        i === index ? { ...entry, [field]: value } : entry
+      )
+    }));
+  };
+
   const load=useCallback(async()=>{
     if(!group)return;
     const data=await tasksAPI.getByGroup(group.id);
@@ -230,22 +267,33 @@ export default function TasksPanel({group, taskTarget}){
         return toast.error('Please fill in at least one entry (PubID, PID, or Pause Reason)');
       }
     }
+    // Validate optimise entries
+    if (form.task_type === 'optimise') {
+      const validOptimiseEntries = form.optimise_entries.filter(entry => 
+        entry.pub_id.trim() || entry.pid.trim() || entry.fp.trim() || entry.fa.trim() || entry.f1.trim() || entry.f2.trim() || entry.optimise_scenario.trim()
+      );
+      if (validOptimiseEntries.length === 0) {
+        return toast.error('Please fill in at least one entry (PubID, PID, FP, FA, F1, F2, or Scenario)');
+      }
+    }
     setCreating(true);
     try{
       let payload;
       if(form.attachment){
         payload=new FormData();
         Object.entries({group_id:group.id,campaign_id:group.campaign_id||'',...form}).forEach(([k,v])=>{
-          if(k!=='attachment'&&k!=='entries'&&k!=='pause_entries'&&v!==null&&v!==undefined)payload.append(k,String(v));
+          if(k!=='attachment'&&k!=='entries'&&k!=='pause_entries'&&k!=='optimise_entries'&&v!==null&&v!==undefined)payload.append(k,String(v));
         });
         if(form.task_type === 'share_link') payload.append('entries',JSON.stringify(form.entries));
         if(form.task_type === 'pause_pid') payload.append('pause_entries',JSON.stringify(form.pause_entries));
+        if(form.task_type === 'optimise') payload.append('optimise_entries',JSON.stringify(form.optimise_entries));
         payload.append('attachment',form.attachment);
       }else{
         payload={group_id:group.id,campaign_id:group.campaign_id,...form};
         delete payload.attachment;
         if(form.task_type !== 'share_link') delete payload.entries;
         if(form.task_type !== 'pause_pid') delete payload.pause_entries;
+        if(form.task_type !== 'optimise') delete payload.optimise_entries;
       }
       const data=await tasksAPI.create(payload);
       if(data.subTasks && data.subTasks.length > 0){

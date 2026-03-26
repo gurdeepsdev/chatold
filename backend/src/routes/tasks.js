@@ -64,7 +64,7 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
     const b=req.body;
     const{group_id,campaign_id,task_type,description,assigned_to,
           pub_id,pid,link,pause_reason,request_type,request_details,
-          fp,f1,f2,optimise_scenario,due_date,entries,pause_entries}=b;
+          fp,f1,f2,optimise_scenario,due_date,entries,pause_entries,optimise_entries}=b;
 
     // Only group_id and task_type are required - NO TITLE VALIDATION
     if(!group_id||!task_type)
@@ -90,6 +90,16 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
         parsedPauseEntries = typeof pause_entries === 'string' ? JSON.parse(pause_entries) : pause_entries;
       } catch (e) {
         return res.status(400).json({error:'Invalid pause_entries format'});
+      }
+    }
+
+    // Parse optimise_entries for optimise tasks
+    let parsedOptimiseEntries = [];
+    if (task_type === 'optimise' && optimise_entries) {
+      try {
+        parsedOptimiseEntries = typeof optimise_entries === 'string' ? JSON.parse(optimise_entries) : optimise_entries;
+      } catch (e) {
+        return res.status(400).json({error:'Invalid optimise_entries format'});
       }
     }
 
@@ -143,6 +153,24 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
       }
     }
 
+    // Create sub-tasks for each optimise entry (for optimise tasks)
+    if (task_type === 'optimise' && parsedOptimiseEntries.length > 0) {
+      for (const entry of parsedOptimiseEntries) {
+        if (entry.pub_id || entry.pid || entry.fp || entry.fa || entry.f1 || entry.f2 || entry.optimise_scenario) {
+          const[subR]=await conn.query(
+            `INSERT INTO tasks (group_id,campaign_id,task_type,title,description,
+               assigned_to,assigned_by,pub_id,pid,link,pause_reason,
+               fp,f1,f2,optimise_scenario,parent_task_id)
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [group_id,campaign_id||null,task_type,null,null,
+             entry.assigned_to||null,req.user.id,entry.pub_id||null,entry.pid||null,
+             null,null,entry.fp||null,entry.f1||null,entry.f2||null,entry.optimise_scenario||null,taskId]
+          );
+          subTaskIds.push(subR.insertId);
+        }
+      }
+    }
+
     // Post task-notification message in chat
     const labels={initial_setup:'🚀 Initial Setup',share_link:'🔗 Share Link',
       pause_pid:'⏸️ Pause PID',raise_request:'📋 Raise Request',optimise:'⚡ Optimise'};
@@ -150,6 +178,7 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
     let entryCount = 1;
     if (task_type === 'share_link') entryCount = parsedEntries.filter(e => e.pub_id || e.pid || e.link).length;
     if (task_type === 'pause_pid') entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
+    if (task_type === 'optimise') entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario).length;
     const chatContent=`📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
     const{encrypted,iv}=encrypt(chatContent);
     const[mRes]=await conn.query(
@@ -173,6 +202,11 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
     }
     if (task_type === 'pause_pid') {
       parsedPauseEntries.forEach(entry => {
+        if (entry.assigned_to) allAssignees.add(entry.assigned_to);
+      });
+    }
+    if (task_type === 'optimise') {
+      parsedOptimiseEntries.forEach(entry => {
         if (entry.assigned_to) allAssignees.add(entry.assigned_to);
       });
     }
