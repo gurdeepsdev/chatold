@@ -133,7 +133,7 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
           const[subR]=await conn.query(
             `INSERT INTO tasks (group_id,campaign_id,task_type,title,description,
                assigned_to,assigned_by,pub_id,pid,link,pause_reason,parent_task_id)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
             [group_id,campaign_id||null,task_type,null,null,
              entry.assigned_to||null,req.user.id,entry.pub_id||null,entry.pid||null,
              null,entry.pause_reason||null,taskId]
