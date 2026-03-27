@@ -306,15 +306,29 @@ export default function TasksPanel({group, taskTarget}){
                 switch(field) {
                   case 'assigned_to':
                     return (
+                      // <select 
+                      //   className="form-control" 
+                      //   style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                      //   value={entry.assigned_to} 
+                      //   onChange={e => updateOptimiseEntry(entryIndex, 'assigned_to', e.target.value)}
+                      // >
+                      //   {/* <option value="">Unassigned</option> */}
+                      //   {getFilteredMembersForTaskType('optimise').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
+                      // </select>
                       <select 
-                        className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
-                        value={entry.assigned_to} 
-                        onChange={e => updateOptimiseEntry(entryIndex, 'assigned_to', e.target.value)}
-                      >
-                        <option value="">Unassigned</option>
-                        {getFilteredMembersForTaskType('optimise').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
-                      </select>
+  className="form-control" 
+  style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+  value={entry.assigned_to || ""} 
+  onChange={e => updateOptimiseEntry(entryIndex, 'assigned_to', e.target.value)}
+  required
+>
+  <option value="">Select User *</option>
+  {getFilteredMembersForTaskType('optimise').map(member => (
+    <option key={member.id} value={member.id}>
+      {member.full_name}
+    </option>
+  ))}
+</select>
                     );
                   case 'pub_id':
                     return (
@@ -621,7 +635,22 @@ export default function TasksPanel({group, taskTarget}){
         });
         if(form.task_type === 'share_link') payload.append('entries',JSON.stringify(form.entries));
         if(form.task_type === 'pause_pid') payload.append('pause_entries',JSON.stringify(form.pause_entries));
-        if(form.task_type === 'optimise') payload.append('optimise_entries',JSON.stringify(form.optimise_entries));
+        if(form.task_type === 'optimise') {
+          // Process optimise entries to handle attachments properly
+          console.log('🔍 Raw optimise_entries before processing:', form.optimise_entries);
+          const processedOptimiseEntries = form.optimise_entries.map((entry, index) => {
+            console.log(`🔍 Processing optimise entry ${index}:`, entry);
+            const processedEntry = {
+              ...entry,
+              attachment: entry.attachment ? entry.attachment.name || entry.attachment.filename : null,
+              attachment_name: entry.attachment ? entry.attachment.name || entry.attachment.filename : null
+            };
+            console.log(`🔍 Processed optimise entry ${index}:`, processedEntry);
+            return processedEntry;
+          });
+          console.log('🔍 Final processed optimise_entries:', processedOptimiseEntries);
+          payload.append('optimise_entries',JSON.stringify(processedOptimiseEntries));
+        }
         payload.append('attachment',form.attachment);
       }else{
         payload={group_id:group.id,campaign_id:group.campaign_id,...form};
@@ -629,6 +658,21 @@ export default function TasksPanel({group, taskTarget}){
         if(form.task_type !== 'share_link') delete payload.entries;
         if(form.task_type !== 'pause_pid') delete payload.pause_entries;
         if(form.task_type !== 'optimise') delete payload.optimise_entries;
+        else {
+          // Process optimise entries to handle attachments properly
+          console.log('🔍 Raw optimise_entries before processing (else):', form.optimise_entries);
+          payload.optimise_entries = form.optimise_entries.map((entry, index) => {
+            console.log(`🔍 Processing optimise entry ${index} (else):`, entry);
+            const processedEntry = {
+              ...entry,
+              attachment: entry.attachment ? entry.attachment.name || entry.attachment.filename : null,
+              attachment_name: entry.attachment ? entry.attachment.name || entry.attachment.filename : null
+            };
+            console.log(`🔍 Processed optimise entry ${index} (else):`, processedEntry);
+            return processedEntry;
+          });
+          console.log('🔍 Final processed optimise_entries (else):', payload.optimise_entries);
+        }
       }
       console.log('🔍 Frontend Task Payload:', payload);
       const data=await tasksAPI.create(payload);
@@ -764,7 +808,7 @@ export default function TasksPanel({group, taskTarget}){
               <div style={{maxHeight:'200px',overflowY:'auto'}}>
                 {form.entries.map((entry, index) => (
                   <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.5fr auto',gap:4,marginBottom:6}}>
-                    <select 
+                    {/* <select 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
                       value={entry.assigned_to} 
@@ -772,7 +816,29 @@ export default function TasksPanel({group, taskTarget}){
                     >
                       <option value="">Unassigned</option>
                       {getFilteredMembersForTaskType('share_link').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
-                    </select>
+                    </select> */}
+                    <select 
+  className="form-control" 
+  style={{
+    fontSize:11,
+    padding:4,
+    background:'rgba(255,255,255,0.1)',
+    border: !entry.assigned_to 
+      ? '1px solid #ef4444' 
+      : '1px solid rgba(255,255,255,0.2)',
+    color:'#fff'
+  }}
+  value={entry.assigned_to || ""} 
+  onChange={e => updateEntry(index, 'assigned_to', e.target.value)}
+  required
+>
+  <option value="">Select User *</option>
+  {getFilteredMembersForTaskType('share_link').map(member => (
+    <option key={member.id} value={member.id}>
+      {member.full_name}
+    </option>
+  ))}
+</select>
                     <input 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
@@ -876,7 +942,7 @@ export default function TasksPanel({group, taskTarget}){
               <div style={{maxHeight:'200px',overflowY:'auto'}}>
                 {form.pause_entries.map((entry, index) => (
                   <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
-                    <select 
+                    {/* <select 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
                       value={entry.assigned_to} 
@@ -884,7 +950,29 @@ export default function TasksPanel({group, taskTarget}){
                     >
                       <option value="">Unassigned</option>
                       {getFilteredMembersForTaskType('pause_pid').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
-                    </select>
+                    </select> */}
+                    <select 
+  className="form-control" 
+  style={{
+    fontSize:11,
+    padding:4,
+    background:'rgba(255,255,255,0.1)',
+    border: !entry.assigned_to 
+      ? '1px solid #ef4444' 
+      : '1px solid rgba(255,255,255,0.2)',
+    color:'#fff'
+  }}
+  value={entry.assigned_to || ""} 
+  onChange={e => updatePauseEntry(index, 'assigned_to', e.target.value)}
+  required
+>
+  <option value="">Select User *</option>
+  {getFilteredMembersForTaskType('pause_pid').map(member => (
+    <option key={member.id} value={member.id}>
+      {member.full_name}
+    </option>
+  ))}
+</select>
                     <input 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
@@ -969,10 +1057,28 @@ export default function TasksPanel({group, taskTarget}){
             <>
               <div style={{marginBottom:10}}>
                 <label className="form-label">Assign To</label>
-                <select className="form-control" value={form.assigned_to} onChange={e=>f('assigned_to',e.target.value)}>
+                {/* <select className="form-control" value={form.assigned_to} onChange={e=>f('assigned_to',e.target.value)}>
                   <option value="">Unassigned</option>
                   {getFilteredMembersForTaskType('raise_request').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
-                </select>
+                </select> */}
+                <select 
+  className="form-control" 
+  style={{
+    border: !form.assigned_to 
+      ? '1px solid #ef4444' 
+      : '1px solid var(--border)'
+  }}
+  value={form.assigned_to || ""} 
+  onChange={e => f('assigned_to', e.target.value)}
+  required
+>
+  <option value="">Select User *</option>
+  {getFilteredMembersForTaskType('raise_request').map(member => (
+    <option key={member.id} value={member.id}>
+      {member.full_name}
+    </option>
+  ))}
+</select>
               </div>
               <div style={{marginBottom:10}}>
                 <label className="form-label">Request Type</label>

@@ -97,8 +97,28 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
     let parsedOptimiseEntries = [];
     if (task_type === 'optimise' && optimise_entries) {
       try {
+        console.log('🔍 Backend received optimise_entries:', optimise_entries);
         parsedOptimiseEntries = typeof optimise_entries === 'string' ? JSON.parse(optimise_entries) : optimise_entries;
+        console.log('🔍 Backend parsed optimise_entries:', parsedOptimiseEntries);
+        
+        // Handle attachment objects in optimise entries
+        parsedOptimiseEntries = parsedOptimiseEntries.map((entry, index) => {
+          console.log(`🔍 Backend processing optimise entry ${index}:`, entry);
+          if (entry.attachment && typeof entry.attachment === 'object') {
+            const processedEntry = {
+              ...entry,
+              attachment: entry.attachment.name || entry.attachment.filename || null,
+              attachment_name: entry.attachment.name || entry.attachment.filename || null
+            };
+            console.log(`🔍 Backend processed optimise entry ${index} (object):`, processedEntry);
+            return processedEntry;
+          }
+          console.log(`🔍 Backend keeping optimise entry ${index} as-is:`, entry);
+          return entry;
+        });
+        console.log('🔍 Backend final optimise_entries after processing:', parsedOptimiseEntries);
       } catch (e) {
+        console.error('🔍 Backend optimise_entries parse error:', e);
         return res.status(400).json({error:'Invalid optimise_entries format'});
       }
     }
@@ -323,11 +343,134 @@ if (task_type === 'pause_pid') {
 }
 
 // ✅ FIX: HANDLE OPTIMISE SEPARATELY (NO PARENT TASK)
+// if (task_type === 'optimise') {
+//   let subTaskIds = [];
+
+//   for (const entry of parsedOptimiseEntries) {
+//     if (entry.pub_id || entry.pid || entry.fp || entry.fa || entry.f1 || entry.f2 || entry.optimise_scenario) {
+//       const [subR] = await conn.query(
+//         `INSERT INTO tasks (
+//           group_id,
+//           campaign_id,
+//           task_type,
+//           assigned_to,
+//           assigned_by,
+//           pub_id,
+//           pid,
+//           link,
+//           fp,
+//           fa,
+//           f1,
+//           f2,
+//           optimise_scenario,
+//           attachment_url,
+//           attachment_name
+//         )
+//         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+//         [
+//           group_id,
+//           campaign_id || null,
+//           task_type,
+//           entry.assigned_to || null,
+//           req.user.id,
+//           entry.pub_id || null,
+//           entry.pid || null,
+//           null,
+//           entry.fp || null,
+//           entry.fa || null,
+//           entry.f1 || null,
+//           entry.f2 || null,
+//           entry.optimise_scenario || null,
+//           entry.attachment || null,
+//           entry.attachment_name || null
+//         ]
+//       );
+
+//       subTaskIds.push(subR.insertId);
+//     }
+//   }
+
+//   await conn.commit();
+
+//   // Fetch the created tasks to return proper format
+//   const [createdTasks] = await conn.query(
+//     `SELECT * FROM tasks WHERE id IN (${subTaskIds.map(() => '?').join(',')})`,
+//     subTaskIds
+//   );
+
+//   // Post task-notification message in chat
+//   const taskLabel = '⚡ Optimise';
+//   const entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp  || e.f1 || e.f2 || e.optimise_scenario).length;
+//   const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
+//   const {encrypted, iv} = encrypt(chatContent);
+//   const [mRes] = await conn.query(
+//     `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
+//      VALUES(?,?,'task_notification',?,?,?)`,
+//     [group_id, req.user.id, encrypted, iv, null]
+//   );
+
+//   await conn.query(
+//     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
+//     [group_id, 'task_created', JSON.stringify({task_type: 'optimise', entries: subTaskIds.length}), req.user.id]
+//   );
+
+//   // Emit real-time message to group
+//   const io = req.app.get('io');
+//   if (io) {
+//     io.to(`group_${group_id}`).emit('new_message', {
+//       id: mRes.insertId,
+//       group_id: Number(group_id),
+//       sender_id: req.user.id,
+//       sender_name: req.user.full_name,
+//       sender_role: req.user.role,
+//       message_type: 'task_notification',
+//       content: chatContent,
+//       task_ref: {task_type: 'optimise', task_title: taskLabel},
+//       sent_at: new Date(),
+//     });
+//   }
+
+//   return res.status(201).json({
+//     task: null, // No parent task for optimise
+//     subTasks: createdTasks
+//   });
+// }
+// ✅ FIX: HANDLE OPTIMISE SEPARATELY (NO PARENT TASK)
 if (task_type === 'optimise') {
   let subTaskIds = [];
 
   for (const entry of parsedOptimiseEntries) {
-    if (entry.pub_id || entry.pid || entry.fp || entry.f1 || entry.f2 || entry.optimise_scenario) {
+    console.log(`🔍 Backend optimise entry loop - entry:`, entry);
+    console.log(`🔍 Backend optimise entry - fa:`, entry.fa);
+    console.log(`🔍 Backend optimise entry - attachment:`, entry.attachment);
+    console.log(`🔍 Backend optimise entry - attachment_name:`, entry.attachment_name);
+    console.log(`🔍 Backend optimise entry - attachment_url:`, attachment_url);
+    console.log(`🔍 Backend optimise entry - attachment_name from req.file:`, attachment_name);
+    if (
+      entry.pub_id || 
+      entry.pid || 
+      entry.fp || 
+      entry.fa || 
+      entry.f1 || 
+      entry.f2 || 
+      entry.optimise_scenario
+    ) {
+      console.log(`🔍 Backend inserting optimise entry with values:`, {
+        group_id,
+        campaign_id,
+        task_type,
+        assigned_to: entry.assigned_to,
+        assigned_by: req.user.id,
+        pub_id: entry.pub_id,
+        pid: entry.pid,
+        fp: entry.fp,
+        fa: entry.fa,
+        f1: entry.f1,
+        f2: entry.f2,
+        optimise_scenario: entry.optimise_scenario,
+        attachment_url,
+        attachment_name
+      });
       const [subR] = await conn.query(
         `INSERT INTO tasks (
           group_id,
@@ -339,14 +482,14 @@ if (task_type === 'optimise') {
           pid,
           link,
           fp,
-        
+          fa,
           f1,
           f2,
           optimise_scenario,
           attachment_url,
           attachment_name
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           group_id,
           campaign_id || null,
@@ -356,13 +499,15 @@ if (task_type === 'optimise') {
           entry.pub_id || null,
           entry.pid || null,
           null,
-          entry.fp || null,
-          // entry.fa || null,
-          entry.f1 || null,
-          entry.f2 || null,
+          entry.fp ? entry.fp : null,
+          entry.fa ? entry.fa : null,
+          entry.f1 ? entry.f1 : null,
+          entry.f2 ? entry.f2 : null,
           entry.optimise_scenario || null,
-          attachment_url,
-          attachment_name
+
+          // ✅ FIX: USE entry.attachment and entry.attachment_name (NOT req.file)
+          entry.attachment ? `/uploads/${entry.attachment}` : null,
+          entry.attachment_name || null
         ]
       );
 
@@ -372,7 +517,6 @@ if (task_type === 'optimise') {
 
   await conn.commit();
 
-  // Fetch the created tasks to return proper format
   const [createdTasks] = await conn.query(
     `SELECT * FROM tasks WHERE id IN (${subTaskIds.map(() => '?').join(',')})`,
     subTaskIds
@@ -380,9 +524,13 @@ if (task_type === 'optimise') {
 
   // Post task-notification message in chat
   const taskLabel = '⚡ Optimise';
-  const entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp  || e.f1 || e.f2 || e.optimise_scenario).length;
+  const entryCount = parsedOptimiseEntries.filter(
+    e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario
+  ).length;
+
   const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
-  const {encrypted, iv} = encrypt(chatContent);
+  const { encrypted, iv } = encrypt(chatContent);
+
   const [mRes] = await conn.query(
     `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
      VALUES(?,?,'task_notification',?,?,?)`,
@@ -391,10 +539,9 @@ if (task_type === 'optimise') {
 
   await conn.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
-    [group_id, 'task_created', JSON.stringify({task_type: 'optimise', entries: subTaskIds.length}), req.user.id]
+    [group_id, 'task_created', JSON.stringify({ task_type: 'optimise', entries: subTaskIds.length }), req.user.id]
   );
 
-  // Emit real-time message to group
   const io = req.app.get('io');
   if (io) {
     io.to(`group_${group_id}`).emit('new_message', {
@@ -405,17 +552,16 @@ if (task_type === 'optimise') {
       sender_role: req.user.role,
       message_type: 'task_notification',
       content: chatContent,
-      task_ref: {task_type: 'optimise', task_title: taskLabel},
+      task_ref: { task_type: 'optimise', task_title: taskLabel },
       sent_at: new Date(),
     });
   }
 
   return res.status(201).json({
-    task: null, // No parent task for optimise
+    task: null,
     subTasks: createdTasks
   });
 }
-
     // Post task-notification message in chat
     const labels={initial_setup:'🚀 Initial Setup',share_link:'🔗 Share Link',
       pause_pid:'⏸️ Pause PID',raise_request:'📋 Raise Request',optimise:'⚡ Optimise'};
@@ -423,7 +569,7 @@ if (task_type === 'optimise') {
     let entryCount = 1;
     if (task_type === 'share_link') entryCount = parsedEntries.filter(e => e.pub_id || e.pid || e.link).length;
     if (task_type === 'pause_pid') entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
-    if (task_type === 'optimise') entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp || e.f1 || e.f2 || e.optimise_scenario).length;
+    if (task_type === 'optimise') entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario).length;
     const chatContent=`📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
     const{encrypted,iv}=encrypt(chatContent);
     const[mRes]=await conn.query(
