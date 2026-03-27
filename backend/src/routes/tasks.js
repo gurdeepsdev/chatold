@@ -327,7 +327,7 @@ if (task_type === 'optimise') {
   let subTaskIds = [];
 
   for (const entry of parsedOptimiseEntries) {
-    if (entry.pub_id || entry.pid || entry.fp || entry.fa || entry.f1 || entry.f2 || entry.optimise_scenario) {
+    if (entry.pub_id || entry.pid || entry.fp || entry.f1 || entry.f2 || entry.optimise_scenario) {
       const [subR] = await conn.query(
         `INSERT INTO tasks (
           group_id,
@@ -339,14 +339,14 @@ if (task_type === 'optimise') {
           pid,
           link,
           fp,
-          fa,
+        
           f1,
           f2,
           optimise_scenario,
           attachment_url,
           attachment_name
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           group_id,
           campaign_id || null,
@@ -357,7 +357,7 @@ if (task_type === 'optimise') {
           entry.pid || null,
           null,
           entry.fp || null,
-          entry.fa || null,
+          // entry.fa || null,
           entry.f1 || null,
           entry.f2 || null,
           entry.optimise_scenario || null,
@@ -380,7 +380,7 @@ if (task_type === 'optimise') {
 
   // Post task-notification message in chat
   const taskLabel = '⚡ Optimise';
-  const entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario).length;
+  const entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp  || e.f1 || e.f2 || e.optimise_scenario).length;
   const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
   const {encrypted, iv} = encrypt(chatContent);
   const [mRes] = await conn.query(
@@ -423,7 +423,7 @@ if (task_type === 'optimise') {
     let entryCount = 1;
     if (task_type === 'share_link') entryCount = parsedEntries.filter(e => e.pub_id || e.pid || e.link).length;
     if (task_type === 'pause_pid') entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
-    if (task_type === 'optimise') entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario).length;
+    if (task_type === 'optimise') entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp || e.f1 || e.f2 || e.optimise_scenario).length;
     const chatContent=`📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
     const{encrypted,iv}=encrypt(chatContent);
     const[mRes]=await conn.query(
