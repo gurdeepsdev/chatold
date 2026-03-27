@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { groupsAPI, campaignsAPI } from '../utils/api';
+import { groupsAPI, campaignsAPI, messagesAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import CreateGroupModal from './Groups/CreateGroupModal';
@@ -27,7 +27,7 @@ function avatarColor(name = '') {
 
 export default function Sidebar({ selectedGroupId, onSelectGroup }) {
   const { user, logout } = useAuth();
-  const { on, connected } = useSocket();
+  const { on, connected, joinGroup } = useSocket();
   const [groups, setGroups] = useState([]);
   const [threads, setThreads] = useState([]);
   const [search, setSearch] = useState('');
@@ -35,22 +35,65 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pinnedGroups, setPinnedGroups] = useState([]);
+  const [unreadCounts, setUnreadCounts] = useState({});
 
   const loadGroups = useCallback(async () => {
     try {
       const data = await groupsAPI.getAll();
       setGroups(data.groups || []);
       setThreads(data.threads || []);
-      // Don't expand any threads by default - keep them collapsed
-      // if (data.threads?.length) {
-      //   setExpandedThreads(prev => ({ [data.threads[0].package_id]: true, ...prev }));
-      // }
-    } catch (err) {
-      console.error('Failed to load groups');
+      
+      // Join all group rooms for real-time updates
+      if (data.groups && data.groups.length > 0) {
+        console.log('[Sidebar] Joining group rooms:', data.groups.map(g => g.id));
+        data.groups.forEach(group => {
+          if (group.id) {
+            joinGroup(group.id);
+          }
+        });
+      }
+      
+      // Load unread message counts
+      loadUnreadCounts();
+    } catch (error) {
+      console.error('Failed to load groups:', error);
+      toast.error('Failed to load groups');
     } finally {
       setLoading(false);
     }
+  }, [joinGroup]);
+
+  const loadUnreadCounts = useCallback(async () => {
+    try {
+      const data = await messagesAPI.getUnreadCounts();
+      setUnreadCounts(data.unreadCounts || {});
+    } catch (error) {
+      console.error('Failed to load unread counts:', error);
+    }
   }, []);
+
+  const markGroupAsRead = useCallback(async (groupId) => {
+    try {
+      // Mark messages as seen by calling the messages API
+      await messagesAPI.getMessages(groupId); // This automatically marks messages as seen
+      
+      // Update unread counts locally
+      setUnreadCounts(prev => ({
+        ...prev,
+        [groupId]: 0
+      }));
+    } catch (error) {
+      console.error('Failed to mark group as read:', error);
+    }
+  }, []);
+
+  // Handle group selection and mark as read
+  const handleGroupSelect = useCallback((group) => {
+    onSelectGroup(group);
+    if (group && group.id) {
+      markGroupAsRead(group.id);
+    }
+  }, [onSelectGroup, markGroupAsRead]);
 
   // Load pinned groups from localStorage on mount
   useEffect(() => {
@@ -119,11 +162,37 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       }
     });
 
+    const unsubCampaignCreated = on('campaign_created', (data) => {
+      console.log('[Sidebar] Campaign created event received:', data);
+      
+      // Show toast notification about new campaign
+      if (data.message) {
+        toast.success(data.message);
+      }
+      
+      // Refresh groups list to show the new campaign group
+      loadGroups();
+    });
+
+    const unsubNewMessage = on('new_message', (message) => {
+      console.log('[Sidebar] New message received:', message);
+      
+      // Update unread counts when a new message arrives
+      if (message.group_id && message.sender_id !== user?.id) {
+        setUnreadCounts(prev => ({
+          ...prev,
+          [message.group_id]: (prev[message.group_id] || 0) + 1
+        }));
+      }
+    });
+
     return () => {
       unsub();
       unsubGroupCreated();
+      unsubCampaignCreated();
+      unsubNewMessage();
     };
-  }, [on, user?.full_name, user?.id, loadGroups]);
+  }, [on, user?.full_name, user?.id, loadGroups, user?.id]);
 
   const toggleThread = (key) => {
     setExpandedThreads(prev => ({ ...prev, [key]: !prev[key] }));
@@ -150,7 +219,7 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
     <div
       key={group.id}
       className={`group-item ${selectedGroupId === group.id ? 'active' : ''}`}
-      onClick={() => onSelectGroup(group)}
+      onClick={() => handleGroupSelect(group)}
     >
       <div
         className={`group-avatar ${group.group_type}`}
@@ -168,8 +237,8 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatTime(group.last_message_at)}</span>
-        {group.pending_tasks > 0 && (
-          <span className="group-badge" style={{ background: 'var(--warning)' }}>{group.pending_tasks}</span>
+        {unreadCounts[group.id] > 0 && (
+          <span className="group-badge" style={{ background: 'var(--accent)' }}>{unreadCounts[group.id]}</span>
         )}
         {/* Pin button - only for groups NOT inside threads */}
         {!isThreadGroup && (

@@ -271,6 +271,30 @@ router.post('/from-campaign-data', auth, async (req, res) => {
             }
           });
         });
+
+        // Emit campaign creation notification to all group members
+        io.to(`group_${group.id}`).emit('campaign_created', {
+          type: 'campaign_created',
+          campaign: {
+            id: null, // CRM campaigns don't have local ID yet
+            campaign_name: group.campaign_name,
+            campaign_subid: group.campaign_subid,
+            platform: group.platform,
+            advertiser_name: group.adv_name,
+            created_by: req.user.full_name,
+            created_at: new Date(),
+            group_id: group.id,
+            group_name: group.group_name
+          },
+          message: `New campaign "${group.campaign_name}" created by ${req.user.full_name}`
+        });
+
+        console.log('Campaign created event emitted (from-campaign-data):', {
+          campaign_name: group.campaign_name,
+          campaign_subid: group.campaign_subid,
+          group_id: group.id,
+          members_notified: members.length
+        });
       }
     }
 
@@ -419,6 +443,37 @@ router.post('/from-campaign', auth, async (req, res) => {
             created_at: new Date()
           }
         });
+      });
+
+      // Emit campaign creation notification to all group members
+      io.to(`group_${groupId}`).emit('campaign_created', {
+        type: 'campaign_created',
+        campaign: {
+          id: campaign.id,
+          campaign_name: campaign.campaign_name,
+          geo: campaign.geo,
+          payout: campaign.payout,
+          status: campaign.status,
+          advertiser_id: campaign.advertiser_id,
+          advertiser_name: advRows[0]?.full_name || 'Unknown',
+          package_id: packageId,
+          sub_id: campaign.sub_id,
+          preview_url: campaign.preview_url,
+          kpi: campaign.kpi,
+          mmp_tracker: campaign.mmp_tracker,
+          created_by: req.user.full_name,
+          created_at: new Date(),
+          group_id: groupId,
+          group_name: groupName
+        },
+        message: `New campaign "${campaign.campaign_name}" created by ${req.user.full_name}`
+      });
+
+      console.log('Campaign created event emitted:', {
+        campaign_id: campaign.id,
+        campaign_name: campaign.campaign_name,
+        group_id: groupId,
+        members_notified: members.length
       });
     }
 

@@ -4,8 +4,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import TaskDetailsModal from './TaskDetailsModal';
 
-const TASK_TYPES={
+export const TASK_TYPES={
   initial_setup:{label:'Initial Setup',icon:'🚀',color:'#a855f7'},
   share_link:   {label:'Share Link',   icon:'🔗',color:'#4f7dff'},
   pause_pid:    {label:'Pause PID',    icon:'⏸️',color:'#f59e0b'},
@@ -13,16 +14,19 @@ const TASK_TYPES={
   optimise:     {label:'Optimise',     icon:'⚡',color:'#06b6d4'},
 };
 
-const PAUSE_SCENARIOS=[
+export const PAUSE_SCENARIOS=[
   'Low Quality Traffic','Fraud Detected','Budget Exhausted',
   'Geo Mismatch','KPI Not Met','Technical Issue','Advertiser Request','Other'
 ];
-const OPTIMISE_SCENARIOS=[
-  'Increase Budget','Decrease Budget','Expand GEO','Restrict GEO',
-  'Update KPI Target','Change Payout','Pause Sub-publisher',
-  'Whitelist Publisher','Blacklist Publisher','Other'
+
+export const REQUEST_TYPES=['geo','budget','creative','technical','other'];
+
+export const OPTIMISE_SCENARIOS=[
+  'Decrease Budget','Increase Budget','Change Targeting','Update Creative',
+  'Pause Campaign','Resume Campaign','Adjust Bidding','New Campaign Setup'
 ];
-const REQUEST_TYPES=['geo','payout','link','budget'];
+
+export const FA_OPTIONS = ['FA1', 'FA2', 'FA3', 'FA4'];
 
 // Role-based field definitions for optimise task
 const OPTIMISE_FIELDS = {
@@ -34,10 +38,8 @@ const OPTIMISE_FIELDS = {
   am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment']
 };
 
-const FA_OPTIONS = ['FA1', 'FA2', 'FA3', 'FA4'];
-
 const emptyForm=(type='share_link')=>({
-  task_type:type, description:'', assigned_to:'',
+  task_type:type, description:'',
   entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' }],
   pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'' }],
 optimise_entries: [{
@@ -47,12 +49,16 @@ optimise_entries: [{
 });
 
 /* ── Task item ─────────────────────────────────────────────── */
-function TaskItem({task,currentUser,onStatusUpdate,onFollowup}){
+function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
   const [expanded,setExpanded]=useState(false);
   const [comment,setComment]=useState('');
   const [busy,setBusy]=useState(false);
   const type=TASK_TYPES[task.task_type]||TASK_TYPES.initial_setup;
   const sc={pending:'#f59e0b',accepted:'#4f7dff',completed:'#22c55e',rejected:'#ef4444'};
+
+  // Check if current user is the assigned user
+  const isAssignedUser = task.assigned_to === currentUser.id;
+  const isTaskCreator = task.assigned_by === currentUser.id;
 
   const doStatus=async(status)=>{
     setBusy(true);
@@ -61,10 +67,27 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup}){
     setBusy(false);
   };
 
+  const handleTaskClick = () => {
+    if (onTaskClick) {
+      onTaskClick(task.id);
+    }
+  };
+
   
 
   return(
-    <div style={{marginBottom:10,borderRadius:10,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderLeft:`3px solid ${type.color}`,padding:'12px 14px'}}>
+    <div 
+      style={{marginBottom:10,borderRadius:10,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderLeft:`3px solid ${type.color}`,padding:'12px 14px',cursor:'pointer',transition:'all 0.2s'}}
+      // onClick={handleTaskClick}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateX(4px)';
+        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateX(0)';
+        e.currentTarget.style.boxShadow = 'none';
+      }}
+    >
       <div style={{display:'flex',gap:10}}>
         <span style={{fontSize:20}}>{type.icon}</span>
         <div style={{flex:1,minWidth:0}}>
@@ -98,8 +121,8 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup}){
               )}
             </div>
           )}
-          {/* actions */}
-          {task.status==='pending'&&(
+          {/* actions - Only show for assigned users */}
+          {isAssignedUser && task.status==='pending'&&(
             <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
               <button className="btn btn-xs btn-success" onClick={()=>doStatus('accepted')} disabled={busy}>✓ Accept</button>
               <button className="btn btn-xs btn-danger"  onClick={()=>doStatus('rejected')} disabled={busy}>✗ Reject</button>
@@ -109,13 +132,27 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup}){
               </button>
             </div>
           )}
-          {task.status==='accepted'&&(
+          {isAssignedUser && task.status==='accepted'&&(
             <button className="btn btn-xs btn-success" style={{marginTop:6}} onClick={()=>doStatus('completed')} disabled={busy}>✔ Mark Complete</button>
           )}
-          {expanded&&<textarea className="form-control" style={{minHeight:56,fontSize:12,marginTop:8}} placeholder="Comment…" value={comment} onChange={e=>setComment(e.target.value)}/>}
+          {isAssignedUser && expanded&&<textarea className="form-control" style={{minHeight:56,fontSize:12,marginTop:8}} placeholder="Comment…" value={comment} onChange={e=>setComment(e.target.value)}/>}
+          {!isAssignedUser && isTaskCreator && (
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:6,fontStyle:'italic'}}>
+              You can only view this task. Actions are available to the assigned user.
+            </div>
+          )}
           {(task.status==='completed'||task.status==='rejected')&&(
             <button className="btn btn-xs btn-secondary" style={{marginTop:6}} onClick={()=>onFollowup(task)}>↩ Follow Up</button>
           )}
+          {/* Details button - always show */}
+          <button 
+            className="btn btn-xs btn-info" 
+            style={{marginTop:6}} 
+            onClick={() => onTaskClick(task.id)}
+            title="View task details"
+          >
+            📋 Details
+          </button>
         </div>
       </div>
     </div>
@@ -129,12 +166,62 @@ export default function TasksPanel({group, taskTarget}){
   const [tasks,setTasks]=useState([]);
   const [filter,setFilter]=useState('all');
   const [showCreate,setShowCreate]=useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Add refresh key for forcing re-renders
+  const [loadingTasks, setLoadingTasks] = useState(false); // Add loading state for tasks
   const [users,setUsers]=useState([]);
   const [members,setMembers]=useState([]);
   const [form,setForm]=useState(emptyForm());
   const [creating,setCreating]=useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [taskDetails, setTaskDetails] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const fileRef=useRef(null);
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  // Add CSS animation for spinner
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
+  // Role-based filtering for "Assign To" dropdowns
+  const getFilteredMembersForTaskType = useCallback((taskType) => {
+    if (!members || members.length === 0) return [];
+    
+    switch(taskType) {
+      case 'share_link':
+      case 'pause_pid':
+        // Show only publisher and publisher_manager (excluding current user)
+        return members.filter(member => 
+          (member.role === 'publisher' || member.role === 'publisher_manager') &&
+          member.id !== user?.id
+        );
+      
+      case 'raise_request':
+        // Show only advertiser and advertiser_manager (excluding current user)
+        return members.filter(member => 
+          (member.role === 'advertiser' || member.role === 'advertiser_manager') &&
+          member.id !== user?.id
+        );
+      
+      case 'optimise':
+        // Show all group members (excluding current user)
+        return members.filter(member => member.id !== user?.id);
+      
+      default:
+        // For initial_setup and others, show all members (excluding current user)
+        return members.filter(member => member.id !== user?.id);
+    }
+  }, [members, user?.id]);
 
   // API call to get group members
   useEffect(() => {
@@ -226,7 +313,7 @@ export default function TasksPanel({group, taskTarget}){
                         onChange={e => updateOptimiseEntry(entryIndex, 'assigned_to', e.target.value)}
                       >
                         <option value="">Unassigned</option>
-                        {members.map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
+                        {getFilteredMembersForTaskType('optimise').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
                       </select>
                     );
                   case 'pub_id':
@@ -348,8 +435,18 @@ export default function TasksPanel({group, taskTarget}){
 
   const load=useCallback(async()=>{
     if(!group)return;
-    const data=await tasksAPI.getByGroup(group.id);
-    setTasks(data.tasks||[]);
+    setLoadingTasks(true);
+    try {
+      // Add small delay to make loading state visible during testing
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const data=await tasksAPI.getByGroup(group.id);
+      setTasks(data.tasks||[]);
+    } catch (error) {
+      console.error('Failed to load tasks:', error);
+      setTasks([]);
+    } finally {
+      setLoadingTasks(false);
+    }
   },[group?.id]);// eslint-disable-line
 
   useEffect(()=>{
@@ -358,12 +455,105 @@ export default function TasksPanel({group, taskTarget}){
   },[group?.id]);// eslint-disable-line
 
   useEffect(()=>{
-    const unsub=on('task_update',({action,task,task_id,status})=>{
-      if(action==='created')setTasks(prev=>[task,...prev]);
-      if(action==='status_changed')setTasks(prev=>prev.map(t=>t.id===task_id?{...t,status}:t));
+    const unsub=on('task_update',({action,task,task_id,status,response,updated_by})=>{
+      console.log('Task update event received:', { action, task, task_id, status, response, updated_by, currentUserId: user?.id });
+      
+      if(action==='status_changed'){
+        // Update task status in the list with single state update
+        setTasks(prev => {
+          const updatedTasks = prev.map(t=>t.id===task_id?{...t,status}:t);
+          console.log('Updated task status in list:', updatedTasks);
+          return updatedTasks;
+        });
+        // Force re-render
+        setRefreshKey(prev => prev + 1);
+        
+        // Show notification about the update
+        if(response && response.comment){
+          const actionText = status === 'accepted' ? 'accepted' : status === 'rejected' ? 'rejected' : 'completed';
+          toast(`${updated_by} ${actionText} task${response.comment ? ' with note' : ''}`);
+        }
+        
+        // If we have this task selected, update the details
+        if(selectedTask === task_id && taskDetails){
+          setTaskDetails(prev=>prev ? {...prev,status} : null);
+        }
+      }
+      
+      if(action==='created' && task){
+        // Only add if task is assigned to current user or created by current user
+        if(task.assigned_to === user?.id || task.assigned_by === user?.id){
+          setTasks(prev => {
+            // Avoid duplicates
+            if(!prev.find(t => t.id === task.id)) {
+              console.log('Adding created task to list:', task);
+              // Force re-render
+              setRefreshKey(prev => prev + 1);
+              return [task,...prev];
+            }
+            return prev;
+          });
+        }
+      }
     });
     return unsub;
-  },[on]);
+  },[on,user?.id,selectedTask,taskDetails]);
+
+  // Listen for real-time task assignments
+  useEffect(()=>{
+    console.log('[TasksPanel] Setting up task_assigned listener, connected:', on);
+    const unsub=on('task_assigned',({task,subTasks,assigned_by,message,group_id})=>{
+      console.log('[TasksPanel] Task assigned event received:', { task, subTasks, assigned_by, message, group_id, currentGroupId: group?.id, currentUserId: user?.id });
+      
+      // Only add task if it's for current user's group
+      if(group_id === group?.id) {
+        toast.success(message);
+        
+        // Collect all tasks to add in a single state update
+        const tasksToAdd = [];
+        
+        // Check if main task should be shown (creator or has assigned sub-tasks)
+        const shouldShowMainTask = task && (
+          task.assigned_to === user?.id || 
+          task.assigned_by === user?.id ||
+          (subTasks && subTasks.some(st => st.assigned_to === user?.id))
+        );
+        
+        if(shouldShowMainTask) {
+          console.log('[TasksPanel] Adding main task to list:', task);
+          tasksToAdd.push(task);
+        }
+        
+        // Add sub-tasks if any (only those assigned to current user)
+        if(subTasks && subTasks.length > 0) {
+          const userSubTasks = subTasks.filter(st => st.assigned_to === user?.id || st.assigned_by === user?.id);
+          console.log('[TasksPanel] Adding sub-tasks:', userSubTasks);
+          tasksToAdd.push(...userSubTasks);
+        }
+        
+        // Single state update to prevent race conditions
+        if(tasksToAdd.length > 0) {
+          console.log('[TasksPanel] Adding all tasks to state:', tasksToAdd);
+          setTasks(prev => {
+            const newTasks = [...prev];
+            // Add tasks in order and avoid duplicates
+            tasksToAdd.forEach(newTask => {
+              if(!newTasks.find(t => t.id === newTask.id)) {
+                newTasks.unshift(newTask);
+              }
+            });
+            console.log('[TasksPanel] Updated task list:', newTasks);
+            return newTasks;
+          });
+          // Force re-render
+          setRefreshKey(prev => prev + 1);
+        }
+      } else {
+        console.log('[TasksPanel] Ignoring task for different group:', group_id, 'current group:', group?.id);
+      }
+    });
+    return unsub;
+  },[on,group?.id,user?.id]);
 
   /* ── Handle taskTarget from chat pill click ──
      If taskTarget.openForm === true: open the create form pre-set to that task type
@@ -391,6 +581,9 @@ export default function TasksPanel({group, taskTarget}){
   },[taskTarget]);// re-runs each time taskTarget changes (new ts)
 
   const handleCreate=async()=>{
+    // Prevent double submission
+    if (creating) return;
+    
     // Validate share_link entries
     if (form.task_type === 'share_link') {
       const validEntries = form.entries.filter(entry => 
@@ -437,9 +630,10 @@ export default function TasksPanel({group, taskTarget}){
         if(form.task_type !== 'pause_pid') delete payload.pause_entries;
         if(form.task_type !== 'optimise') delete payload.optimise_entries;
       }
+      console.log('🔍 Frontend Task Payload:', payload);
       const data=await tasksAPI.create(payload);
       if(data.subTasks && data.subTasks.length > 0){
-        setTasks(prev=>[data.task,...prev,...data.subTasks]);
+        setTasks(prev=>[...(data.task ? [data.task] : []),...prev,...data.subTasks]);
       }else{
         setTasks(prev=>[data.task,...prev]);
       }
@@ -451,21 +645,57 @@ export default function TasksPanel({group, taskTarget}){
   };
 
   const handleStatusUpdate=async(taskId,status,comment)=>{
-    await tasksAPI.updateStatus(taskId,status,comment);
-    setTasks(prev=>prev.map(t=>t.id===taskId?{...t,status}:t));
+    try {
+      await tasksAPI.updateStatus(taskId,status,comment);
+      setTasks(prev=>prev.map(t=>t.id===taskId?{...t,status}:t));
+    } catch (error) {
+      if (error.error === 'Access Denied: Only assigned user can update task status') {
+        toast.error('Access Denied: Only assigned users can update task status');
+      } else {
+        toast.error('Failed to update task status');
+      }
+      throw error; // Re-throw to let TaskItem handle it
+    }
   };
 
   const handleFollowup=async(task)=>{
-    const msg=prompt(`Follow-up for: ${type.label} task`);
+    const taskType=TASK_TYPES[task.task_type]||TASK_TYPES.initial_setup;
+    const msg=prompt(`Follow-up for: ${taskType.label} task`);
     if(!msg)return;
     await tasksAPI.createFollowup({group_id:group.id,task_id:task.id,message:msg});
     toast.success('Follow-up added!');
+  };
+
+  const handleTaskClick = async (taskId) => {
+    if (selectedTask === taskId) {
+      setSelectedTask(null);
+      setTaskDetails(null);
+      return;
+    }
+    
+    setSelectedTask(taskId);
+    setLoadingDetails(true);
+    try {
+      const data = await tasksAPI.getById(taskId);
+      setTaskDetails(data.task);
+    } catch (error) {
+      if (error.error === 'Access Denied: Only assigned user can view task details') {
+        toast.error('Access Denied: You can only view tasks assigned to you');
+      } else {
+        toast.error('Failed to load task details');
+      }
+      setSelectedTask(null);
+      setTaskDetails(null);
+    } finally {
+      setLoadingDetails(false);
+    }
   };
 
   const filtered=tasks.filter(t=>filter==='all'?true:t.status===filter);
   const pendingCount=tasks.filter(t=>t.status==='pending').length;
 
   return(
+    <>
     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
 
       {/* filter bar */}
@@ -541,7 +771,7 @@ export default function TasksPanel({group, taskTarget}){
                       onChange={e => updateEntry(index, 'assigned_to', e.target.value)}
                     >
                       <option value="">Unassigned</option>
-                      {members.map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
+                      {getFilteredMembersForTaskType('share_link').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
                     </select>
                     <input 
                       className="form-control" 
@@ -653,7 +883,7 @@ export default function TasksPanel({group, taskTarget}){
                       onChange={e => updatePauseEntry(index, 'assigned_to', e.target.value)}
                     >
                       <option value="">Unassigned</option>
-                      {members.map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
+                      {getFilteredMembersForTaskType('pause_pid').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
                     </select>
                     <input 
                       className="form-control" 
@@ -741,7 +971,7 @@ export default function TasksPanel({group, taskTarget}){
                 <label className="form-label">Assign To</label>
                 <select className="form-control" value={form.assigned_to} onChange={e=>f('assigned_to',e.target.value)}>
                   <option value="">Unassigned</option>
-                  {members.map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
+                  {getFilteredMembersForTaskType('raise_request').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
                 </select>
               </div>
               <div style={{marginBottom:10}}>
@@ -872,21 +1102,56 @@ export default function TasksPanel({group, taskTarget}){
 
       {/* task list */}
       <div style={{flex:1,overflowY:'auto',padding:'10px 12px'}}>
-        {filtered.length===0?(
-          <div className="empty-state" style={{padding:40}}><div style={{fontSize:32}}>✅</div><p>No {filter!=='all'?filter:''} tasks</p></div>
-        ):filtered.map(task=>(
-          <div id={`task-${task.id}`} key={task.id}>
-            <TaskItem 
-              key={task.id} 
-              task={task} 
-              currentUser={user} 
-              onStatusUpdate={handleStatusUpdate} 
-              onFollowup={handleFollowup}
-              group={group} 
-            />
+        {loadingTasks ? (
+          // Loading state
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px',color:'var(--text-muted)'}}>
+            <div style={{
+              width:'32px',
+              height:'32px',
+              border:'3px solid var(--border)',
+              borderTop:'3px solid var(--accent)',
+              borderRadius:'50%',
+              animation:'spin 1s linear infinite',
+              marginBottom:'12px'
+            }}></div>
+            <p style={{margin:0,fontSize:'14px'}}>Loading tasks...</p>
           </div>
-        ))}
+        ) : filtered.length===0 ? (
+          // Empty state
+          <div className="empty-state" style={{padding:40,textAlign:'center',color:'var(--text-muted)'}}>
+            <div style={{fontSize:'32px',marginBottom:'8px'}}>📋</div>
+            <p style={{margin:0,fontSize:'14px'}}>
+              {tasks.length===0 ? 'No tasks found' : `No ${filter!=='all'?filter:''} tasks`}
+            </p>
+          </div>
+        ) : (
+          // Task list
+          filtered.map(task=>(
+            <div id={`task-${task.id}`} key={`${task.id}-${refreshKey}`}>
+              <TaskItem 
+                key={`${task.id}-${refreshKey}`} 
+                task={task} 
+                currentUser={user} 
+                onStatusUpdate={handleStatusUpdate} 
+                onFollowup={handleFollowup}
+                onTaskClick={handleTaskClick}
+                group={group} 
+              />
+            </div>
+          ))
+        )}
       </div>
     </div>
+
+    {/* Task Details Modal */}
+    <TaskDetailsModal 
+      task={taskDetails} 
+      onClose={() => {
+        setSelectedTask(null);
+        setTaskDetails(null);
+      }}
+      loading={loadingDetails}
+    />
+    </>
   );
 }

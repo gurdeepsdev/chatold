@@ -53,10 +53,13 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || 'Clickorbits@123',
   database: process.env.DB_NAME     || 'crm_chat',
   waitForConnections: true,
-  connectionLimit: 20,
+  connectionLimit: 5,
   queueLimit: 0,
   timezone: '+00:00',
   decimalNumbers: true,
+  idleTimeout: 300000,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
 });
 
 pool.getConnection()
@@ -74,10 +77,13 @@ let crmPool = null;
     password: process.env.CRM_DB_PASSWORD || process.env.DB_PASSWORD || 'Clickorbits@123',
     database: process.env.CRM_DB_NAME     || 'crmclickorbits',
     waitForConnections: true,
-    connectionLimit: 5,
+    connectionLimit: 3,
     queueLimit: 0,
     timezone: '+00:00',
     decimalNumbers: true,
+    idleTimeout: 300000,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0,
   });
   crmPool.getConnection()
     .then(conn => { console.log('✅ CRM Source DB connected'); conn.release(); })

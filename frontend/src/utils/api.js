@@ -17,7 +17,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res.data,
   (err) => {
-    if (err.response?.status === 401) {
+    console.error('API Error:', err);
+    // Only logout on actual authentication errors, not temporary connection issues
+    if (err.response?.status === 401 && err.response?.data?.error !== 'Authentication failed') {
+      console.log('Authentication error - logging out');
       localStorage.removeItem('crm_chat_token');
       window.location.href = '/';
     }
@@ -59,10 +62,12 @@ export const messagesAPI = {
   deleteMessage: (groupId, messageId) => api.delete(`/messages/${groupId}/${messageId}`),
   addReaction: (groupId, messageId, emoji) => api.post(`/messages/${groupId}/${messageId}/reaction`, { emoji }),
   removeReaction: (groupId, messageId, emoji) => api.delete(`/messages/${groupId}/${messageId}/reaction`, { data: { emoji } }),
+  getUnreadCounts: () => api.get('/messages/unread-counts'),
 };
 
 export const tasksAPI = {
   getByGroup: (groupId) => api.get(`/tasks/group/${groupId}`),
+  getById: (taskId) => api.get(`/tasks/${taskId}`),
   create: (data) => {
     if (data instanceof FormData) {
       return api.post('/tasks', data, { headers: { 'Content-Type': 'multipart/form-data' } });

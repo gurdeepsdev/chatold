@@ -8,16 +8,18 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) return toast.error('Fill in all fields');
+    setError(''); // Clear previous error
     setLoading(true);
     try {
       await login(email, password);
       toast.success('Welcome back!');
     } catch (err) {
-      toast.error(err?.error || 'Login failed');
+      setError(err?.error || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -31,11 +33,12 @@ export default function Login() {
     };
     const c = creds[role];
     setEmail(c.email); setPassword(c.password);
+    setError(''); // Clear previous error
     setLoading(true);
     try {
       await login(c.email, c.password);
     } catch (err) {
-      toast.error(err?.error || 'Login failed');
+      setError(err?.error || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -49,6 +52,25 @@ export default function Login() {
           <h1>CRM Chat</h1>
           <p>Campaign Communication Hub</p>
         </div>
+
+        {/* Error Message Bar */}
+        {error && (
+          <div style={{
+            background: '#ef4444',
+            color: 'white',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            marginBottom: '16px',
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            border: '1px solid #dc2626'
+          }}>
+            <span style={{ fontSize: '14px' }}>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">

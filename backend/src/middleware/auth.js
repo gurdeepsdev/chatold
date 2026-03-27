@@ -7,14 +7,26 @@ const auth = async (req, res, next) => {
     if (!token) return res.status(401).json({ error: 'No token provided' });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-    const [rows] = await db.query('SELECT id, username, full_name, email, role FROM users WHERE id = ?', [decoded.userId]);
+    let rows;
+    try {
+      [rows] = await db.query('SELECT id, username, full_name, email, role FROM users WHERE id = ?', [decoded.userId]);
+    } catch (dbError) {
+      console.error('Database connection error in auth:', dbError);
+      // Retry once after a short delay
+      await new Promise(resolve => setTimeout(resolve, 100));
+      [rows] = await db.query('SELECT id, username, full_name, email, role FROM users WHERE id = ?', [decoded.userId]);
+    }
     
     if (!rows.length) return res.status(401).json({ error: 'User not found' });
     
     req.user = rows[0];
     next();
   } catch (err) {
-    return res.status(401).json({ error: 'Invalid token' });
+    console.error('Auth middleware error:', err);
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    return res.status(401).json({ error: 'Authentication failed' });
   }
 };
 

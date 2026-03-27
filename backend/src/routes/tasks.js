@@ -27,9 +27,9 @@ router.get('/group/:groupId',auth,async(req,res)=>{
       LEFT JOIN users u2 ON u2.id=t.assigned_by
       LEFT JOIN campaigns c ON c.id=t.campaign_id
       LEFT JOIN tasks parent ON parent.id=t.parent_task_id
-      WHERE t.group_id=?
+      WHERE t.group_id=? AND (t.assigned_to=? OR t.assigned_by=?)
       ORDER BY CASE t.status WHEN 'pending' THEN 1 WHEN 'accepted' THEN 2 ELSE 3 END,t.created_at DESC
-    `,[req.params.groupId]);
+    `,[req.params.groupId, req.user.id, req.user.id]);
     
     // Get sub-tasks for each main task
     const tasksWithSubs = await Promise.all(tasks.map(async (task) => {
@@ -41,10 +41,10 @@ router.get('/group/:groupId',auth,async(req,res)=>{
           FROM tasks t
           LEFT JOIN users u1 ON u1.id=t.assigned_to
           LEFT JOIN users u2 ON u2.id=t.assigned_by
-          WHERE t.parent_task_id=?
+          WHERE t.parent_task_id=? AND (t.assigned_to=? OR t.assigned_by=?)
           ORDER BY t.created_at DESC
-        `,[task.id]);
-        return { ...task, subTasks };
+        `,[task.id, req.user.id, req.user.id]);
+        return{...task,subTasks};
       }
       return task;
     }));
@@ -103,73 +103,318 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
       }
     }
 
-    // Create main task
-    const[r]=await conn.query(
-      `INSERT INTO tasks (group_id,campaign_id,task_type,title,description,
-         assigned_to,assigned_by,pub_id,pid,link,pause_reason,
-         request_type,request_details,fp,f1,f2,optimise_scenario,
-         attachment_url,attachment_name,due_date)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [group_id,campaign_id||null,task_type,null,description||null,
-       assigned_to||null,req.user.id,pub_id||null,pid||null,link||null,
-       pause_reason||null,request_type||null,request_details||null,
-       fp||null,f1||null,f2||null,optimise_scenario||null,
-       attachment_url,attachment_name,due_date||null]
-    );
-    const taskId=r.insertId;
-
-    // Create sub-tasks for each entry (for share_link tasks)
+    // Create main task for single-entry task types (raise_request, initial_setup, etc.)
+    let taskId;
     let subTaskIds = [];
-    if (task_type === 'share_link' && parsedEntries.length > 0) {
-      for (const entry of parsedEntries) {
-        if (entry.pub_id || entry.pid || entry.link) {
-          const[subR]=await conn.query(
-            `INSERT INTO tasks (group_id,campaign_id,task_type,title,description,
-               assigned_to,assigned_by,pub_id,pid,link,parent_task_id)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-            [group_id,campaign_id||null,task_type,entry.note||null,null,
-             entry.assigned_to||null,req.user.id,entry.pub_id||null,entry.pid||null,
-             entry.link||null,taskId]
-          );
-          subTaskIds.push(subR.insertId);
-        }
-      }
+    
+    if (task_type === 'raise_request' || task_type === 'initial_setup') {
+      const [mainTask] = await conn.query(
+        `INSERT INTO tasks (
+          group_id,
+          campaign_id,
+          task_type,
+          description,
+          assigned_to,
+          assigned_by,
+          request_type,
+          request_details,
+          pub_id,
+          pid,
+          fp,
+          f1,
+          f2,
+          optimise_scenario,
+          attachment_url,
+          attachment_name
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          group_id,
+          campaign_id || null,
+          task_type,
+          description || null,
+          assigned_to || null,
+          req.user.id,
+          request_type || null,
+          request_details || null,
+          pub_id || null,
+          pid || null,
+          fp || null,
+          f1 || null,
+          f2 || null,
+          optimise_scenario || null,
+          attachment_url,
+          attachment_name
+        ]
+      );
+      taskId = mainTask.insertId;
     }
 
-    // Create sub-tasks for each pause entry (for pause_pid tasks)
-    if (task_type === 'pause_pid' && parsedPauseEntries.length > 0) {
-      for (const entry of parsedPauseEntries) {
-        if (entry.pub_id || entry.pid || entry.pause_reason) {
-          const[subR]=await conn.query(
-            `INSERT INTO tasks (group_id,campaign_id,task_type,title,description,
-               assigned_to,assigned_by,pub_id,pid,link,pause_reason,parent_task_id)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-            [group_id,campaign_id||null,task_type,null,null,
-             entry.assigned_to||null,req.user.id,entry.pub_id||null,entry.pid||null,
-             null,entry.pause_reason||null,taskId]
-          );
-          subTaskIds.push(subR.insertId);
-        }
-      }
-    }
+// ✅ FIX: HANDLE SHARE LINK SEPARATELY (NO PARENT TASK)
+if (task_type === 'share_link') {
+  let subTaskIds = [];
 
-    // Create sub-tasks for each optimise entry (for optimise tasks)
-    if (task_type === 'optimise' && parsedOptimiseEntries.length > 0) {
-      for (const entry of parsedOptimiseEntries) {
-        if (entry.pub_id || entry.pid || entry.fp || entry.fa || entry.f1 || entry.f2 || entry.optimise_scenario) {
-          const[subR]=await conn.query(
-            `INSERT INTO tasks (group_id,campaign_id,task_type,title,description,
-               assigned_to,assigned_by,pub_id,pid,link,pause_reason,
-               fp,f1,f2,optimise_scenario,parent_task_id)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-            [group_id,campaign_id||null,task_type,null,null,
-             entry.assigned_to||null,req.user.id,entry.pub_id||null,entry.pid||null,
-             null,null,entry.fp||null,entry.f1||null,entry.f2||null,entry.optimise_scenario||null,taskId]
-          );
-          subTaskIds.push(subR.insertId);
-        }
-      }
+  for (const entry of parsedEntries) {
+    if (entry.pub_id || entry.pid || entry.link) {
+      const [subR] = await conn.query(
+        `INSERT INTO tasks (
+          group_id,
+          campaign_id,
+          task_type,
+          assigned_to,
+          assigned_by,
+          pub_id,
+          pid,
+          link,
+          note,
+          attachment_url,
+          attachment_name
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          group_id,
+          campaign_id || null,
+          task_type,
+          entry.assigned_to || null,
+          req.user.id,
+          entry.pub_id || null,
+          entry.pid || null,
+          entry.link || null,
+          entry.note || null,
+          attachment_url,
+          attachment_name
+        ]
+      );
+
+      subTaskIds.push(subR.insertId);
     }
+  }
+
+  await conn.commit();
+
+  // Fetch the created tasks to return proper format
+  const [createdTasks] = await conn.query(
+    `SELECT * FROM tasks WHERE id IN (${subTaskIds.map(() => '?').join(',')})`,
+    subTaskIds
+  );
+
+  // Post task-notification message in chat
+  const taskLabel = '🔗 Share Link';
+  const entryCount = parsedEntries.filter(e => e.pub_id || e.pid || e.link).length;
+  const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
+  const {encrypted, iv} = encrypt(chatContent);
+  const [mRes] = await conn.query(
+    `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
+     VALUES(?,?,'task_notification',?,?,?)`,
+    [group_id, req.user.id, encrypted, iv, null]
+  );
+
+  await conn.query(
+    'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
+    [group_id, 'task_created', JSON.stringify({task_type: 'share_link', entries: subTaskIds.length}), req.user.id]
+  );
+
+  // Emit real-time message to group
+  const io = req.app.get('io');
+  if (io) {
+    io.to(`group_${group_id}`).emit('new_message', {
+      id: mRes.insertId,
+      group_id: Number(group_id),
+      sender_id: req.user.id,
+      sender_name: req.user.full_name,
+      sender_role: req.user.role,
+      message_type: 'task_notification',
+      content: chatContent,
+      task_ref: {task_type: 'share_link', task_title: taskLabel},
+      sent_at: new Date(),
+    });
+  }
+
+  return res.status(201).json({
+    task: null, // No parent task for share_link
+    subTasks: createdTasks
+  });
+}
+
+    // ✅ FIX: HANDLE PAUSE_PID SEPARATELY (NO PARENT TASK)
+if (task_type === 'pause_pid') {
+  let subTaskIds = [];
+
+  for (const entry of parsedPauseEntries) {
+    if (entry.pub_id || entry.pid || entry.pause_reason) {
+      const [subR] = await conn.query(
+        `INSERT INTO tasks (
+          group_id,
+          campaign_id,
+          task_type,
+          assigned_to,
+          assigned_by,
+          pub_id,
+          pid,
+          link,
+          pause_reason,
+          attachment_url,
+          attachment_name
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          group_id,
+          campaign_id || null,
+          task_type,
+          entry.assigned_to || null,
+          req.user.id,
+          entry.pub_id || null,
+          entry.pid || null,
+          null,
+          entry.pause_reason || null,
+          attachment_url,
+          attachment_name
+        ]
+      );
+
+      subTaskIds.push(subR.insertId);
+    }
+  }
+
+  await conn.commit();
+
+  // Fetch the created tasks to return proper format
+  const [createdTasks] = await conn.query(
+    `SELECT * FROM tasks WHERE id IN (${subTaskIds.map(() => '?').join(',')})`,
+    subTaskIds
+  );
+
+  // Post task-notification message in chat
+  const taskLabel = '⏸️ Pause PID';
+  const entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
+  const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
+  const {encrypted, iv} = encrypt(chatContent);
+  const [mRes] = await conn.query(
+    `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
+     VALUES(?,?,'task_notification',?,?,?)`,
+    [group_id, req.user.id, encrypted, iv, null]
+  );
+
+  await conn.query(
+    'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
+    [group_id, 'task_created', JSON.stringify({task_type: 'pause_pid', entries: subTaskIds.length}), req.user.id]
+  );
+
+  // Emit real-time message to group
+  const io = req.app.get('io');
+  if (io) {
+    io.to(`group_${group_id}`).emit('new_message', {
+      id: mRes.insertId,
+      group_id: Number(group_id),
+      sender_id: req.user.id,
+      sender_name: req.user.full_name,
+      sender_role: req.user.role,
+      message_type: 'task_notification',
+      content: chatContent,
+      task_ref: {task_type: 'pause_pid', task_title: taskLabel},
+      sent_at: new Date(),
+    });
+  }
+
+  return res.status(201).json({
+    task: null, // No parent task for pause_pid
+    subTasks: createdTasks
+  });
+}
+
+// ✅ FIX: HANDLE OPTIMISE SEPARATELY (NO PARENT TASK)
+if (task_type === 'optimise') {
+  let subTaskIds = [];
+
+  for (const entry of parsedOptimiseEntries) {
+    if (entry.pub_id || entry.pid || entry.fp || entry.fa || entry.f1 || entry.f2 || entry.optimise_scenario) {
+      const [subR] = await conn.query(
+        `INSERT INTO tasks (
+          group_id,
+          campaign_id,
+          task_type,
+          assigned_to,
+          assigned_by,
+          pub_id,
+          pid,
+          link,
+          fp,
+          fa,
+          f1,
+          f2,
+          optimise_scenario,
+          attachment_url,
+          attachment_name
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          group_id,
+          campaign_id || null,
+          task_type,
+          entry.assigned_to || null,
+          req.user.id,
+          entry.pub_id || null,
+          entry.pid || null,
+          null,
+          entry.fp || null,
+          entry.fa || null,
+          entry.f1 || null,
+          entry.f2 || null,
+          entry.optimise_scenario || null,
+          attachment_url,
+          attachment_name
+        ]
+      );
+
+      subTaskIds.push(subR.insertId);
+    }
+  }
+
+  await conn.commit();
+
+  // Fetch the created tasks to return proper format
+  const [createdTasks] = await conn.query(
+    `SELECT * FROM tasks WHERE id IN (${subTaskIds.map(() => '?').join(',')})`,
+    subTaskIds
+  );
+
+  // Post task-notification message in chat
+  const taskLabel = '⚡ Optimise';
+  const entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario).length;
+  const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
+  const {encrypted, iv} = encrypt(chatContent);
+  const [mRes] = await conn.query(
+    `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
+     VALUES(?,?,'task_notification',?,?,?)`,
+    [group_id, req.user.id, encrypted, iv, null]
+  );
+
+  await conn.query(
+    'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
+    [group_id, 'task_created', JSON.stringify({task_type: 'optimise', entries: subTaskIds.length}), req.user.id]
+  );
+
+  // Emit real-time message to group
+  const io = req.app.get('io');
+  if (io) {
+    io.to(`group_${group_id}`).emit('new_message', {
+      id: mRes.insertId,
+      group_id: Number(group_id),
+      sender_id: req.user.id,
+      sender_name: req.user.full_name,
+      sender_role: req.user.role,
+      message_type: 'task_notification',
+      content: chatContent,
+      task_ref: {task_type: 'optimise', task_title: taskLabel},
+      sent_at: new Date(),
+    });
+  }
+
+  return res.status(201).json({
+    task: null, // No parent task for optimise
+    subTasks: createdTasks
+  });
+}
 
     // Post task-notification message in chat
     const labels={initial_setup:'🚀 Initial Setup',share_link:'🔗 Share Link',
@@ -251,10 +496,22 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
       // notify assignees
       allAssignees.forEach(assigneeId => {
         if (assigneeId) {
+          console.log('Emitting task_assigned to user:', assigneeId);
+          console.log('Task data:', { task: taskRow, subTasks, assigned_by: req.user.full_name, group_id });
+          
           io.to(`user_${assigneeId}`).emit('push_notification',{
             type:'task',title:`📋 New task: ${taskLabel}`,
             body:description||'You have a new task assigned',group_id,
           });
+          // Send real-time task assignment event
+          io.to(`user_${assigneeId}`).emit('task_assigned', {
+            task: taskRow,
+            subTasks: subTasks,
+            assigned_by: req.user.full_name,
+            message: `New task assigned to you by ${req.user.full_name}`,
+            group_id
+          });
+          console.log('task_assigned event emitted successfully');
         }
       });
     }
@@ -267,6 +524,52 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
   }finally{conn.release();}
 });
 
+/* GET single task with permission check */
+router.get('/:taskId', auth, async (req, res) => {
+  try {
+    const [[task]] = await db.query(`
+      SELECT t.*, 
+        u1.full_name AS assigned_to_name,
+        u2.full_name AS assigned_by_name,
+        c.campaign_name,
+        parent.task_type AS parent_task_type
+      FROM tasks t
+      LEFT JOIN users u1 ON u1.id = t.assigned_to
+      LEFT JOIN users u2 ON u2.id = t.assigned_by
+      LEFT JOIN campaigns c ON c.id = t.campaign_id
+      LEFT JOIN tasks parent ON parent.id = t.parent_task_id
+      WHERE t.id = ?
+    `, [req.params.taskId]);
+
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Strict permission check: only assigned user or task creator can view details
+    if (task.assigned_to !== req.user.id && task.assigned_by !== req.user.id) {
+      return res.status(403).json({ error: 'Access Denied: Only assigned user can view task details' });
+    }
+
+    // Get sub-tasks if any
+    let subTasks = [];
+    if (task.parent_task_id === null) {
+      const [subRows] = await db.query(`
+        SELECT t.*, u1.full_name AS assigned_to_name, u2.full_name AS assigned_by_name
+        FROM tasks t 
+        LEFT JOIN users u1 ON u1.id = t.assigned_to 
+        LEFT JOIN users u2 ON u2.id = t.assigned_by
+        WHERE t.parent_task_id = ?
+      `, [req.params.taskId]);
+      subTasks = subRows;
+    }
+
+    res.json({ task: { ...task, subTasks } });
+  } catch (e) {
+    console.error('Get task error:', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 /* PATCH update status */
 router.patch('/:taskId/status',auth,async(req,res)=>{
   const conn=await db.getConnection();
@@ -275,15 +578,53 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
     const{taskId}=req.params;const{status,comment}=req.body;
     const valid=['pending','accepted','rejected','completed'];
     if(!valid.includes(status))return res.status(400).json({error:'Invalid status'});
+    
+    // Get task and validate user permissions
+    const[[task]]=await conn.query('SELECT * FROM tasks WHERE id=?',[taskId]);
+    if(!task)return res.status(404).json({error:'Task not found'});
+    
+    // Only assigned user can update task status
+    if(task.assigned_to !== req.user.id) {
+      return res.status(403).json({error:'Access Denied: Only assigned user can update task status'});
+    }
+    
     await conn.query('UPDATE tasks SET status=?,updated_at=NOW() WHERE id=?',[status,taskId]);
     await conn.query('INSERT INTO task_responses (task_id,user_id,action,comment) VALUES(?,?,?,?)',[taskId,req.user.id,status,comment||null]);
-    const[[task]]=await conn.query('SELECT * FROM tasks WHERE id=?',[taskId]);
     await conn.query('INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
       [task.group_id,'task_status_changed',JSON.stringify({task_id:taskId,status}),req.user.id]);
     await conn.commit();
+    
+    // Get updated task with full details
+    const[[updatedTask]]=await conn.query(`
+      SELECT t.*, 
+        u1.full_name AS assigned_to_name,
+        u2.full_name AS assigned_by_name
+      FROM tasks t 
+      LEFT JOIN users u1 ON u1.id=t.assigned_to 
+      LEFT JOIN users u2 ON u2.id=t.assigned_by
+      WHERE t.id=?`,[taskId]);
+    
+    // Get the latest response/comment
+    const[[latestResponse]]=await conn.query(`
+      SELECT tr.*, u.full_name AS user_name
+      FROM task_responses tr 
+      JOIN users u ON u.id=tr.user_id 
+      WHERE tr.task_id=? 
+      ORDER BY tr.responded_at DESC 
+      LIMIT 1`,[taskId]);
+    
     const io=req.app.get('io');
-    if(io)io.to(`group_${task.group_id}`).emit('task_update',{action:'status_changed',task_id:Number(taskId),status});
-    res.json({message:'Updated',status});
+    if(io){
+      io.to(`group_${task.group_id}`).emit('task_update',{
+        action:'status_changed',
+        task_id:Number(taskId),
+        status,
+        task: updatedTask,
+        response: latestResponse,
+        updated_by: req.user.full_name
+      });
+    }
+    res.json({message:'Updated',status,task:updatedTask,response:latestResponse});
   }catch(e){await conn.rollback();res.status(500).json({error:'Server error'});}
   finally{conn.release();}
 });

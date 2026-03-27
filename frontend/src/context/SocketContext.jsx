@@ -54,8 +54,25 @@ export const SocketProvider = ({ children, token }) => {
     socket.on('connect', () => {
       setConnected(true);
       console.log('[Socket] connected', socket.id);
+      console.log('[Socket] User ID from token:', socket.user?.id);
       reattach(socket);
       rejoin(socket);
+    });
+
+    socket.on('connect_error', err => {
+      console.error('[Socket] Connection error:', err);
+    });
+
+    socket.on('task_assigned', (data) => {
+      console.log('[Socket] task_assigned event received:', data);
+    });
+
+    socket.on('task_update', (data) => {
+      console.log('[Socket] task_update event received:', data);
+    });
+
+    socket.on('campaign_created', (data) => {
+      console.log('[Socket] campaign_created event received:', data);
     });
 
     socket.on('disconnect', reason => {

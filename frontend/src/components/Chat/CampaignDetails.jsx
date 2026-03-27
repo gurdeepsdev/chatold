@@ -26,6 +26,49 @@ export default function CampaignDetails({ group }) {
     (typeof group.crm_campaign_data === 'string' ? JSON.parse(group.crm_campaign_data) : group.crm_campaign_data) 
     : null;
 
+  const copyCampaignDetails = () => {
+    // Format campaign details exactly as shown in the UI (without decorative lines)
+    let details = `📊 Campaign Details\n\n`;
+    
+    details += `Group: ${group.group_name}\n`;
+    
+    // CRM Campaign Data
+    if (crmData) {
+      details += `Campaign: ${crmData.campaign_name || 'N/A'}\n`;
+      details += `KPI: ${crmData.kpi || 'N/A'}\n`;
+      details += `Payable Event: ${crmData.payable_event || 'N/A'}\n`;
+      details += `GEO: ${Array.isArray(crmData.geo) ? crmData.geo.join(', ') : crmData.geo || 'N/A'}\n`;
+      if (crmData.preview_url && crmData.preview_url !== 'NA') {
+        details += `Preview: ${crmData.preview_url}\n`;
+      }
+      details += `MMP Tracker: ${crmData.mmp_tracker || 'N/A'}\n`;
+      details += `Payout: ${crmData.adv_payout ? `$${crmData.adv_payout}` : (group.payout ? `$${group.payout}` : 'N/A')}\n`;
+    } else {
+      // Fallback to regular group data
+      if (group.campaign_name) details += `Campaign: ${group.campaign_name}\n`;
+      if (group.geo) details += `GEO: ${group.geo}\n`;
+      if (group.payout) details += `Payout: $${group.payout}\n`;
+      if (group.payable_event) details += `Event: ${group.payable_event}\n`;
+      if (group.kpi) details += `KPI: ${group.kpi}\n`;
+      if (group.mmp_tracker) details += `MMP: ${group.mmp_tracker}\n`;
+      if (group.preview_url) details += `Preview: ${group.preview_url}\n`;
+    }
+    
+    // Additional fields
+    if (group.sub_id) details += `Sub ID: ${group.sub_id}\n`;
+    if (group.package_id) details += `Package: ${group.package_id}\n`;
+    
+    details += `\nGenerated: ${new Date().toLocaleString()}`;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(details).then(() => {
+      toast.success('Campaign details copied to clipboard!');
+    }).catch(err => {
+      console.error('Failed to copy campaign details:', err);
+      toast.error('Failed to copy campaign details');
+    });
+  };
+
   useEffect(() => {
     if (!group) return;
     groupsAPI.getById(group.id).then(d => setMembers(d.members || []));
@@ -92,11 +135,29 @@ export default function CampaignDetails({ group }) {
       <div className="card">
         <div className="card-header">
           <span className="card-title">📊 Campaign Details</span>
-          {group.campaign_status && (
-            <span className={`badge badge-${group.campaign_status === 'active' ? 'live' : 'paused'}`}>
-              {group.campaign_status}
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {group.campaign_status && (
+              <span className={`badge badge-${group.campaign_status === 'active' ? 'live' : 'paused'}`}>
+                {group.campaign_status}
+              </span>
+            )}
+            <button
+              className="btn-icon"
+              onClick={copyCampaignDetails}
+              style={{
+                fontSize: 12,
+                padding: '4px 6px',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 4,
+                color: 'var(--accent)',
+                cursor: 'pointer'
+              }}
+              title="Copy campaign details"
+            >
+              📋
+            </button>
+          </div>
         </div>
         <div className="campaign-detail-row"><span className="campaign-detail-label">Group</span><span className="campaign-detail-value" style={{ fontWeight: 600 }}>{group.group_name}</span></div>
         

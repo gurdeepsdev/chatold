@@ -60,6 +60,16 @@ module.exports = (io) => {
       });
     });
 
+    // Handle task assignment notification
+    socket.on('task_assigned', ({ task, assignedUserId }) => {
+      // Send to assigned user's personal room
+      io.to(`user_${assignedUserId}`).emit('task_assigned', {
+        task,
+        assigned_by: socket.user.full_name,
+        message: `New task assigned to you by ${socket.user.full_name}`
+      });
+    });
+
     // Handle message seen
     socket.on('message_seen', async ({ messageId, groupId }) => {
       try {
