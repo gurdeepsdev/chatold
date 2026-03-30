@@ -149,6 +149,13 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
       if (validEntries.length === 0) {
         return toast.error('Please fill in at least one entry (PubID, PID, or Link)');
       }
+           // 🔥 NEW VALIDATION (IMPORTANT)
+  const invalidAssign = form.entries.some(entry => !entry.assigned_to);
+
+  if (invalidAssign) {
+    return toast.error('Please select "Assign To" for all entries');
+  }
+
     }
     // For pause_pid, validate pause entries
     if (form.task_type === 'pause_pid') {
@@ -158,6 +165,11 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
       if (validPauseEntries.length === 0) {
         return toast.error('Please fill in at least one entry (PubID, PID, or Pause Reason)');
       }
+            // 🔥 NEW VALIDATION (IMPORTANT)
+const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
+  if (invalidAssign) {
+    return toast.error('Please select "Assign To" for all entries');
+  }
     }
     // For optimise, validate optimise entries
     if (form.task_type === 'optimise') {
@@ -167,6 +179,13 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
       if (validOptimiseEntries.length === 0) {
         return toast.error('Please fill in at least one entry (PubID, PID, FP, FA, F1, F2, or Scenario)');
       }
+             // 🔥 NEW VALIDATION (IMPORTANT)
+  const invalidAssign = form.optimise_entries.some(entry => !entry.assigned_to);
+
+  if (invalidAssign) {
+    return toast.error('Please select "Assign To" for all entries');
+  }
+      
     }
     setCreating(true);
     try {
@@ -269,13 +288,13 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
 
         {/* Assign To */}
         <div style={{display:'grid',gridTemplateColumns:'1fr',gap:6,marginBottom:8}}>
-          <div>
+          {/* <div>
             <label className="form-label" style={{fontSize:11,marginBottom:4,color:'rgba(255,255,255,0.8)'}}>Assign To</label>
             <select className="form-control" style={{fontSize:12,padding:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} value={form.assigned_to} onChange={e => f('assigned_to', e.target.value)}>
               <option value="">Unassigned</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>)}
             </select>
-          </div>
+          </div> */}
         </div>
 
         {/* ── Share Link ── */}

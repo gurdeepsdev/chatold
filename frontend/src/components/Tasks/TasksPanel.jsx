@@ -810,10 +810,10 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
           {form.task_type==='share_link'&&(
             <div style={{padding:'8px 10px',background:'rgba(79,125,255,0.1)',borderRadius:6,
               border:'1px solid rgba(79,125,255,0.2)',marginBottom:10}}>
-              <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>🔗 Link Details</div>
+              <div style={{fontSize:10,fontWeight:600,marginBottom:6}}>🔗 Link Details</div>
               
               {/* Table Header */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.5fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.5fr auto',gap:4,marginBottom:6,fontSize:10,fontWeight:500}}>
                 <div>Assign To</div>
                 <div>PubID</div>
                 <div>PID</div>
@@ -844,7 +844,6 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
     border: !entry.assigned_to 
       ? '1px solid #ef4444' 
       : '1px solid rgba(255,255,255,0.2)',
-    color:'#fff'
   }}
   value={entry.assigned_to || ""} 
   onChange={e => updateEntry(index, 'assigned_to', e.target.value)}
@@ -859,7 +858,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
 </select>
                     <input 
                       className="form-control" 
-                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
                       placeholder="PubID" 
                       value={entry.pub_id} 
                       onChange={e => updateEntry(index, 'pub_id', e.target.value)}
@@ -945,10 +944,10 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
           {form.task_type==='pause_pid'&&(
             <div style={{padding:'8px 10px',background:'rgba(245,158,11,0.1)',borderRadius:6,
               border:'1px solid rgba(245,158,11,0.2)',marginBottom:10}}>
-              <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>⏸️ Pause Details</div>
+              <div style={{fontSize:10,fontWeight:600,marginBottom:6}}>⏸️ Pause Details</div>
               
               {/* Table Header */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,fontWeight:500}}>
                 <div>Assign To</div>
                 <div>PubID</div>
                 <div>PID</div>
@@ -978,7 +977,6 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
     border: !entry.assigned_to 
       ? '1px solid #ef4444' 
       : '1px solid rgba(255,255,255,0.2)',
-    color:'#fff'
   }}
   value={entry.assigned_to || ""} 
   onChange={e => updatePauseEntry(index, 'assigned_to', e.target.value)}
@@ -993,21 +991,21 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
 </select>
                     <input 
                       className="form-control" 
-                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
                       placeholder="PubID" 
                       value={entry.pub_id} 
                       onChange={e => updatePauseEntry(index, 'pub_id', e.target.value)}
                     />
                     <input 
                       className="form-control" 
-                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
                       placeholder="PID" 
                       value={entry.pid} 
                       onChange={e => updatePauseEntry(index, 'pid', e.target.value)}
                     />
                     <select 
                       className="form-control" 
-                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}}
                       value={entry.pause_reason} 
                       onChange={e => updatePauseEntry(index, 'pause_reason', e.target.value)}
                     >
@@ -1128,7 +1126,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
       attachment: 'Attachment'
     };
     return (
-      <div key={field} style={{fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+      <div key={field} style={{fontSize:10,fontWeight:500}}>
         {labels[field]}
       </div>
     );
@@ -1144,7 +1142,6 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
     }}>
       <div style={{
         fontSize:10,
-        color:'rgba(255,255,255,0.9)',
         fontWeight:600,
         marginBottom:6
       }}>
