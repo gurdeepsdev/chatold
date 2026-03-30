@@ -23,7 +23,7 @@ export default function ChatView({group}){
   // taskType tells TasksPanel which form to open (e.g. 'share_link')
   const handleTaskClick=useCallback((taskId,taskType)=>{
     setActiveTab('tasks');
-    setTaskTarget({taskId:Number(taskId),taskType,openForm:true,ts:Date.now()});
+    setTaskTarget({taskId:Number(taskId),taskType,openForm:false,ts:Date.now()});
     // clear after 4s so re-clicking same task still triggers
     setTimeout(()=>setTaskTarget(null),4000);
   },[]);

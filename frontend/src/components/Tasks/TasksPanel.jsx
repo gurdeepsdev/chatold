@@ -606,6 +606,12 @@ export default function TasksPanel({group, taskTarget}){
       if (validEntries.length === 0) {
         return toast.error('Please fill in at least one entry (PubID, PID, or Link)');
       }
+       // 🔥 NEW VALIDATION (IMPORTANT)
+  const invalidAssign = form.entries.some(entry => !entry.assigned_to);
+
+  if (invalidAssign) {
+    return toast.error('Please select "Assign To" for all entries');
+  }
     }
     // Validate pause_pid entries
     if (form.task_type === 'pause_pid') {
@@ -615,6 +621,11 @@ export default function TasksPanel({group, taskTarget}){
       if (validPauseEntries.length === 0) {
         return toast.error('Please fill in at least one entry (PubID, PID, or Pause Reason)');
       }
+       // 🔥 NEW VALIDATION (IMPORTANT)
+const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
+  if (invalidAssign) {
+    return toast.error('Please select "Assign To" for all entries');
+  }
     }
     // Validate optimise entries
     if (form.task_type === 'optimise') {
@@ -623,7 +634,14 @@ export default function TasksPanel({group, taskTarget}){
       );
       if (validOptimiseEntries.length === 0) {
         return toast.error('Please fill in at least one entry (PubID, PID, FP, FA, F1, F2, or Scenario)');
+
       }
+       // 🔥 NEW VALIDATION (IMPORTANT)
+  const invalidAssign = form.optimise_entries.some(entry => !entry.assigned_to);
+
+  if (invalidAssign) {
+    return toast.error('Please select "Assign To" for all entries');
+  }
     }
     setCreating(true);
     try{

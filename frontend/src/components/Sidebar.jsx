@@ -162,17 +162,28 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       }
     });
 
-    const unsubCampaignCreated = on('campaign_created', (data) => {
-      console.log('[Sidebar] Campaign created event received:', data);
-      
-      // Show toast notification about new campaign
-      if (data.message) {
-        toast.success(data.message);
-      }
-      
-      // Refresh groups list to show the new campaign group
-      loadGroups();
-    });
+const unsubCampaignCreated = on('campaign_created', (data) => {
+  console.log('🔥 Campaign received:', data);
+
+  if (data.message) {
+    toast.success(data.message);
+  }
+
+  // 🔥 JOIN NEW GROUP (IMPORTANT)
+  joinGroup(data.campaign.group_id);
+
+  // 🔥 UPDATE UI
+  setGroups(prev => {
+    const exists = prev.find(g => g.id === data.campaign.group_id);
+    if (exists) return prev;
+
+    return [{
+      id: data.campaign.group_id,
+      group_name: data.campaign.group_name,
+      campaign_name: data.campaign.campaign_name
+    }, ...prev];
+  });
+});
 
     const unsubNewMessage = on('new_message', (message) => {
       console.log('[Sidebar] New message received:', message);
@@ -241,7 +252,8 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
           <span className="group-badge" style={{ background: 'var(--accent)' }}>{unreadCounts[group.id]}</span>
         )}
         {/* Pin button - only for groups NOT inside threads */}
-        {!isThreadGroup && (
+        {/* {!isThreadGroup && ( */}
+        {( 
           <button
             className={`btn-icon ${isGroupPinned(group.id) ? 'pinned' : ''}`}
             onClick={(e) => {

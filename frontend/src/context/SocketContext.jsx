@@ -34,34 +34,43 @@ export const SocketProvider = ({ children, token }) => {
     if (!token) return;
 
     // Extract the base URL without /api for Socket.IO connection
-    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5500';
     const socketUrl = apiUrl.replace('/api', '');
 
     console.log('[Socket] Connecting to:', socketUrl);
     console.log('[Socket] API URL:', apiUrl);
 
+    // const socket = io(socketUrl, {
+    //   auth: { token },
+    //   reconnectionAttempts: Infinity,
+    //   reconnectionDelay: 1000,
+    //   reconnectionDelayMax: 5000,
+    //   transports: ['websocket', 'polling'],
+    //   // Add production-specific options
+    //   forceNew: true,
+    //   secure: true,
+    // });
     const socket = io(socketUrl, {
-      auth: { token },
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      transports: ['websocket', 'polling'],
-      // Add production-specific options
-      forceNew: true,
-      secure: true,
-    });
+  auth: { token },
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  transports: ['websocket', 'polling'],
+  forceNew: true
+});
+socket.on('connect', () => {
+  setConnected(true);
+  console.log('🔍 [Socket] connected with ID:', socket.id);
+  console.log('🔍 [Socket] User ID from token:', socket.user?.id);
+  console.log('🔍 [Socket] Socket available for events:', !!socket);
+  reattach(socket);
+  rejoin(socket);
+});
 
-    socket.on('connect', () => {
-      setConnected(true);
-      console.log('[Socket] connected', socket.id);
-      console.log('[Socket] User ID from token:', socket.user?.id);
-      reattach(socket);
-      rejoin(socket);
-    });
-
-    socket.on('connect_error', err => {
-      console.error('[Socket] Connection error:', err);
-    });
+socket.on('connect_error', err => {
+  console.error('🔍 [Socket] Connection error:', err);
+  console.error('🔍 [Socket] Error details:', err.message);
+});
 
     socket.on('task_assigned', (data) => {
       console.log('[Socket] task_assigned event received:', data);
@@ -71,10 +80,9 @@ export const SocketProvider = ({ children, token }) => {
       console.log('[Socket] task_update event received:', data);
     });
 
-    socket.on('campaign_created', (data) => {
-      console.log('[Socket] campaign_created event received:', data);
-    });
-
+socket.on('campaign_created', (data) => {
+  console.log('🔍 [SocketContext] campaign_created event received:', data);
+});
     socket.on('disconnect', reason => {
       setConnected(false);
       console.log('[Socket] disconnected:', reason);

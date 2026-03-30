@@ -26,14 +26,19 @@ module.exports = (io) => {
     // Update online status
     await db.query('UPDATE users SET is_online = TRUE WHERE id = ?', [userId]);
     
-    // Join user's groups
-    const [groups] = await db.query(
-      'SELECT group_id FROM group_members WHERE user_id = ?', [userId]
-    );
-    groups.forEach(g => socket.join(`group_${g.group_id}`));
+// Join user's groups
+const [groups] = await db.query(
+  'SELECT group_id FROM group_members WHERE user_id = ?', [userId]
+);
+console.log(`🔍 User ${socket.user.full_name} groups to join:`, groups.map(g => g.group_id));
+groups.forEach(g => {
+  console.log(`🔍 User ${socket.user.full_name} joining room: group_${g.group_id}`);
+  socket.join(`group_${g.group_id}`);
+});
 
-    // Join personal room
-    socket.join(`user_${userId}`);
+// Join personal room
+console.log(`🔍 User ${socket.user.full_name} joining personal room: user_${userId}`);
+socket.join(`user_${userId}`);
 
     // Broadcast online status
     io.emit('user_status', { user_id: userId, is_online: true });

@@ -218,10 +218,26 @@ if (task_type === 'share_link') {
     subTaskIds
   );
 
+    const assignees = [...new Set(parsedEntries
+  .filter(e => e.assigned_to && e.assigned_to !== 'null')
+  .map(e => e.assigned_to)
+)];
+ let assigneeText = '';
+
+if (assignees.length > 0) {
+  const [users] = await conn.query(
+    `SELECT id, full_name FROM users WHERE id IN (?)`,
+    [assignees]
+  );
+
+  const names = users.map(u => u.full_name);
+
+  assigneeText = names.length > 0 ? ` → ${names.join(', ')}` : '';
+}
   // Post task-notification message in chat
   const taskLabel = '🔗 Share Link';
   const entryCount = parsedEntries.filter(e => e.pub_id || e.pid || e.link).length;
-  const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
+  const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const {encrypted, iv} = encrypt(chatContent);
   const [mRes] = await conn.query(
     `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
@@ -304,10 +320,27 @@ if (task_type === 'pause_pid') {
     subTaskIds
   );
 
+  const assignees = [...new Set(parsedPauseEntries
+  .filter(e => e.assigned_to && e.assigned_to !== 'null')
+  .map(e => e.assigned_to)
+)];
+ let assigneeText = '';
+
+if (assignees.length > 0) {
+  const [users] = await conn.query(
+    `SELECT id, full_name FROM users WHERE id IN (?)`,
+    [assignees]
+  );
+
+  const names = users.map(u => u.full_name);
+
+  assigneeText = names.length > 0 ? ` → ${names.join(', ')}` : '';
+}
+
   // Post task-notification message in chat
   const taskLabel = '⏸️ Pause PID';
   const entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
-  const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
+  const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const {encrypted, iv} = encrypt(chatContent);
   const [mRes] = await conn.query(
     `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
@@ -528,7 +561,23 @@ if (task_type === 'optimise') {
     e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario
   ).length;
 
-  const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
+const assignees = [...new Set(parsedOptimiseEntries
+  .filter(e => e.assigned_to && e.assigned_to !== 'null')
+  .map(e => e.assigned_to)
+)];
+ let assigneeText = '';
+
+if (assignees.length > 0) {
+  const [users] = await conn.query(
+    `SELECT id, full_name FROM users WHERE id IN (?)`,
+    [assignees]
+  );
+
+  const names = users.map(u => u.full_name);
+
+  assigneeText = names.length > 0 ? ` → ${names.join(', ')}` : '';
+}
+const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const { encrypted, iv } = encrypt(chatContent);
 
   const [mRes] = await conn.query(
@@ -566,11 +615,48 @@ if (task_type === 'optimise') {
     const labels={initial_setup:'🚀 Initial Setup',share_link:'🔗 Share Link',
       pause_pid:'⏸️ Pause PID',raise_request:'📋 Raise Request',optimise:'⚡ Optimise'};
     const taskLabel=labels[task_type]||task_type;
+
+    // Handle assignee names for single-entry tasks (raise_request, initial_setup)
+    let assigneeText = '';
     let entryCount = 1;
-    if (task_type === 'share_link') entryCount = parsedEntries.filter(e => e.pub_id || e.pid || e.link).length;
-    if (task_type === 'pause_pid') entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
-    if (task_type === 'optimise') entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario).length;
-    const chatContent=`📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
+    if (task_type === 'raise_request' || task_type === 'initial_setup') {
+      if (assigned_to && assigned_to !== 'null') {
+        const [users] = await conn.query(
+          `SELECT id, full_name FROM users WHERE id = ?`,
+          [assigned_to]
+        );
+        if (users.length > 0) {
+          assigneeText = ` → ${users[0].full_name}`;
+        }
+      }
+    } else {
+      // Handle multi-entry tasks (optimise, share_link, pause_pid)
+      let entries = [];
+      if (task_type === 'share_link') entries = parsedEntries;
+      if (task_type === 'pause_pid') entries = parsedPauseEntries;
+      if (task_type === 'optimise') entries = parsedOptimiseEntries;
+      
+      const assignees = [...new Set(entries
+        .filter(e => e.assigned_to && e.assigned_to !== 'null')
+        .map(e => e.assigned_to)
+      )];
+      
+      if (assignees.length > 0) {
+        const [users] = await conn.query(
+          `SELECT id, full_name FROM users WHERE id IN (?)`,
+          [assignees]
+        );
+        const names = users.map(u => u.full_name);
+        assigneeText = names.length > 0 ? ` → ${names.join(', ')}` : '';
+      }
+      
+      // Set entry count for multi-entry tasks
+      if (task_type === 'share_link') entryCount = parsedEntries.filter(e => e.pub_id || e.pid || e.link).length;
+      if (task_type === 'pause_pid') entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
+      if (task_type === 'optimise') entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario).length;
+    }
+
+    const chatContent=`📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
     const{encrypted,iv}=encrypt(chatContent);
     const[mRes]=await conn.query(
       `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)

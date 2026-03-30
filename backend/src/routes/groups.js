@@ -273,28 +273,73 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         });
 
         // Emit campaign creation notification to all group members
-        io.to(`group_${group.id}`).emit('campaign_created', {
-          type: 'campaign_created',
-          campaign: {
-            id: null, // CRM campaigns don't have local ID yet
-            campaign_name: group.campaign_name,
-            campaign_subid: group.campaign_subid,
-            platform: group.platform,
-            advertiser_name: group.adv_name,
-            created_by: req.user.full_name,
-            created_at: new Date(),
-            group_id: group.id,
-            group_name: group.group_name
-          },
-          message: `New campaign "${group.campaign_name}" created by ${req.user.full_name}`
-        });
+        // Emit campaign creation notification to ALL connected users
+console.log('🔍 About to emit campaign_created event to ALL users');
+console.log('🔍 Socket io instance available:', !!io);
+console.log('🔍 New campaign group created:', group.id);
+ 
+        // io.to(`group_${group.id}`).emit('campaign_created', {
+        // io.emit('campaign_created', {
+        //   type: 'campaign_created',
+        //   campaign: {
+        //     id: null, // CRM campaigns don't have local ID yet
+        //     campaign_name: group.campaign_name,
+        //     campaign_subid: group.campaign_subid,
+        //     platform: group.platform,
+        //     advertiser_name: group.adv_name,
+        //     created_by: req.user.full_name,
+        //     created_at: new Date(),
+        //     group_id: group.id,
+        //     group_name: group.group_name
+        //   },
+        //   message: `New campaign "${group.campaign_name}" created by ${req.user.full_name}`
+        // });
 
-        console.log('Campaign created event emitted (from-campaign-data):', {
-          campaign_name: group.campaign_name,
-          campaign_subid: group.campaign_subid,
-          group_id: group.id,
-          members_notified: members.length
-        });
+        // console.log('Campaign created event emitted (from-campaign-data):', {
+        //   campaign_name: group.campaign_name,
+        //   campaign_subid: group.campaign_subid,
+        //   group_id: group.id,
+        //   members_notified: members.length,
+        //     emitted_to: 'all_connected_users'
+
+        // });
+        // Emit campaign creation notification to ALL connected users
+
+console.log('🔍 Emitting campaign_created to group members only');
+console.log('🔍 Socket io instance available:', !!io);
+console.log('🔍 New campaign group created:', group.id);
+ 
+
+
+// 🔥 Emit campaign_created to ALL group members
+members.forEach(member => {
+  console.log(`🚀 Emitting campaign_created to user_${member.user_id}`);
+
+  io.to(`user_${member.user_id}`).emit('campaign_created', {
+    type: 'campaign_created',
+    campaign: {
+      id: null,
+      campaign_name: group.campaign_name,
+      campaign_subid: group.campaign_subid,
+      platform: group.platform,
+      advertiser_name: group.adv_name,
+      created_by: req.user.full_name,
+      created_at: new Date(),
+      group_id: group.id,
+      group_name: group.group_name,
+      group_type: 'campaign' // 🔥 ADD THIS
+
+    },
+    message: `New campaign "${group.campaign_name}" created by ${req.user.full_name}`
+  });
+});
+
+console.log('✅ Campaign created event emitted to ALL users:', {
+  campaign_name: group.campaign_name,
+  campaign_subid: group.campaign_subid,
+  group_id: group.id,
+  emitted_to: 'all_connected_users'
+});
       }
     }
 
