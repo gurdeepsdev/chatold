@@ -214,11 +214,31 @@ router.post('/:groupId',auth,checkMember,async(req,res)=>{
         [groupId,req.user.id,message_type,encrypted,iv,reply_to_id||null]
       );
       const[[grp]]=await db.query('SELECT group_name FROM chat_groups WHERE id=?',[groupId]).catch(()=>[[{}]]);
+      
+      // Fetch reply data if this is a reply
+      let replyData = null;
+      if(reply_to_id) {
+        const[[replyMsg]] = await db.query(`
+          SELECT m.encrypted_content, m.iv, u.full_name as sender_name
+          FROM messages m
+          JOIN users u ON u.id = m.sender_id
+          WHERE m.id = ? AND m.is_deleted = false
+        `, [reply_to_id]);
+        
+        if(replyMsg) {
+          replyData = {
+            reply_content: decrypt(replyMsg.encrypted_content, replyMsg.iv),
+            reply_sender_name: replyMsg.sender_name
+          };
+        }
+      }
+      
       const message={
         id:r.insertId,group_id:Number(groupId),
         sender_id:req.user.id,sender_name:req.user.full_name,
         username:req.user.username,sender_role:req.user.role,
         message_type,content,reply_to_id:reply_to_id||null,
+        ...replyData, // ← Add reply content and sender name
         is_deleted:false,sent_at:new Date(),
       };
       const io=req.app.get('io');

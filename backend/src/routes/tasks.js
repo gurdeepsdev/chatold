@@ -187,10 +187,11 @@ if (task_type === 'share_link') {
           pid,
           link,
           note,
+          geo,
           attachment_url,
           attachment_name
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           group_id,
           campaign_id || null,
@@ -201,6 +202,7 @@ if (task_type === 'share_link') {
           entry.pid || null,
           entry.link || null,
           entry.note || null,
+          entry.geo || null,
           attachment_url,
           attachment_name
         ]
@@ -261,7 +263,7 @@ if (assignees.length > 0) {
       sender_role: req.user.role,
       message_type: 'task_notification',
       content: chatContent,
-      task_ref: {task_type: 'share_link', task_title: taskLabel},
+      task_ref: {task_id: taskId, task_type: 'share_link', task_title: taskLabel},
       sent_at: new Date(),
     });
   }
@@ -288,11 +290,12 @@ if (task_type === 'pause_pid') {
           pub_id,
           pid,
           link,
+          geo,
           pause_reason,
           attachment_url,
           attachment_name
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           group_id,
           campaign_id || null,
@@ -302,6 +305,8 @@ if (task_type === 'pause_pid') {
           entry.pub_id || null,
           entry.pid || null,
           null,
+                    entry.geo || null,
+
           entry.pause_reason || null,
           attachment_url,
           attachment_name
@@ -364,7 +369,7 @@ if (assignees.length > 0) {
       sender_role: req.user.role,
       message_type: 'task_notification',
       content: chatContent,
-      task_ref: {task_type: 'pause_pid', task_title: taskLabel},
+      task_ref: {task_id: taskId, task_type: 'pause_pid', task_title: taskLabel},
       sent_at: new Date(),
     });
   }
@@ -601,7 +606,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
       sender_role: req.user.role,
       message_type: 'task_notification',
       content: chatContent,
-      task_ref: { task_type: 'optimise', task_title: taskLabel },
+      task_ref: { task_id: taskId, task_type: 'optimise', task_title: taskLabel },
       sent_at: new Date(),
     });
   }

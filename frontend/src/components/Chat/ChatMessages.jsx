@@ -192,7 +192,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
             )}
           </div>
         )}
-        {msg.task_ref&&msg.message_type!=='task_notification'&&(
+        {msg.task_ref&&(
           <div><TaskPill taskRef={msg.task_ref} onTaskClick={onTaskClick}/></div>
         )}
         

@@ -15,8 +15,8 @@ const REQUEST_TYPES = ['geo','payout','link','budget'];
 
 const empty = (type='share_link') => ({
   task_type:type, description:'', assigned_to:'',
-  entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' }],
-  pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'' }],
+  entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'',geo:'' }],
+  pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'', geo:'' }],
   optimise_entries: [{ assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }],
   pause_reason:'', request_type:'geo', request_details:'',
   fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
@@ -246,8 +246,8 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
       borderRadius: '12px',  /* Rounded corners */
       boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)',  /* Dark shadow */
       backdropFilter: 'blur(12px)',  /* Strong glass effect */
-      width: '340px',  /* Slightly wider */
-      maxHeight: '320px',  /* Slightly taller */
+      width: '440px',  /* Slightly wider */
+      maxHeight: '440px',  /* Slightly taller */
       animation: 'slideUp .25s ease-out',
     }}>
 
@@ -304,11 +304,12 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>🔗 Link Details</div>
             
             {/* Table Header */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.5fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.2fr 1.2fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
               <div>Assign To</div>
               <div>PubID</div>
               <div>PID</div>
               <div>Tracking Link</div>
+              <div>GEO</div>
               <div>Note</div>
               <div></div>
             </div>
@@ -316,7 +317,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             {/* Table Entries */}
             <div style={{maxHeight:'200px',overflowY:'auto'}}>
               {form.entries.map((entry, index) => (
-                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.5fr auto',gap:4,marginBottom:6}}>
+                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.2fr 1.2fr auto',gap:4,marginBottom:6}}>
                   <select 
                     className="form-control" 
                     style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
@@ -346,6 +347,13 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                     placeholder="Link" 
                     value={entry.link} 
                     onChange={e => updateEntry(index, 'link', e.target.value)}
+                  />
+                  <input 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                    placeholder="GEO" 
+                    value={entry.geo || ''} 
+                    onChange={e => updateEntry(index, 'geo', e.target.value)}
                   />
                   <input 
                     className="form-control" 
@@ -417,10 +425,11 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>⏸️ Pause Details</div>
             
             {/* Table Header */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
               <div>Assign To</div>
               <div>PubID</div>
               <div>PID</div>
+              <div>GEO</div>
               <div>Pause Scenario</div>
               <div></div>
             </div>
@@ -428,7 +437,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             {/* Table Entries */}
             <div style={{maxHeight:'200px',overflowY:'auto'}}>
               {form.pause_entries.map((entry, index) => (
-                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
+                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
                   <select 
                     className="form-control" 
                     style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
@@ -451,6 +460,13 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                     placeholder="PID" 
                     value={entry.pid} 
                     onChange={e => updatePauseEntry(index, 'pid', e.target.value)}
+                  />
+                     <input 
+                    className="form-control" 
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                    placeholder="GEO" 
+                    value={entry.geo || ''} 
+                    onChange={e => updatePauseEntry(index, 'geo', e.target.value)}
                   />
                   <select 
                     className="form-control" 

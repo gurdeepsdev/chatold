@@ -149,7 +149,7 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                       
                       {/* Show sub-task details based on task type */}
                       {task.task_type === 'share_link' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
                           <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PubID</div>
                             <div style={{ color: 'var(--text-primary)' }}>{subTask.pub_id || '-'}</div>
@@ -157,6 +157,10 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                           <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PID</div>
                             <div style={{ color: 'var(--text-primary)' }}>{subTask.pid || '-'}</div>
+                          </div>
+                          <div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>GEO</div>
+                            <div style={{ color: 'var(--text-primary)' }}>{subTask.geo || '-'}</div>
                           </div>
                           <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Link</div>
@@ -217,7 +221,7 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                       )}
 
                       {task.task_type === 'pause_pid' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
                           <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PubID</div>
                             <div style={{ color: 'var(--text-primary)' }}>{subTask.pub_id || '-'}</div>
@@ -225,6 +229,10 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                           <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PID</div>
                             <div style={{ color: 'var(--text-primary)' }}>{subTask.pid || '-'}</div>
+                          </div>
+                           <div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>GEO</div>
+                            <div style={{ color: 'var(--text-primary)' }}>{subTask.geo || '-'}</div>
                           </div>
                           <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Reason</div>
@@ -294,7 +302,7 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                 }}>
                   {/* Display task-specific fields */}
                   {task.task_type === 'share_link' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
                       <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PubID</div>
                         <div style={{ color: 'var(--text-primary)' }}>{task.pub_id || '-'}</div>
@@ -303,6 +311,10 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PID</div>
                         <div style={{ color: 'var(--text-primary)' }}>{task.pid || '-'}</div>
                       </div>
+                       <div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>GEO</div>
+                            <div style={{ color: 'var(--text-primary)' }}>{task.geo || '-'}</div>
+                          </div>
                       <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Link</div>
                         <div style={{ 
@@ -317,6 +329,7 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                           ) : '-'}
                         </div>
                       </div>
+                         
                       {task.note && (
                         <div style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
                           <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Note</div>
@@ -374,7 +387,7 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                   )}
 
                   {task.task_type === 'pause_pid' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
                       <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PubID</div>
                         <div style={{ color: 'var(--text-primary)' }}>{task.pub_id || '-'}</div>
@@ -383,6 +396,10 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PID</div>
                         <div style={{ color: 'var(--text-primary)' }}>{task.pid || '-'}</div>
                       </div>
+                       <div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>GEO</div>
+                            <div style={{ color: 'var(--text-primary)' }}>{task.geo || '-'}</div>
+                          </div>
                       <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Reason</div>
                         <div style={{ color: 'var(--text-primary)' }}>{task.pause_reason || '-'}</div>
