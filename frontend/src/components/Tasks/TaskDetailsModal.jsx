@@ -1,8 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { TASK_TYPES } from './TasksPanel';
 
-export default function TaskDetailsModal({ task, onClose, loading }) {
+export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate }) {
+  const [loading, setLoading] = useState(false);
+  const [taskDetails, setTaskDetails] = useState(null);
+  const [response, setResponse] = useState('');
+  const [responding, setResponding] = useState(false);
+
+  // File download utility function
+  const getFileDownloadUrl = (attachmentUrl) => {
+    if (!attachmentUrl) return '#';
+    const fileName = attachmentUrl.split('/').pop();
+    // Use the dedicated download API endpoint
+    const encodedFileName = encodeURIComponent(fileName);
+    return `/api/tasks/download/${encodedFileName}`;
+  };
+
   if (!task) return null;
   console.log('TaskDetailsModal - Full task data:', task);
   console.log('TaskDetailsModal - subTasks:', task.subTasks);
@@ -263,7 +277,7 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                         <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
                           <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginBottom: '4px' }}>Attachment</div>
                           <a 
-                            href={`/uploads/${subTask.attachment_url.split('/').pop()}`}
+                            href={getFileDownloadUrl(subTask.attachment_url)}
                             download={subTask.attachment_name || 'attachment'}
                             target="_blank"
                             rel="noreferrer"
@@ -429,7 +443,7 @@ export default function TaskDetailsModal({ task, onClose, loading }) {
                     <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
                       <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginBottom: '4px' }}>Attachment</div>
                       <a 
-                        href={`/uploads/${task.attachment_url.split('/').pop()}`}
+                        href={getFileDownloadUrl(task.attachment_url)}
                         download={task.attachment_name || 'attachment'}
                         target="_blank"
                         rel="noreferrer"

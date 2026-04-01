@@ -2,6 +2,7 @@ const express = require('express');
 const router  = require('express').Router();
 const multer  = require('multer');
 const path    = require('path');
+const fs      = require('fs');
 const db      = require('../utils/db');
 const { auth }             = require('../middleware/auth');
 const { encrypt, decrypt } = require('../utils/encryption');
@@ -884,7 +885,76 @@ router.get('/followups/group/:groupId',auth,async(req,res)=>{
   const[r]=await db.query(
     'SELECT f.*,u.full_name AS created_by_name FROM followups f JOIN users u ON u.id=f.created_by WHERE f.group_id=? ORDER BY f.created_at DESC',
     [req.params.groupId]);
-  res.json({followups:r});
+  res.json({ followups: r });
 });
 
-module.exports=router;
+// File download endpoint
+router.get('/download/:filename', auth, async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const UPLOAD_DIR = req.app.get('UPLOAD_DIR');
+    const filePath = path.join(UPLOAD_DIR, filename);
+
+    // Security check - ensure file is within uploads directory
+    const normalizedPath = path.normalize(filePath);
+    if (!normalizedPath.startsWith(UPLOAD_DIR)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Get file info
+    const stats = fs.statSync(filePath);
+
+    // Set appropriate headers
+    res.setHeader('Content-Type', getMimeType(filename));
+    res.setHeader('Content-Length', stats.size);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+
+    // Force download for non-image/audio files
+    const ext = path.extname(filename).toLowerCase();
+    const inline = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp3', '.wav', '.ogg', '.webm', '.m4a'];
+    if (!inline.includes(ext)) {
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    } else {
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    }
+
+    // Send file
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Download failed' });
+  }
+});
+
+// Helper function to get MIME type
+function getMimeType(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  const mimeTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.csv': 'text/csv',
+    '.txt': 'text/plain',
+    '.zip': 'application/zip',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+module.exports = router;
