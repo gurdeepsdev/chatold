@@ -326,9 +326,9 @@ const MessageSender = ({
               <button type="button" className="action-btn attachment-btn" title="Attach file" onClick={() => fileInputRef.current?.click()}>
                 📎
               </button>
-              <button type="button" className={`action-btn voice-btn ${isRecording ? 'recording' : ''}`} title="Voice message" onClick={handleVoiceRecord}>
+              {/* <button type="button" className={`action-btn voice-btn ${isRecording ? 'recording' : ''}`} title="Voice message" onClick={handleVoiceRecord}>
                 🎤
-              </button>
+              </button> */}
               <button type="button" className="action-btn task-btn" title="Create task" onClick={handleTaskClick}>
                 ✅
               </button>

@@ -245,10 +245,10 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
               <span className="option-icon">📋</span>
               <span className="option-text">Copy</span>
             </button>
-            <button className="option-btn" onClick={(e) => { e.stopPropagation(); setShowForwardModal(true); }}>
+            {/* <button className="option-btn" onClick={(e) => { e.stopPropagation(); setShowForwardModal(true); }}>
               <span className="option-icon">↗️</span>
               <span className="option-text">Forward</span>
-            </button>
+            </button> */}
             {isOwn && (
               <button className="option-btn delete-btn" onClick={(e) => { e.stopPropagation(); handleDelete(); }}>
                 <span className="option-icon">🗑️</span>
