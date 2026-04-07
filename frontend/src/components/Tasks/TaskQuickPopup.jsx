@@ -19,20 +19,20 @@ const empty = (type='share_link') => ({
   pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'', geo:'' }],
   optimise_entries: [{ assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }],
   pause_reason:'', request_type:'geo', request_details:'',
-  fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
+  f1:'', f2:'', f3:'', f4:'', optimise_scenario:'', attachment:null,
 });
 
 // Role-based field definitions for optimise task
 const OPTIMISE_FIELDS = {
-  admin: ['assigned_to', 'pub_id', 'pid', 'fp', 'f1', 'f2', 'optimise_scenario', 'attachment'],
-  advertiser: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment'],
-  advertiser_manager: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment'],
-  publisher: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment'],
-  publisher_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment'],
-  am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment']
+  admin: ['assigned_to', 'pub_id', 'pid', 'f1', 'f2', 'f3', 'f4', 'optimise_scenario', 'attachment'],
+  advertiser: ['assigned_to', 'pub_id', 'pid', 'f1', 'f2', 'f3', 'f4', 'optimise_scenario', 'attachment'],
+  advertiser_manager: ['assigned_to', 'pub_id', 'pid', 'f1', 'f2', 'f3', 'f4', 'optimise_scenario', 'attachment'],
+  publisher: ['assigned_to', 'pub_id', 'pid', 'f1', 'f2', 'optimise_scenario', 'attachment'],
+  publisher_manager: ['assigned_to', 'pub_id', 'pid', 'f1', 'f2', 'optimise_scenario', 'attachment'],
+  am: ['assigned_to', 'pub_id', 'pid', 'f1', 'f2', 'f3', 'f4', 'optimise_scenario', 'attachment']
 };
 
-const FA_OPTIONS = ['FA1', 'FA2', 'FA3', 'FA4'];
+const F_OPTIONS = ['F1', 'F2', 'F3', 'F4'];
 
 /*
  * TaskQuickPopup
@@ -41,6 +41,7 @@ const FA_OPTIONS = ['FA1', 'FA2', 'FA3', 'FA4'];
  * No full-screen overlay — just a contained card.
  */
 export default function TaskQuickPopup({ group, onClose, initialType }) {
+  console.log('TaskQuickPopup rendered with group:', group);
   const { user } = useAuth();
   const [users,    setUsers]    = useState([]);
   const [form,     setForm]     = useState(empty(initialType || 'share_link'));
@@ -231,23 +232,23 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
 
   return (
     /*
-     * Positioned absolutely at bottom of the chat column (above the input bar).
+     * Positioned absolutely at bottom of chat column (above the input bar).
      * z-index 100 so it floats above messages but does not cover the whole screen.
      * Chat messages behind it are still visible via scroll.
      */
     <div style={{
-      position: 'absolute',
-      top: '-500%',              /* center vertically in chat area */
-      left: '50%',              /* center horizontally */
-      transform: 'translate(-50%, -50%)',  /* perfect center */
-      zIndex: 100,
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      zIndex: 1000,
       background: 'rgba(0, 0, 0, 0.15)',  /* Fully transparent with dark tint */
       border: '1px solid rgba(255, 255, 255, 0.2)',  /* Subtle white border */
       borderRadius: '12px',  /* Rounded corners */
       boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)',  /* Dark shadow */
       backdropFilter: 'blur(12px)',  /* Strong glass effect */
       width: '440px',  /* Slightly wider */
-      maxHeight: '440px',  /* Slightly taller */
+      maxHeight: '80vh',  /* Responsive height */
       animation: 'slideUp .25s ease-out',
     }}>
 
@@ -625,13 +626,15 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                     );
                   case 'fp':
                     return (
-                      <input 
+                      <select 
                         className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
-                        placeholder="FP" 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
                         value={entry.fp} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'fp', e.target.value)}
-                      />
+                      >
+                        <option value="">Select FP</option>
+                        {FA_OPTIONS.map(fp => <option key={fp} value={fp}>{fp}</option>)}
+                      </select>
                     );
                   case 'fa':
                     return (
@@ -647,23 +650,27 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                     );
                   case 'f1':
                     return (
-                      <input 
+                      <select 
                         className="form-control" 
                         style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
-                        placeholder="F1" 
                         value={entry.f1} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'f1', e.target.value)}
-                      />
+                      >
+                        <option value="">Select F1</option>
+                        {F_OPTIONS.map(f1 => <option key={f1} value={f1}>{f1}</option>)}
+                      </select>
                     );
                   case 'f2':
                     return (
-                      <input 
+                      <select 
                         className="form-control" 
                         style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
-                        placeholder="F2" 
                         value={entry.f2} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'f2', e.target.value)}
-                      />
+                      >
+                        <option value="">Select F2</option>
+                        {F_OPTIONS.map(f2 => <option key={f2} value={f2}>{f2}</option>)}
+                      </select>
                     );
                   case 'optimise_scenario':
                     return (
@@ -702,14 +709,23 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                           📎 Choose
                         </button>
                         {entry.attachment && (
-                          <span style={{fontSize:9,color:'rgba(255,255,255,0.7)'}}>
-                            {entry.attachment.name}
+                          <span style={{fontSize:9,color:'rgba(255,255,255,0.7)',display:'flex',alignItems:'center',gap:4}}>
+                            <a 
+                              href={`${process.env.REACT_APP_API_URL || 'http://localhost:5500'}${entry.attachment.url || entry.attachment}`}
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              download={entry.attachment.name || entry.attachment.split('/').pop()}
+                              style={{color:'#4f7dff',textDecoration:'none',cursor:'pointer',marginRight:4}}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {entry.attachment.name || entry.attachment.split('/').pop()}
+                            </a>
                             <button
                               type="button"
                               onClick={() => updateOptimiseEntry(entryIndex, 'attachment', null)}
-                              style={{background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.5)',marginLeft:2}}
+                              style={{background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.5)'}}
                             >
-                              ✕
+                              ×
                             </button>
                           </span>
                         )}

@@ -11,45 +11,165 @@ function absoluteUrl(req, relativePath) {
 }
 
 // Get available advertisers and campaign_subids for campaign creation
+// router.get('/campaign-data', auth, async (req, res) => {
+//   try {
+//     const crmPool = db.crmPool;
+    
+//     if (!crmPool) {
+//       return res.status(500).json({ error: 'CRM database not configured' });
+//     }
+
+//     // Get unique advertisers from CRM campaign_data table by joining with login table
+//     const [advertisers] = await crmPool.query(`
+//       SELECT DISTINCT l.username
+//       FROM campaign_data c
+//       INNER JOIN login l ON l.id = c.user_id
+//       WHERE c.user_id IS NOT NULL AND l.username IS NOT NULL AND l.username != ''
+//       ORDER BY l.username
+//     `);
+
+//     // Get all campaign_subids from CRM campaign_data table
+//     const [subIds] = await crmPool.query(`
+//       SELECT DISTINCT sub_campaign_id, campaign_name, user_id
+//       FROM campaign_data 
+//       WHERE sub_campaign_id IS NOT NULL AND sub_campaign_id != ''
+//       ORDER BY sub_campaign_id
+//     `);
+
+//     res.json({
+//       advertisers: advertisers.map(adv => ({
+//         id: adv.username, // Use username as ID
+//         name: adv.full_name || adv.username, // Show full name if available, otherwise username
+//         username: adv.username
+//       })),
+//       sub_ids: subIds.map(row => ({
+//         sub_id: row.sub_campaign_id,
+//         campaign_name: row.campaign_name,
+//         user_id: row.user_id
+//       }))
+//     });
+//   } catch (err) {
+//     console.error('Error fetching campaign data from CRM:', err);
+//     res.status(500).json({ error: 'Failed to fetch campaign data' });
+//   }
+// });
 router.get('/campaign-data', auth, async (req, res) => {
   try {
     const crmPool = db.crmPool;
-    
     if (!crmPool) {
       return res.status(500).json({ error: 'CRM database not configured' });
     }
 
-    // Get unique advertisers from CRM campaign_data table by joining with login table
-    const [advertisers] = await crmPool.query(`
-      SELECT DISTINCT l.username
-      FROM campaign_data c
-      INNER JOIN login l ON l.id = c.user_id
-      WHERE c.user_id IS NOT NULL AND l.username IS NOT NULL AND l.username != ''
-      ORDER BY l.username
-    `);
+    const userId = req.user.id;
 
-    // Get all campaign_subids from CRM campaign_data table
-    const [subIds] = await crmPool.query(`
-      SELECT DISTINCT sub_campaign_id, campaign_name, user_id
-      FROM campaign_data 
-      WHERE sub_campaign_id IS NOT NULL AND sub_campaign_id != ''
-      ORDER BY sub_campaign_id
-    `);
+    // 🔹 STEP 1: Get role from login table
+    const [[loginUser]] = await crmPool.query(
+      `SELECT role FROM login WHERE id = ?`,
+      [userId]
+    );
 
-    res.json({
-      advertisers: advertisers.map(adv => ({
-        id: adv.username, // Use username as ID
-        name: adv.full_name || adv.username, // Show full name if available, otherwise username
-        username: adv.username
-      })),
-      sub_ids: subIds.map(row => ({
-        sub_id: row.sub_campaign_id,
-        campaign_name: row.campaign_name,
-        user_id: row.user_id
-      }))
+    if (!loginUser) {
+      return res.status(404).json({ error: 'User role not found' });
+    }
+
+    const role = loginUser.role;
+
+    let campaignsQuery = '';
+    let params = [];
+
+    // 👑 ADMIN → all campaigns
+    if (role === 'admin') {
+      campaignsQuery = `
+        SELECT c.*, l.username
+        FROM campaign_data c
+        LEFT JOIN login l ON l.id = c.user_id
+      `;
+    }
+    // 🧑‍💼 ADVERTISER MANAGER
+    else if (role === 'advertiser_manager') {
+      campaignsQuery = `
+   SELECT DISTINCT c.*, l.username
+FROM campaign_data c
+LEFT JOIN login l ON l.id = c.user_id
+WHERE 
+  -- ✅ Own campaigns
+  c.user_id = ?
+
+  -- ✅ Sub advertisers
+  OR c.user_id IN (
+    SELECT sub_admin_id 
+    FROM manager_subadmins 
+    WHERE manager_id = ?
+  )
+
+  -- ✅ Assigned campaigns (FIXED 🔥)
+  OR c.adv_d IN (
+    SELECT adv_id 
+    FROM advids 
+    WHERE assign_id = ?
+  )
+      `;
+      params = [userId, userId, userId];
+    }
+
+    // 🧑 ADVERTISER
+    else if (role === 'advertiser') {
+      campaignsQuery = `
+SELECT DISTINCT c.*, l.username
+FROM campaign_data c
+LEFT JOIN login l ON l.id = c.user_id
+WHERE 
+  -- ✅ Own campaigns
+  c.user_id = ?
+
+  -- ✅ Assigned campaigns (FIXED 🔥)
+  OR c.adv_d IN (
+    SELECT adv_id 
+    FROM advids 
+    WHERE assign_id = ?
+  )
+      `;
+      params = [userId, userId];
+    }
+
+    else {
+      return res.status(403).json({ error: 'Unauthorized role' });
+    }
+
+    // 🔹 STEP 2: Fetch campaigns
+    const [campaigns] = await crmPool.query(campaignsQuery, params);
+console.log(campaigns,"data")
+    // 🔹 STEP 3: Extract advertisers (deduplicated)
+    const advertisersMap = new Map();
+    campaigns.forEach(c => {
+      if (c.username) {
+        advertisersMap.set(c.username, {
+          id: c.username,
+          name: c.username
+        });
+      }
     });
+
+    // 🔹 STEP 4: Extract sub_ids (deduplicated)
+    const subIdMap = new Map();
+    campaigns.forEach(c => {
+      if (c.sub_campaign_id) {
+        subIdMap.set(c.sub_campaign_id, {
+          sub_id: c.sub_campaign_id,
+          campaign_name: c.campaign_name,
+          user_id: c.user_id
+        });
+      }
+    });
+
+    // 🔹 FINAL RESPONSE
+    res.json({
+      advertisers: Array.from(advertisersMap.values()),
+      sub_ids: Array.from(subIdMap.values())
+    });
+
   } catch (err) {
-    console.error('Error fetching campaign data from CRM:', err);
+    console.error('Error fetching campaign data:', err);
     res.status(500).json({ error: 'Failed to fetch campaign data' });
   }
 });

@@ -63,6 +63,9 @@ export const messagesAPI = {
   addReaction: (groupId, messageId, emoji) => api.post(`/messages/${groupId}/${messageId}/reaction`, { emoji }),
   removeReaction: (groupId, messageId, emoji) => api.delete(`/messages/${groupId}/${messageId}/reaction`, { data: { emoji } }),
   getUnreadCounts: () => api.get('/messages/unread-counts'),
+  // 🆕 New endpoints for user assignment
+  getRecipients: (groupId) => api.get(`/messages/${groupId}/recipients`),
+  getAssignmentInfo: (groupId, recipientId) => api.get(`/messages/${groupId}/assignment/${recipientId}`),
 };
 
 export const tasksAPI = {

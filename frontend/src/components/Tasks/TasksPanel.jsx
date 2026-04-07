@@ -30,7 +30,7 @@ export const FA_OPTIONS = ['FA1', 'FA2', 'FA3', 'FA4'];
 
 // Role-based field definitions for optimise task
 const OPTIMISE_FIELDS = {
-  admin: ['assigned_to', 'pub_id', 'pid', 'fp', 'f1', 'f2', 'optimise_scenario', 'attachment'],
+  admin: ['assigned_to', 'pub_id', 'pid', 'fp', 'fa', 'optimise_scenario', 'attachment'],
   advertiser: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment'],
   advertiser_manager: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment'],
   publisher: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment'],

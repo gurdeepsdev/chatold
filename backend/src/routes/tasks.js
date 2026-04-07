@@ -6,6 +6,7 @@ const fs      = require('fs');
 const db      = require('../utils/db');
 const { auth }             = require('../middleware/auth');
 const { encrypt, decrypt } = require('../utils/encryption');
+const { getTaskAccessFilter } = require('../utils/taskAccess');
 
 // Multer for task attachments — same UPLOAD_DIR as messages
 const storage = multer.diskStorage({
@@ -17,34 +18,55 @@ const upload=multer({storage,limits:{fileSize:52428800}});
 /* GET tasks for group */
 router.get('/group/:groupId',auth,async(req,res)=>{
   try{
-    const[tasks]=await db.query(`
-      SELECT t.*,
-        u1.full_name AS assigned_to_name,
-        u2.full_name AS assigned_by_name,
-        c.campaign_name,
-        parent.task_type AS parent_task_type
-      FROM tasks t
-      LEFT JOIN users u1 ON u1.id=t.assigned_to
-      LEFT JOIN users u2 ON u2.id=t.assigned_by
-      LEFT JOIN campaigns c ON c.id=t.campaign_id
-      LEFT JOIN tasks parent ON parent.id=t.parent_task_id
-      WHERE t.group_id=? AND (t.assigned_to=? OR t.assigned_by=?)
-      ORDER BY CASE t.status WHEN 'pending' THEN 1 WHEN 'accepted' THEN 2 ELSE 3 END,t.created_at DESC
-    `,[req.params.groupId, req.user.id, req.user.id]);
+        const userId = req.user.id;
+
+    const crmDb = db.crmPool;   // 👈 crmclickorbits
+    const chatDb = db;          // 👈 crm_chat
+
+    // 🔹 GET FILTER FROM CRM DB
+    const { where, params } = await getTaskAccessFilter(crmDb, userId);
+  const [tasks] = await db.query(`
+  SELECT t.*,
+    u1.full_name AS assigned_to_name,
+    u2.full_name AS assigned_by_name,
+    c.campaign_name,
+    parent.task_type AS parent_task_type
+  FROM tasks t
+  LEFT JOIN users u1 ON u1.id=t.assigned_to
+  LEFT JOIN users u2 ON u2.id=t.assigned_by
+  LEFT JOIN campaigns c ON c.id=t.campaign_id
+  LEFT JOIN tasks parent ON parent.id=t.parent_task_id
+  WHERE t.group_id=? 
+  AND (   ${where}   
+
+  
+  )
+  ORDER BY 
+    CASE t.status 
+      WHEN 'pending' THEN 1 
+      WHEN 'accepted' THEN 2 
+      ELSE 3 
+    END,
+    t.created_at DESC
+`, [req.params.groupId, userId, userId, ...params]);
     
     // Get sub-tasks for each main task
     const tasksWithSubs = await Promise.all(tasks.map(async (task) => {
       if (task.parent_task_id === null) {
-        const[subTasks]=await db.query(`
-          SELECT t.*,
-            u1.full_name AS assigned_to_name,
-            u2.full_name AS assigned_by_name
-          FROM tasks t
-          LEFT JOIN users u1 ON u1.id=t.assigned_to
-          LEFT JOIN users u2 ON u2.id=t.assigned_by
-          WHERE t.parent_task_id=? AND (t.assigned_to=? OR t.assigned_by=?)
-          ORDER BY t.created_at DESC
-        `,[task.id, req.user.id, req.user.id]);
+       const [subTasks] = await db.query(`
+  SELECT t.*,
+    u1.full_name AS assigned_to_name,
+    u2.full_name AS assigned_by_name
+  FROM tasks t
+  LEFT JOIN users u1 ON u1.id=t.assigned_to
+  LEFT JOIN users u2 ON u2.id=t.assigned_by
+  WHERE t.parent_task_id=? 
+   
+    AND (${where})
+
+  
+  ORDER BY t.created_at DESC
+`, [task.id, userId, userId, ...params]);
         return{...task,subTasks};
       }
       return task;
@@ -54,7 +76,11 @@ router.get('/group/:groupId',auth,async(req,res)=>{
     const mainTasks = tasksWithSubs.filter(task => task.parent_task_id === null);
     
     res.json({tasks: mainTasks});
-  }catch(e){res.status(500).json({error:'Server error'});}
+  }catch (e) {
+  console.error("🔥 TASK API ERROR:", e);
+  console.error("🔥 STACK:", e.stack);
+  res.status(500).json({ error: e.message || 'Server error' });
+}
 });
 
 /* POST create task */

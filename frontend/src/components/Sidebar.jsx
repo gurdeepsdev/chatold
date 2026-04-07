@@ -214,18 +214,39 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
     : null;
 
   // Sort groups: pinned groups first, then by last message time
-  const sortedGroups = filteredGroups || groups;
-  const groupsToRender = sortedGroups ? 
-    [...sortedGroups].sort((a, b) => {
-      // Pinned groups come first
-      const aPinned = isGroupPinned(a.id);
-      const bPinned = isGroupPinned(b.id);
-      if (aPinned && !bPinned) return -1;
-      if (!aPinned && bPinned) return 1;
-      // If both pinned or both not pinned, sort by last message time
-      return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
-    }) : sortedGroups;
+  // const sortedGroups = filteredGroups || groups;
+  // const groupsToRender = sortedGroups ? 
+  
+  //   [...sortedGroups].sort((a, b) => {
+  //     // Pinned groups come first
+  //     const aPinned = isGroupPinned(a.id);
+  //     const bPinned = isGroupPinned(b.id);
+  //     if (aPinned && !bPinned) return -1;
+  //     if (!aPinned && bPinned) return 1;
+  //     // If both pinned or both not pinned, sort by last message time
+  //     return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+  //   }) : sortedGroups;
+const sortedGroups = filteredGroups || groups;
 
+const groupsToRender = sortedGroups ? 
+  [...sortedGroups].sort((a, b) => {
+    const aPinned = isGroupPinned(a.id);
+    const bPinned = isGroupPinned(b.id);
+
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+
+    return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+  }) 
+  : sortedGroups;
+
+
+// ✅ YAHI ADD KARNA HAI (IMPORTANT)
+const validThreads = threads.filter(thread => (thread.groups || []).length > 1);
+
+const threadGroupIds = new Set(
+  validThreads.flatMap(t => t.groups.map(g => g.id))
+);
   const renderGroup = (group, isThreadGroup = false) => (
     <div
       key={group.id}
@@ -252,29 +273,30 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
           <span className="group-badge" style={{ background: 'var(--accent)' }}>{unreadCounts[group.id]}</span>
         )}
         {/* Pin button - only for groups NOT inside threads */}
-        {/* {!isThreadGroup && ( */}
-        {( 
-          <button
-            className={`btn-icon ${isGroupPinned(group.id) ? 'pinned' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePinGroup(group.id);
-            }}
-            style={{
-              fontSize: 10,
-              padding: 2,
-              opacity: isGroupPinned(group.id) ? 1 : 0.5,
-              color: isGroupPinned(group.id) ? 'var(--warning)' : 'var(--text-muted)'
-            }}
-            title={isGroupPinned(group.id) ? 'Unpin group' : 'Pin group'}
-          >
-            📌
-          </button>
-        )}
+   {(
+  <button
+    className={`btn-icon ${isGroupPinned(group.id) ? 'pinned' : ''}`}
+    onClick={(e) => {
+      e.stopPropagation();
+      togglePinGroup(group.id);
+    }}
+    style={{
+      fontSize: 10,
+      padding: 2,
+      opacity: isGroupPinned(group.id) ? 1 : 0.5,
+      color: isGroupPinned(group.id) ? 'var(--warning)' : 'var(--text-muted)'
+    }}
+    title={isGroupPinned(group.id) ? 'Unpin group' : 'Pin group'}
+  >
+    📌
+  </button>
+)}
       </div>
     </div>
   );
 
+console.log("THREAD IDS:", [...threadGroupIds]);
+console.log("ALL GROUPS:", groupsToRender.map(g => g.id));
   return (
     <div className="sidebar">
       {/* Header */}
@@ -357,7 +379,10 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
             ) : (
               // Show threads and remaining individual groups when not searching
               <>
-                {threads.map(thread => (
+                {/* {threads.map(thread => ( */}
+                {threads
+  .filter(thread => (thread.groups || []).length > 1)
+  .map(thread => (
                   <div key={thread.package_id} className="thread-section">
                     {thread.package_id && !thread.package_id.startsWith('custom_') && (
                       <div className="thread-header" onClick={() => toggleThread(thread.package_id)}>
@@ -400,7 +425,13 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
                 ))}
                 
                 {/* Show ALL individual groups with pin buttons (excluding pinned ones to avoid duplication) */}
-                {groupsToRender.filter(g => !pinnedGroups.includes(g.id)).map(renderGroup)}
+                {/* {groupsToRender.filter(g => !pinnedGroups.includes(g.id)).map(renderGroup)} */}
+{groupsToRender
+  .filter(g => 
+    !pinnedGroups.includes(g.id) &&
+    !threadGroupIds.has(g.id)
+  )
+  .map(renderGroup)}
               </>
             )}
           </>

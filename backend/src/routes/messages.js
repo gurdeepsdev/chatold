@@ -6,6 +6,12 @@ const fs      = require('fs');
 const db      = require('../utils/db');
 const { auth }            = require('../middleware/auth');
 const { encrypt, decrypt} = require('../utils/encryption');
+const { 
+  getMessageAccessFilter, 
+  getUserAssignmentInfo, 
+  getAvailableRecipients,
+  canUserMessageRecipient 
+} = require('../utils/messageAccess');
 
 // ── Multer: use UPLOAD_DIR set by server.js (absolute path) ──
 function getUploadDir(req){ return req.app.get('UPLOAD_DIR') || path.resolve('uploads'); }
@@ -168,85 +174,162 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
 router.post('/:groupId',auth,checkMember,async(req,res)=>{
   try{
     const{groupId}=req.params;
-    const{content,reply_to_id,message_type='text',file_url,file_name,file_size,mime_type}=req.body;
+    const{
+      content,
+      reply_to_id,
+      message_type='text',
+      file_url,
+      file_name,
+      file_size,
+      mime_type,
+      recipient_id, // 🔒 REQUIRED: Primary recipient
+      secondary_recipient_id // 🔧 OPTIONAL: Secondary recipient (manager)
+    }=req.body;
     
-    // Handle forwarded files
-    if(file_url && file_name){
-      // Forwarding a file message
-      console.log('Forwarding file:', { file_url, file_name, message_type });
-      
-      // Convert absolute URL to relative path if needed for storage
-      let storedFileUrl = file_url;
-      if(file_url.startsWith('http')) {
-        // Extract relative path from absolute URL
-        const url = new URL(file_url);
-        storedFileUrl = url.pathname; // e.g., "/uploads/image.jpg"
-      }
-      
-      const{encrypted,iv}=encrypt(content||file_name);
-      const[r]=await db.query(
-        'INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,file_url,file_name,file_size,mime_type,reply_to_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
-        [groupId,req.user.id,message_type,encrypted,iv,storedFileUrl,file_name,file_size,mime_type,reply_to_id||null]
-      );
-      const[[grp]]=await db.query('SELECT group_name FROM chat_groups WHERE id=?',[groupId]).catch(()=>[[{}]]);
-      const message={
-        id:r.insertId,group_id:Number(groupId),
-        sender_id:req.user.id,sender_name:req.user.full_name,
-        username:req.user.username,sender_role:req.user.role,
-        message_type,
-        content:content||file_name,
-        file_url:absUrl(req,storedFileUrl),
-        file_name,file_size,mime_type,
-        reply_to_id:reply_to_id||null,
-        is_deleted:false,sent_at:new Date(),
-      };
-      console.log('Forwarded message:', { message });
-      const io=req.app.get('io');
-      if(io)io.to(`group_${groupId}`).emit('new_message',message);
-      await pushToMembers(io,groupId,req.user.id,message,grp?.group_name||'');
-      res.status(201).json({message});
-    } else {
-      // Regular text message
-      if(!content?.trim())return res.status(400).json({error:'Content required'});
-      const{encrypted,iv}=encrypt(content);
-      const[r]=await db.query(
-        'INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,reply_to_id) VALUES(?,?,?,?,?,?)',
-        [groupId,req.user.id,message_type,encrypted,iv,reply_to_id||null]
-      );
-      const[[grp]]=await db.query('SELECT group_name FROM chat_groups WHERE id=?',[groupId]).catch(()=>[[{}]]);
-      
-      // Fetch reply data if this is a reply
-      let replyData = null;
-      if(reply_to_id) {
-        const[[replyMsg]] = await db.query(`
-          SELECT m.encrypted_content, m.iv, u.full_name as sender_name
-          FROM messages m
-          JOIN users u ON u.id = m.sender_id
-          WHERE m.id = ? AND m.is_deleted = false
-        `, [reply_to_id]);
-        
-        if(replyMsg) {
-          replyData = {
-            reply_content: decrypt(replyMsg.encrypted_content, replyMsg.iv),
-            reply_sender_name: replyMsg.sender_name
-          };
-        }
-      }
-      
-      const message={
-        id:r.insertId,group_id:Number(groupId),
-        sender_id:req.user.id,sender_name:req.user.full_name,
-        username:req.user.username,sender_role:req.user.role,
-        message_type,content,reply_to_id:reply_to_id||null,
-        ...replyData, // ← Add reply content and sender name
-        is_deleted:false,sent_at:new Date(),
-      };
-      const io=req.app.get('io');
-      if(io)io.to(`group_${groupId}`).emit('new_message',message);
-      await pushToMembers(io,groupId,req.user.id,message,grp?.group_name||'');
-      res.status(201).json({message});
+    // 🔒 CORE RULE: User must select a recipient
+    if (!recipient_id) {
+      return res.status(400).json({ 
+        error: 'Recipient is required. Please select a user to send this message to.' 
+      });
     }
+    
+    // 🔍 Get CRM database connection
+    const crmDb = db.crmPool;
+    if (!crmDb) {
+      return res.status(500).json({ error: 'CRM database not available' });
+    }
+    
+    // 🔍 Validate recipient exists and is in same group
+    const [recipientCheck] = await db.query(`
+      SELECT gm.user_id, u.full_name 
+      FROM group_members gm 
+      JOIN users u ON u.id = gm.user_id
+      WHERE gm.group_id = ? AND gm.user_id = ?
+    `, [groupId, recipient_id]);
+    
+    if (recipientCheck.length === 0) {
+      return res.status(400).json({ 
+        error: 'Selected recipient is not a member of this group.' 
+      });
+    }
+    
+    // 🔍 Validate secondary recipient if provided
+    let secondaryRecipientInfo = null;
+    if (secondary_recipient_id) {
+      const [secondaryCheck] = await db.query(`
+        SELECT gm.user_id, u.full_name 
+        FROM group_members gm 
+        JOIN users u ON u.id = gm.user_id
+        WHERE gm.group_id = ? AND gm.user_id = ?
+      `, [groupId, secondary_recipient_id]);
+      
+      if (secondaryCheck.length === 0) {
+        return res.status(400).json({ 
+          error: 'Secondary recipient is not a member of this group.' 
+        });
+      }
+      
+      secondaryRecipientInfo = secondaryCheck[0];
+    }
+    
+    // 🎯 Build recipient names for message content
+    const primaryRecipientName = recipientCheck[0].full_name;
+    let recipientNames = primaryRecipientName;
+    
+    if (secondaryRecipientInfo) {
+      recipientNames += ` & ${secondaryRecipientInfo.full_name}`;
+    }
+    
+    // 📝 Modify content to include recipient names
+    const modifiedContent = `📤 To ${recipientNames}: ${content}`;
+    
+    // 🚀 SEND SINGLE MESSAGE (no duplicates)
+    if(!content?.trim())return res.status(400).json({error:'Content required'});
+    
+    const{encrypted,iv}=encrypt(modifiedContent);
+    const[r]=await db.query(
+      'INSERT INTO messages (group_id,sender_id,recipient_id,secondary_recipient_id,message_type,encrypted_content,iv,reply_to_id) VALUES(?,?,?,?,?,?,?,?)',
+      [groupId,req.user.id,recipient_id,secondary_recipient_id||null,message_type,encrypted,iv,reply_to_id||null]
+    );
+    
+    const[[grp]]=await db.query('SELECT group_name FROM chat_groups WHERE id=?',[groupId]).catch(()=>[[{}]]);
+    
+    // Fetch reply data if this is a reply
+    let replyData = null;
+    if(reply_to_id) {
+      const[[replyMsg]] = await db.query(`
+        SELECT m.encrypted_content, m.iv, u.full_name as sender_name
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+        WHERE m.id = ? AND m.is_deleted = false
+      `, [reply_to_id]);
+      
+      if(replyMsg) {
+        replyData = {
+          reply_content: decrypt(replyMsg.encrypted_content, replyMsg.iv),
+          reply_sender_name: replyMsg.sender_name
+        };
+      }
+    }
+    
+    // 🎯 Create single message object
+    const message={
+      id:r.insertId,group_id:Number(groupId),
+      sender_id:req.user.id,sender_name:req.user.full_name,
+      recipient_id: Number(recipient_id),
+      secondary_recipient_id: secondary_recipient_id ? Number(secondary_recipient_id) : null,
+      username:req.user.username,sender_role:req.user.role,
+      message_type,content:modifiedContent,reply_to_id:reply_to_id||null,
+      ...replyData,
+      is_deleted:false,sent_at:new Date(),
+    };
+    
+    // 🚀 Emit single message to all group members
+    const io=req.app.get('io');
+    if(io)io.to(`group_${groupId}`).emit('new_message',message);
+    await pushToMembers(io,groupId,req.user.id,message,grp?.group_name||'');
+    res.status(201).json({message});
   }catch(e){console.error(e);res.status(500).json({error:'Failed to send'});}
+});
+
+/* GET available recipients for group */
+router.get('/:groupId/recipients', auth, checkMember, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const crmDb = db.crmPool;
+    
+    if (!crmDb) {
+      return res.status(500).json({ error: 'CRM database not available' });
+    }
+    
+    // Get available recipients based on hierarchy
+    const recipients = await getAvailableRecipients(crmDb, db, groupId, req.user.id);
+    
+    res.json({ recipients });
+  } catch (error) {
+    console.error('Error getting recipients:', error);
+    res.status(500).json({ error: 'Failed to get recipients' });
+  }
+});
+
+/* GET assignment info for a specific recipient */
+router.get('/:groupId/assignment/:recipientId', auth, checkMember, async (req, res) => {
+  try {
+    const { groupId, recipientId } = req.params;
+    const crmDb = db.crmPool;
+    
+    if (!crmDb) {
+      return res.status(500).json({ error: 'CRM database not available' });
+    }
+    
+    // Get assignment info for the recipient
+    const assignmentInfo = await getUserAssignmentInfo(crmDb, db, req.user.id, recipientId);
+    
+    res.json(assignmentInfo);
+  } catch (error) {
+    console.error('Error getting assignment info:', error);
+    res.status(500).json({ error: 'Failed to get assignment info' });
+  }
 });
 
 /* POST upload file */
@@ -254,32 +337,82 @@ router.post('/:groupId/upload',auth,checkMember,upload.single('file'),async(req,
   try{
     const{groupId}=req.params;
     const file=req.file;
-    if(!file)return res.status(400).json({error:'No file'});
+    if(!file)return res.status(400).json({error:'No file uploaded'});
+    
+    // Enhanced file type detection
     const relPath=`/uploads/${file.filename}`;
     let msgType='file';
-    if(file.mimetype.startsWith('image/'))msgType='image';
-    else if(file.mimetype.startsWith('audio/'))msgType='audio';
-    const{encrypted,iv}=encrypt(req.body.caption||file.originalname);
+    let fileIcon='📄';
+    
+    if(file.mimetype.startsWith('image/')){
+      msgType='image';
+      fileIcon='🖼️';
+    }
+    else if(file.mimetype.startsWith('audio/')){
+      msgType='audio';
+      fileIcon='🎵';
+    }
+    else if(file.mimetype.startsWith('video/')){
+      msgType='video';
+      fileIcon='🎬';
+    }
+    else if(file.mimetype.includes('pdf')){
+      fileIcon='📕';
+    }
+    else if(file.mimetype.includes('word') || file.mimetype.includes('document')){
+      fileIcon='📝';
+    }
+    else if(file.mimetype.includes('sheet') || file.mimetype.includes('excel')){
+      fileIcon='📊';
+    }
+    else if(file.mimetype.includes('zip') || file.mimetype.includes('compressed')){
+      fileIcon='🗜️';
+    }
+    else if(file.mimetype.includes('presentation') || file.mimetype.includes('powerpoint')){
+      fileIcon='📽️';
+    }
+    else if(file.mimetype.includes('text')){
+      fileIcon='📄';
+    }
+    
+    // Use caption from request or fallback to filename
+    const caption = req.body.caption || file.originalname;
+    const{encrypted,iv}=encrypt(caption);
+    
     const[r]=await db.query(
       'INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,file_url,file_name,file_size,mime_type) VALUES(?,?,?,?,?,?,?,?,?)',
       [groupId,req.user.id,msgType,encrypted,iv,relPath,file.originalname,file.size,file.mimetype]
     );
+    
     const[[grp]]=await db.query('SELECT group_name FROM chat_groups WHERE id=?',[groupId]).catch(()=>[[{}]]);
     const message={
       id:r.insertId,group_id:Number(groupId),
       sender_id:req.user.id,sender_name:req.user.full_name,
       username:req.user.username,sender_role:req.user.role,
       message_type:msgType,
-      content:req.body.caption||file.originalname,
+      content:caption,
       file_url:absUrl(req,relPath),   // ✅ absolute
       file_name:file.originalname,file_size:file.size,mime_type:file.mimetype,
+      file_icon:fileIcon, // Add file icon for better UI
       sent_at:new Date(),
     };
+    
     const io=req.app.get('io');
     if(io)io.to(`group_${groupId}`).emit('new_message',message);
     await pushToMembers(io,groupId,req.user.id,message,grp?.group_name||'');
+    
+    console.log('✅ File uploaded successfully:', {
+      name: file.originalname,
+      size: file.size,
+      type: file.mimetype,
+      msgType: msgType
+    });
+    
     res.status(201).json({message});
-  }catch(e){console.error(e);res.status(500).json({error:'Failed to upload'});}
+  }catch(e){
+    console.error('❌ File upload error:', e);
+    res.status(500).json({error:'Failed to upload file: ' + e.message});
+  }
 });
 
 /* DELETE message */
@@ -389,6 +522,8 @@ router.delete('/:groupId/:messageId/reaction',auth,checkMember,async(req,res)=>{
 router.get('/unread-counts', auth, async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log('=== UNREAD COUNTS DEBUG ===');
+    console.log('User ID:', userId, 'User:', req.user.full_name);
     
     // Get all groups the user is a member of
     const [groups] = await db.query(`
@@ -399,10 +534,12 @@ router.get('/unread-counts', auth, async (req, res) => {
     `, [userId]);
     
     if (groups.length === 0) {
+      console.log('No groups found for user');
       return res.json({ unreadCounts: {} });
     }
     
     const groupIds = groups.map(g => g.id);
+    console.log('User groups:', groupIds);
     
     // Get unread message counts for each group
     const [unreadCounts] = await db.query(`
@@ -414,8 +551,46 @@ router.get('/unread-counts', auth, async (req, res) => {
       WHERE m.group_id IN (${groupIds.map(() => '?').join(',')})
       AND m.sender_id != ?
       AND ms.message_id IS NULL
+      AND (m.recipient_id = ? OR m.secondary_recipient_id = ?)
       GROUP BY m.group_id
-    `, [userId, ...groupIds, userId]);
+    `, [userId, ...groupIds, userId, userId, userId]);
+    
+    console.log('Unread counts result:', unreadCounts);
+    
+    // Debug first group if available
+    if (unreadCounts.length > 0) {
+      const firstUnread = unreadCounts[0];
+      console.log(`\n--- Debug Group ${firstUnread.group_id} ---`);
+      
+      // Check all unread messages for this group
+      const [allUnread] = await db.query(`
+        SELECT 
+          m.id,
+          m.recipient_id,
+          m.secondary_recipient_id,
+          m.sender_id,
+          u_recipient.full_name as recipient_name,
+          u_secondary.full_name as secondary_name,
+          u_sender.full_name as sender_name
+        FROM messages m
+        LEFT JOIN message_status ms ON m.id = ms.message_id AND ms.user_id = ? AND ms.status = 'seen'
+        LEFT JOIN users u_recipient ON u_recipient.id = m.recipient_id
+        LEFT JOIN users u_secondary ON u_secondary.id = m.secondary_recipient_id
+        LEFT JOIN users u_sender ON u_sender.id = m.sender_id
+        WHERE m.group_id = ?
+        AND m.sender_id != ?
+        AND ms.message_id IS NULL
+        ORDER BY m.sent_at DESC
+        LIMIT 5
+      `, [userId, firstUnread.group_id, userId]);
+      
+      console.log('All unread messages in group:');
+      allUnread.forEach(m => {
+        const isUserRecipient = m.recipient_id === userId || m.secondary_recipient_id === userId;
+        console.log(`  ID ${m.id}: ${m.sender_name} -> ${m.recipient_name || 'NULL'}${m.secondary_name ? ' + ' + m.secondary_name : ''} (User is recipient: ${isUserRecipient})`);
+      });
+      console.log('============================\n');
+    }
     
     // Convert to object with group_id as key
     const countsMap = {};
