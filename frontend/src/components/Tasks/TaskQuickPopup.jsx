@@ -711,7 +711,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                         {entry.attachment && (
                           <span style={{fontSize:9,color:'rgba(255,255,255,0.7)',display:'flex',alignItems:'center',gap:4}}>
                             <a 
-                              href={`${process.env.REACT_APP_API_URL || 'http://localhost:5500'}${entry.attachment.url || entry.attachment}`}
+                              href={`${process.env.REACT_APP_API_URL}${entry.attachment.url || entry.attachment}`}
                               target="_blank" 
                               rel="noopener noreferrer"
                               download={entry.attachment.name || entry.attachment.split('/').pop()}

@@ -90,7 +90,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
     }
   };
 
-  const fileUrl = msg.file_url ? (msg.file_url.startsWith('http') ? msg.file_url : `${process.env.REACT_APP_API_URL || 'http://localhost:5500'}${msg.file_url}`) : null;
+  const fileUrl = msg.file_url ? (msg.file_url.startsWith('http') ? msg.file_url : `${process.env.REACT_APP_API_URL}${msg.file_url}`) : null;
 
   return(
     <div className={`message-row ${isOwn?'own':''}`}>

@@ -33,14 +33,13 @@ export const SocketProvider = ({ children, token }) => {
   useEffect(() => {
     if (!token) return;
 
-    // Extract the base URL without /api for Socket.IO connection
-    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5500';
+    // Use environment variable for API URL
+    const apiUrl = process.env.REACT_APP_API_URL;
     const socketUrl = apiUrl.replace('/api', '');
 
     console.log('[Socket] Connecting to:', socketUrl);
     console.log('[Socket] API URL:', apiUrl);
 
-    // const socket = io(socketUrl, {
     //   auth: { token },
     //   reconnectionAttempts: Infinity,
     //   reconnectionDelay: 1000,
