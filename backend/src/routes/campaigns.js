@@ -150,11 +150,13 @@ console.log(campaigns,"data")
       }
     });
 
-    // 🔹 STEP 4: Extract sub_ids (deduplicated)
+    // 🔹 STEP 4: Extract sub_ids (deduplicated by user_id + sub_campaign_id)
     const subIdMap = new Map();
     campaigns.forEach(c => {
       if (c.sub_campaign_id) {
-        subIdMap.set(c.sub_campaign_id, {
+        // Use composite key to ensure each user sees their own campaigns
+        const compositeKey = `${c.sub_campaign_id}_${c.user_id}`;
+        subIdMap.set(compositeKey, {
           sub_id: c.sub_campaign_id,
           campaign_name: c.campaign_name,
           user_id: c.user_id

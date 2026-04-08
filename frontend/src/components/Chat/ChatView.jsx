@@ -9,8 +9,8 @@ const TABS=[
   {key:'chat',    label:'Chat',       icon:'💬'},
   {key:'tasks',   label:'Tasks',      icon:'📋',badge:true},
   {key:'preview', label:'Preview',    icon:'👁️'},
-  {key:'followups',label:'Follow Ups',icon:'↩️'},
-  {key:'summary', label:'Summary',    icon:'📊'},
+  // {key:'followups',label:'Follow Ups',icon:'↩️'},
+  // {key:'summary', label:'Summary',    icon:'📊'},
 ];
 
 export default function ChatView({group}){

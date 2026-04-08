@@ -1,10 +1,14 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { tasksAPI, authAPI, groupsAPI, getFileUrl } from '../../utils/api';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import PreviewPanel from '../Preview/PreviewPanel';
+import SummaryPanel from '../Chat/SummaryPanel';
+import CampaignDetails from '../Chat/CampaignDetails';
 import { useAuth } from '../../context/AuthContext';
+import { canViewAction, getVisibleActions } from '../../utils/taskAccess';
 import { useSocket } from '../../context/SocketContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TaskDetailsModal from './TaskDetailsModal';
+import { groupsAPI, authAPI, tasksAPI } from '../../utils/api';
 
 export const TASK_TYPES={
   initial_setup:{label:'Initial Setup',icon:'🚀',color:'#a855f7'},
@@ -159,7 +163,6 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
   );
 }
 
-/* ── Main TasksPanel ────────────────────────────────────────── */
 export default function TasksPanel({group, taskTarget}){
   const {user}=useAuth();
   const {on}=useSocket();
@@ -202,14 +205,14 @@ export default function TasksPanel({group, taskTarget}){
       case 'pause_pid':
         // Show only publisher and publisher_manager (excluding current user)
         return members.filter(member => 
-          (member.role === 'publisher' || member.role === 'publisher_manager') &&
+          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive') &&
           member.id !== user?.id
         );
       
       case 'raise_request':
         // Show only advertiser and advertiser_manager (excluding current user)
         return members.filter(member => 
-          (member.role === 'advertiser' || member.role === 'advertiser_manager') &&
+          (member.role === 'advertiser' || member.role === 'advertiser_manager' || member.role === 'adv_executive') &&
           member.id !== user?.id
         );
       
@@ -569,6 +572,42 @@ export default function TasksPanel({group, taskTarget}){
     return unsub;
   },[on,group?.id,user?.id]);
 
+  // Listen for new task notifications (when tasks are created)
+  useEffect(()=>{
+    console.log('[TasksPanel] Setting up new_message listener for task notifications, connected:', on);
+    const unsub=on('new_message',(msg)=>{
+      // Only handle task notifications
+      if(msg.message_type === 'task_notification' && Number(msg.group_id) === group?.id) {
+        console.log('[TasksPanel] New task notification received:', msg);
+        
+        // Reload tasks to get complete task data with user names
+        load();
+        
+        // Show notification
+        toast.success('New task created');
+      }
+    });
+    return unsub;
+  },[on,group?.id,load]);
+
+  // Listen for member updates (when members are added to group)
+  useEffect(()=>{
+    console.log('[TasksPanel] Setting up member_added listener, connected:', on);
+    const unsub=on('member_added',(data)=>{
+      // Only handle member updates for current group
+      if(Number(data.group_id) === group?.id) {
+        console.log('[TasksPanel] Member added event received:', data);
+        
+        // Reload group members to update the dropdown
+        groupsAPI.getById(group.id).then(d => setMembers(d.members || []));
+        
+        // Show notification
+        toast.success(`${data.added_by_name} added a new member`);
+      }
+    });
+    return unsub;
+  },[on,group?.id]);
+
   /* ── Handle taskTarget from chat pill click ──
      If taskTarget.openForm === true: open the create form pre-set to that task type
      Also highlight the task if we have a taskId */
@@ -762,7 +801,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
 
       {/* filter bar */}
       <div style={{display:'flex',gap:6,padding:'10px 14px',borderBottom:'1px solid var(--border)',flexWrap:'wrap',alignItems:'center'}}>
-        {['all','pending','accepted','completed','rejected'].map(f2=>(
+        {['pending','accepted','completed','rejected'].map(f2=>(
           <button key={f2} onClick={()=>setFilter(f2)}
             className={`btn btn-xs ${filter===f2?'btn-primary':'btn-secondary'}`}
             style={{textTransform:'capitalize'}}>
@@ -792,9 +831,12 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             <div>
               <label className="form-label">Task Type</label>
               <select className="form-control" value={form.task_type} onChange={e=>f('task_type',e.target.value)}>
-                {Object.entries(TASK_TYPES).filter(([k])=>k!=='initial_setup').map(([k,v])=>(
-                  <option key={k} value={k}>{v.icon} {v.label}</option>
-                ))}
+                {getVisibleActions(user?.role).map(action => {
+                  const taskType = TASK_TYPES[action];
+                  return (
+                    <option key={action} value={action}>{taskType.icon} {taskType.label}</option>
+                  );
+                })}
               </select>
             </div>
             {/* <div>

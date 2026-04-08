@@ -13,6 +13,18 @@ export default function CreateGroupModal({ onClose, onCreated }) {
   const [mode, setMode] = useState('campaign'); // 'campaign' | 'custom'
   const [campaignData, setCampaignData] = useState({ advertisers: [], sub_ids: [] });
   const [users, setUsers] = useState([]);
+  const [usersByRole, setUsersByRole] = useState({
+    publisher_side: {
+      pub_executive: [],
+      publisher: [],
+      publisher_manager: []
+    },
+    advertiser_side: {
+      adv_executive: [],
+      advertiser: [],
+      advertiser_manager: []
+    }
+  });
   const [selectedSubId, setSelectedSubId] = useState('');
   const [campaignSearch, setCampaignSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -29,13 +41,16 @@ export default function CreateGroupModal({ onClose, onCreated }) {
   );
 
   // Filter users based on search
-  const filteredUsers = users.filter(u => 
-    u.id !== user.id && (
-      u.full_name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-      u.email.toLowerCase().includes(memberSearch.toLowerCase()) ||
-      u.role.toLowerCase().includes(memberSearch.toLowerCase())
-    )
-  );
+  const filteredUsers = users.filter(u => {
+    if (!u || u.id === user.id) return false;
+    
+    const searchLower = memberSearch.toLowerCase();
+    const name = (u.full_name || u.username || '').toLowerCase();
+    const email = (u.email || '').toLowerCase();
+    const role = (u.role || '').toLowerCase();
+    
+    return name.includes(searchLower) || email.includes(searchLower) || role.includes(searchLower);
+  });
 
   useEffect(() => {
     const fetchCampaignData = async () => {
@@ -53,8 +68,140 @@ export default function CreateGroupModal({ onClose, onCreated }) {
       }
     };
     fetchCampaignData();
-    authAPI.getUsers().then(d => setUsers(d.users || []));
   }, []);
+    
+    // Role-based user fetching
+    useEffect(() => {
+      const fetchUsersByRole = async () => {
+        try {
+          console.log('fetchUsersByRole - user role:', user?.role);
+          
+          if (user?.role === 'admin' || user?.role === 'adv_executive' || user?.role === 'advertiser' || user?.role === 'advertiser_manager') {
+            // Admin and Advertiser roles can see all users grouped by roles
+            console.log('Fetching users by roles for', user?.role, '...');
+            try {
+              const response = await groupsAPI.getUsersByRoles();
+              console.log('getUsersByRoles response:', response);
+              
+              // Check if response has the expected format
+              if (response && response.users_by_role) {
+                console.log('Using correct API response format');
+                setUsersByRole(response.users_by_role);
+                
+                // Flatten all users for search functionality
+                const allUsers = [
+                  ...response.users_by_role.publisher_side.pub_executive,
+                  ...response.users_by_role.publisher_side.publisher,
+                  ...response.users_by_role.publisher_side.publisher_manager,
+                  ...response.users_by_role.advertiser_side.adv_executive,
+                  ...response.users_by_role.advertiser_side.advertiser,
+                  ...response.users_by_role.advertiser_side.advertiser_manager
+                ];
+                setUsers(allUsers);
+              } else if (response && response.members) {
+                console.log('API returned members instead of users_by_role, using fallback');
+                // API returned wrong format, fall back to auth API
+                throw new Error('Wrong API response format');
+              } else {
+                console.log('API returned unexpected format:', response);
+                throw new Error('Unexpected API response format');
+              }
+            } catch (groupsError) {
+              console.log('Groups API failed, falling back to auth API:', groupsError);
+              const authResponse = await authAPI.getUsers();
+              console.log('authAPI.getUsers response:', authResponse);
+              const allUsers = authResponse.users || [];
+              setUsers(allUsers);
+            }
+          } else if (user?.role === 'pub_executive' || user?.role === 'publisher') {
+            // Publisher side: pub_executive, publisher
+            console.log('Fetching users for publisher side...');
+            try {
+              const response = await groupsAPI.getUsersByRoles();
+              console.log('getUsersByRoles response:', response);
+              const publisherUsers = [
+                ...response.users_by_role.publisher_side.pub_executive,
+                ...response.users_by_role.publisher_side.publisher
+              ];
+              setUsers(publisherUsers);
+              setUsersByRole({
+                publisher_side: {
+                  pub_executive: response.users_by_role.publisher_side.pub_executive,
+                  publisher: response.users_by_role.publisher_side.publisher,
+                  publisher_manager: []
+                },
+                advertiser_side: {
+                  adv_executive: [],
+                  advertiser: [],
+                  advertiser_manager: []
+                }
+              });
+            } catch (groupsError) {
+              console.log('Groups API failed, falling back to auth API:', groupsError);
+              const authResponse = await authAPI.getUsers();
+              const allUsers = authResponse.users || [];
+              const publisherUsers = allUsers.filter(u => 
+                u.role === 'pub_executive' || u.role === 'publisher'
+              );
+              setUsers(publisherUsers);
+            }
+          } else if (user?.role === 'adv_executive' || user?.role === 'advertiser') {
+            // Advertiser side: adv_executive, advertiser
+            console.log('Fetching users for advertiser side...');
+            try {
+              const response = await groupsAPI.getUsersByRoles();
+              console.log('getUsersByRoles response:', response);
+              const advertiserUsers = [
+                ...response.users_by_role.advertiser_side.adv_executive,
+                ...response.users_by_role.advertiser_side.advertiser
+              ];
+              setUsers(advertiserUsers);
+              setUsersByRole({
+                publisher_side: {
+                  pub_executive: [],
+                  publisher: [],
+                  publisher_manager: []
+                },
+                advertiser_side: {
+                  adv_executive: response.users_by_role.advertiser_side.adv_executive,
+                  advertiser: response.users_by_role.advertiser_side.advertiser,
+                  advertiser_manager: []
+                }
+              });
+            } catch (groupsError) {
+              console.log('Groups API failed, falling back to auth API:', groupsError);
+              const authResponse = await authAPI.getUsers();
+              const allUsers = authResponse.users || [];
+              const advertiserUsers = allUsers.filter(u => 
+                u.role === 'adv_executive' || u.role === 'advertiser'
+              );
+              setUsers(advertiserUsers);
+            }
+          } else {
+            // Other roles: no user selection
+            console.log('User role not eligible for user selection:', user?.role);
+            setUsers([]);
+            setUsersByRole({
+              publisher_side: {
+                pub_executive: [],
+                publisher: [],
+                publisher_manager: []
+              },
+              advertiser_side: {
+                adv_executive: [],
+                advertiser: [],
+                advertiser_manager: []
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Failed to fetch users by role:', error);
+          toast.error('Failed to fetch users');
+        }
+      };
+      
+      fetchUsersByRole();
+    }, [user?.role]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -75,31 +222,54 @@ export default function CreateGroupModal({ onClose, onCreated }) {
   const handleCreate = async () => {
     setLoading(true);
     try {
+      console.log('=== GROUP CREATION DEBUG ===');
+      console.log('Mode:', mode);
+      console.log('Selected members:', selectedMembers);
+      console.log('Selected members length:', selectedMembers.length);
+      
       let group;
       if (mode === 'campaign') {
         if (!selectedSubId) { toast.error('Select campaign sub ID'); setLoading(false); return; }
         
+        // NEW: Expand selected members with hierarchy
+        const expandedMembers = selectedMembers.length > 0 ? await groupsAPI.expandHierarchy(selectedMembers) : selectedMembers;
+        console.log('Expanded members for campaign:', expandedMembers);
+        
+        // Extract user IDs from the response
+        const memberIds = expandedMembers.users ? expandedMembers.users.map(u => u.id) : expandedMembers;
+        console.log('Extracted member IDs:', memberIds);
+        
         const data = await groupsAPI.createFromCampaignData({
           campaign_subid: selectedSubId,
           campaign_type: campaignType,
-          additional_members: selectedMembers
+          additional_members: memberIds
         });
-        console.log(data,"campdata")
+        console.log('Campaign group creation response:', data);
         toast.success(data.message || 'Campaign groups created successfully');
         if (onCreated) onCreated();
         onClose();
       } else {
         if (!groupName.trim()) { toast.error('Enter a group name'); setLoading(false); return; }
+        
+        // NEW: Expand selected members with hierarchy
+        const expandedMembers = selectedMembers.length > 0 ? await groupsAPI.expandHierarchy(selectedMembers) : selectedMembers;
+        console.log('Expanded members for custom:', expandedMembers);
+        
+        // Extract user IDs from the response
+        const memberIds = expandedMembers.users ? expandedMembers.users.map(u => u.id) : expandedMembers;
+        console.log('Extracted member IDs for custom:', memberIds);
+        
         const data = await groupsAPI.createCustom({
           group_name: groupName.trim(),
-          member_ids: selectedMembers
+          member_ids: memberIds
         });
+        console.log('Custom group creation response:', data);
         toast.success(data.message || 'Group created successfully');
         if (onCreated) onCreated();
         onClose();
       }
     } catch (err) {
-      console.error(err);
+      console.error('Group creation error:', err);
       toast.error(err.error || 'Failed to create group');
     } finally {
       setLoading(false);
@@ -323,8 +493,9 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                   >
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: selectedMembers.includes(u.id) ? 'var(--accent)' : 'var(--border)', flexShrink: 0 }} />
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{u.full_name}</div>
-                      <div style={{ fontSize: 11, color: ROLE_COLORS[u.role] || 'var(--text-muted)' }}>{u.role} · {u.email}</div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{u.full_name || u.username}</div>
+                      <div style={{ fontSize: 11, color: ROLE_COLORS[u.role] || 'var(--text-muted)' }}>{u.role} · {u.email || u.username}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{u.file_name || 'No file'}</div>
                     </div>
                   </div>
                 ))

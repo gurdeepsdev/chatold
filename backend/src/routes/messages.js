@@ -420,6 +420,21 @@ router.delete('/:groupId/:messageId',auth,async(req,res)=>{
   const[rows]=await db.query('SELECT id FROM messages WHERE id=? AND sender_id=?',[req.params.messageId,req.user.id]);
   if(!rows.length)return res.status(403).json({error:'Cannot delete'});
   await db.query('UPDATE messages SET is_deleted=TRUE WHERE id=?',[req.params.messageId]);
+  
+  // Emit real-time message deletion to all group members
+  const io = req.app.get('io');
+  if(io){
+    io.to(`group_${req.params.groupId}`).emit('message_deleted', {
+      message_id: parseInt(req.params.messageId),
+      group_id: parseInt(req.params.groupId),
+      deleted_by: req.user.id,
+      deleted_by_name: req.user.full_name
+    });
+    console.log('🗑️ Message deleted and emitted to group:', req.params.groupId);
+  }else{
+    console.log('Socket.io not available');
+  }
+  
   res.json({message:'Deleted'});
 });
 

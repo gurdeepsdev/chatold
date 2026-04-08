@@ -3,6 +3,12 @@ const router = express.Router();
 const db = require('../utils/db');
 const { auth } = require('../middleware/auth');
 const { encrypt } = require('../utils/encryption');
+const { 
+  getUsersByRole, 
+  getAssignedHierarchyUsers, 
+  expandUsersWithHierarchy, 
+  getAllAdminUsers 
+} = require('../utils/taskAccess');
 
 // Get all groups for user
 router.get('/', auth, async (req, res) => {
@@ -90,11 +96,15 @@ router.get('/', auth, async (req, res) => {
     }
 
     const threads = {};
+    console.log('=== THREAD GROUPING DEBUG ===');
     groups.forEach(g => {
+      console.log(`Group: ${g.group_name}, Package ID: ${g.package_id}, ID: ${g.id}`);
       const key = g.package_id || `custom_${g.id}`;
       if (!threads[key]) threads[key] = { package_id: key, groups: [] };
       threads[key].groups.push(g);
     });
+    console.log('Final threads:', Object.keys(threads).map(k => `${k}: ${threads[k].groups.length} groups`));
+    console.log('=== END THREAD DEBUG ===\n');
 
     res.json({ groups, threads: Object.values(threads) });
   } catch (err) {
@@ -105,10 +115,12 @@ router.get('/', auth, async (req, res) => {
 
 // Create campaign groups by campaign_subid (admin, advertiser_manager, advertiser only - auto-detect advertiser)
 router.post('/from-campaign-data', auth, async (req, res) => {
-  // Only admin, advertiser_manager, and advertiser can create campaign groups
-  const allowedRoles = ['admin', 'advertiser_manager', 'advertiser'];
+  console.log('CAMPAIGN GROUP CREATION ENDPOINT CALLED!');
+  
+  // Only admin, advertiser_manager, advertiser, and adv_executive can create campaign groups
+  const allowedRoles = ['admin', 'advertiser_manager', 'advertiser', 'adv_executive'];
   if (!allowedRoles.includes(req.user.role)) {
-    return res.status(403).json({ error: 'Only admin, advertiser_manager, and advertiser can create campaign groups' });
+    return res.status(403).json({ error: 'Only admin, advertiser_manager, advertiser, and adv_executive can create campaign groups' });
   }
 
   const conn = await db.getConnection();
@@ -116,6 +128,14 @@ router.post('/from-campaign-data', auth, async (req, res) => {
     await conn.beginTransaction();
 
     const { campaign_subid, campaign_type = 'agency', additional_members = [] } = req.body;
+    
+    console.log('=== CAMPAIGN GROUP CREATION DEBUG ===');
+    console.log('campaign_subid:', campaign_subid);
+    console.log('campaign_type:', campaign_type);
+    console.log('additional_members:', additional_members);
+    console.log('additional_members type:', typeof additional_members);
+    console.log('additional_members length:', additional_members?.length);
+    console.log('Is array?', Array.isArray(additional_members));
 
     // Get CRM pool
     const crmPool = db.crmPool;
@@ -131,15 +151,21 @@ router.post('/from-campaign-data', auth, async (req, res) => {
       SELECT c.*, l.username
       FROM campaign_data c
       INNER JOIN login l ON l.id = c.user_id
-      WHERE c.sub_campaign_id = ?
-    `, [campaign_subid]);
+      WHERE c.sub_campaign_id = ? AND c.user_id = ?
+    `, [campaign_subid, req.user.id]);
 
     console.log('Found campaigns:', crmCampaigns.length);
+    console.log('Campaign search by user_id:', req.user.id);
 
     if (!crmCampaigns.length) {
       return res.status(404).json({ 
-        error: 'Campaign not found in CRM data with given sub campaign ID',
-        debug: { looking_for: { campaign_subid } }
+        error: 'Campaign not found in CRM data with given sub campaign ID for this user',
+        debug: { 
+          looking_for: { 
+            campaign_subid, 
+            user_id: req.user.id 
+          } 
+        }
       });
     }
 
@@ -150,26 +176,44 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
     // Extract package_id from preview_url
     let package_id = null;
+    console.log('=== PACKAGE_ID EXTRACTION DEBUG ===');
+    console.log('Campaign preview_url:', crmCampaign.preview_url);
+    console.log('Campaign preview_url type:', typeof crmCampaign.preview_url);
+    console.log('Campaign preview_url === "NA":', crmCampaign.preview_url === 'NA');
+    
     if (crmCampaign.preview_url && crmCampaign.preview_url !== 'NA') {
       const url = crmCampaign.preview_url;
+      console.log('Processing URL:', url);
       
       if (url.includes('apps.apple.com')) {
         // iOS: Extract from /id{number} pattern
         const iosMatch = url.match(/\/id(\d+)/);
         if (iosMatch) {
           package_id = iosMatch[1];
+          console.log('iOS package_id extracted:', package_id);
+        } else {
+          console.log('iOS regex match failed');
         }
       } else if (url.includes('play.google.com')) {
         // Android: Extract from id={package_name} pattern
         const androidMatch = url.match(/[?&]id=([^&]+)/);
         if (androidMatch) {
           package_id = androidMatch[1];
+          console.log('Android package_id extracted:', package_id);
+        } else {
+          console.log('Android regex match failed');
         }
       } else {
         // Direct package_id (no URL format)
         package_id = url.trim();
+        console.log('Direct package_id set:', package_id);
       }
+    } else {
+      console.log('No preview_url or preview_url is NA');
     }
+    
+    console.log('Final package_id:', package_id);
+    console.log('=== END PACKAGE_ID DEBUG ===\n');
 
     console.log('Extracted package_id:', package_id, 'from preview_url:', crmCampaign.preview_url);
 
@@ -181,12 +225,24 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
     const advertiserId = advertiserUsers.length > 0 ? advertiserUsers[0].id : null;
 
-    // Create separate groups for iOS and Android
-    const platforms = ['ios', 'android'];
+    // Get available OS platforms for this campaign (instead of hardcoded iOS/Android)
+    const [osPlatforms] = await crmPool.query(
+      `SELECT DISTINCT os FROM campaign_data WHERE sub_campaign_id = ? AND user_id = ? AND os IS NOT NULL AND os != ''`,
+      [campaign_subid, req.user.id]
+    );
+    
+    console.log('Available OS platforms for campaign:', osPlatforms.map(o => o.os));
+    
+    // If no OS data found, default to creating one group without OS specification
+    const platforms = osPlatforms.length > 0 
+      ? osPlatforms.map(o => o.os.toLowerCase().replace(/\s+/g, '')) // Clean OS names (e.g., "iOS" -> "ios")
+      : ['default']; // Fallback for campaigns without OS data
     
     for (const platform of platforms) {
       // Build group name: {campaign_name}_{advertiser_username}_{platform}
-      const groupName = `${crmCampaign.campaign_name}_${adv_name}_${platform}`;
+      const groupName = platform === 'default' 
+        ? `${crmCampaign.campaign_name}_${adv_name}`
+        : `${crmCampaign.campaign_name}_${adv_name}_${platform}`;
 
       // Check if group already exists
       const [existing] = await conn.query(
@@ -224,10 +280,10 @@ router.post('/from-campaign-data', auth, async (req, res) => {
       );
       const groupId = result.insertId;
 
-      // ── Default members based on campaign type ──────────────────
+      // ── Default members based on campaign type and hierarchy ──────────────────
       // Always add: creator + advertiser (if found) + all admins
-      const [allAdmins] = await conn.query("SELECT id FROM users WHERE role = 'admin'");
-
+      const allAdmins = await getAllAdminUsers(db.crmPool); // Use CRM DB for admin users
+      
       let defaultUsernames = [];
       if (campaign_type === 'direct') {
         // Direct campaigns: add akshat and ipsita
@@ -240,17 +296,61 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         defaultUsernames.length > 0 ? defaultUsernames : ['']
       );
 
-      // Debug logging
-      console.log('Default usernames:', defaultUsernames);
-      console.log('Found default users:', defaultUsers);
+      // 🔄 NEW: Expand additional members with hierarchy
+      let expandedMembers = [];
+      if (additional_members && Array.isArray(additional_members) && additional_members.length > 0) {
+        console.log('Processing additional_members:', additional_members);
+        
+        // Get full user objects for additional members
+        const [additionalUserObjects] = await conn.query(
+          `SELECT id, full_name, email, role FROM users WHERE id IN (${additional_members.map(() => '?').join(',')})`,
+          additional_members
+        );
+        
+        console.log('Additional user objects from chat DB:', additionalUserObjects);
+        
+        // Expand with hierarchy using CRM database
+        expandedMembers = await expandUsersWithHierarchy(crmPool, additionalUserObjects);
+        console.log('Expanded members after hierarchy:', expandedMembers);
+      } else {
+        console.log('No additional_members to process');
+      }
+
+      // Auto-add creator's hierarchy for advertiser roles
+      let creatorHierarchy = [];
+      if (req.user.role === 'advertiser' || req.user.role === 'adv_executive') {
+        console.log(`Auto-adding hierarchy for creator role: ${req.user.role}`);
+        
+        // Get creator's user object from CRM database
+        const [creatorUser] = await crmPool.query(
+          `SELECT id, username, role FROM login WHERE id = ?`,
+          [req.user.id]
+        );
+        
+        if (creatorUser && creatorUser.length > 0) {
+          creatorHierarchy = await expandUsersWithHierarchy(crmPool, creatorUser);
+          console.log('Creator hierarchy auto-added:', creatorHierarchy);
+        }
+      }
 
       const memberIds = new Set([
         req.user.id,
         ...(advertiserId ? [advertiserId] : []),
         ...allAdmins.map(u => u.id),
         ...defaultUsers.map(u => u.id),
-        ...additional_members
+        ...expandedMembers.map(u => u.id),
+        ...creatorHierarchy.map(u => u.id)
       ].filter(Boolean));
+
+      console.log('=== FINAL MEMBER INSERTION ===');
+      console.log('Creator ID:', req.user.id);
+      console.log('Creator role:', req.user.role);
+      console.log('Advertiser ID:', advertiserId);
+      console.log('All admins:', allAdmins.map(u => u.id));
+      console.log('Default users:', defaultUsers.map(u => u.id));
+      console.log('Expanded members:', expandedMembers.map(u => u.id));
+      console.log('Creator hierarchy:', creatorHierarchy.map(u => u.id));
+      console.log('Final member IDs Array:', Array.from(memberIds));
 
       console.log('Final member IDs:', Array.from(memberIds));
 
@@ -408,10 +508,10 @@ console.log('✅ Campaign created event emitted to ALL users:', {
 
 // Create group from campaign (admin, advertiser_manager, advertiser only - existing - keep for backward compatibility)
 router.post('/from-campaign', auth, async (req, res) => {
-  // Only admin, advertiser_manager, and advertiser can create campaign groups
-  const allowedRoles = ['admin', 'advertiser_manager', 'advertiser'];
+  // Only admin, advertiser_manager, advertiser, and adv_executive can create campaign groups
+  const allowedRoles = ['admin', 'advertiser_manager', 'advertiser', 'adv_executive'];
   if (!allowedRoles.includes(req.user.role)) {
-    return res.status(403).json({ error: 'Only admin, advertiser_manager, and advertiser can create campaign groups' });
+    return res.status(403).json({ error: 'Only admin, advertiser_manager, advertiser, and adv_executive can create campaign groups' });
   }
 
   const conn = await db.getConnection();
@@ -599,11 +699,33 @@ router.post('/custom', auth, async (req, res) => {
       [group_name, 'custom', req.user.id]
     );
     const groupId = result.insertId;
-    const memberIds = new Set([req.user.id, ...member_ids]);
+    
+    // 🔄 NEW: Always add all admins to custom groups
+    const allAdmins = await getAllAdminUsers(db.crmPool); // Use CRM DB for admin users
+    
+    // 🔄 NEW: Expand member_ids with hierarchy
+    let expandedMembers = [];
+    if (member_ids && Array.isArray(member_ids) && member_ids.length > 0) {
+      // Get full user objects for selected members
+      const [memberObjects] = await conn.query(
+        `SELECT id, full_name, email, role FROM users WHERE id IN (${member_ids.map(() => '?').join(',')})`,
+          member_ids
+      );
+      
+      // Expand with hierarchy using CRM database
+      expandedMembers = await expandUsersWithHierarchy(db.crmPool, memberObjects);
+    }
+    
+    const memberIds = new Set([
+      req.user.id,
+      ...allAdmins.map(u => u.id),
+      ...expandedMembers.map(u => u.id)
+    ].filter(Boolean));
+    
     for (const userId of memberIds) {
       await conn.query(
         'INSERT IGNORE INTO group_members (group_id, user_id, role, added_by) VALUES (?, ?, ?, ?)',
-        [groupId, userId, userId === req.user.id ? 'admin' : 'member', req.user.id]
+          [groupId, userId, userId === req.user.id ? 'admin' : 'member', req.user.id]
       );
     }
     await conn.commit();
@@ -639,6 +761,60 @@ router.post('/custom', auth, async (req, res) => {
   } finally { conn.release(); }
 });
 
+// Get users grouped by roles (for group creation)
+router.get('/users-by-roles', auth, async (req, res) => {
+  console.log('GET /api/groups/users-by-roles - called by user:', req.user?.role);
+  
+  try {
+    const crmPool = db.crmPool;
+    if (!crmPool) {
+      console.log('CRM database not configured');
+      return res.status(500).json({ error: 'CRM database not configured' });
+    }
+    
+    console.log('Fetching users from CRM database...');
+    
+    // Get all users from CRM database
+    const [allUsers] = await crmPool.query(
+      `SELECT id, username, role FROM login WHERE role IN ('pub_executive', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager') ORDER BY role, username`
+    );
+    
+    console.log('Found users:', allUsers.length, 'for roles');
+    
+    // Group users by role
+    const usersByRole = {
+      publisher_side: {
+        pub_executive: allUsers.filter(u => u.role === 'pub_executive'),
+        publisher: allUsers.filter(u => u.role === 'publisher'),
+        publisher_manager: allUsers.filter(u => u.role === 'publisher_manager')
+      },
+      advertiser_side: {
+        adv_executive: allUsers.filter(u => u.role === 'adv_executive'),
+        advertiser: allUsers.filter(u => u.role === 'advertiser'),
+        advertiser_manager: allUsers.filter(u => u.role === 'advertiser_manager')
+      }
+    };
+    
+    console.log('Users by role:', {
+      publisher_side: {
+        pub_executive: usersByRole.publisher_side.pub_executive.length,
+        publisher: usersByRole.publisher_side.publisher.length,
+        publisher_manager: usersByRole.publisher_side.publisher_manager.length
+      },
+      advertiser_side: {
+        adv_executive: usersByRole.advertiser_side.adv_executive.length,
+        advertiser: usersByRole.advertiser_side.advertiser.length,
+        advertiser_manager: usersByRole.advertiser_side.advertiser_manager.length
+      }
+    });
+    
+    res.json({ users_by_role: usersByRole });
+  } catch (err) {
+    console.error('Error fetching users by roles:', err);
+    res.status(500).json({ error: 'Failed to fetch users by roles' });
+  }
+});
+
 // Get group details + members
 router.get('/:groupId', auth, async (req, res) => {
   try {
@@ -663,6 +839,39 @@ router.get('/:groupId', auth, async (req, res) => {
     `, [groupId]);
     res.json({ group: groups[0], members });
   } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// Expand users with hierarchy (for group creation)
+router.post('/expand-hierarchy', auth, async (req, res) => {
+  try {
+    const { user_ids } = req.body;
+    
+    if (!user_ids || !Array.isArray(user_ids)) {
+      return res.status(400).json({ error: 'user_ids array required' });
+    }
+    
+    const conn = await db.getConnection();
+    
+    // Get full user objects for selected users
+    const [userObjects] = await conn.query(
+      `SELECT id, full_name, email, role FROM users WHERE id IN (${user_ids.map(() => '?').join(',')})`,
+      user_ids
+    );
+    
+    // Get CRM pool for hierarchy expansion and admin users
+    const crmPool = db.crmPool;
+    if (!crmPool) {
+      return res.status(500).json({ error: 'CRM database not configured' });
+    }
+    
+    // Expand with hierarchy using CRM database
+    const expandedUsers = await expandUsersWithHierarchy(crmPool, userObjects);
+    
+    res.json({ users: expandedUsers });
+  } catch (err) {
+    console.error('Hierarchy expansion error:', err);
+    res.status(500).json({ error: 'Failed to expand hierarchy' });
+  }
 });
 
 // Add member (also auto-add publisher_manager if publisher is added)
@@ -695,6 +904,20 @@ router.post('/:groupId/members', auth, async (req, res) => {
       [groupId, 'member_added', JSON.stringify({ user_id }), req.user.id]
     );
     await conn.commit();
+    
+    // Emit real-time member update to all group members
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`group_${groupId}`).emit('member_added', {
+        group_id: parseInt(groupId),
+        user_id: parseInt(user_id),
+        added_by: req.user.id,
+        added_by_name: req.user.full_name,
+        timestamp: new Date()
+      });
+      console.log('👥 Member added and emitted to group:', groupId);
+    }
+    
     res.json({ message: 'Member added' });
   } catch (err) {
     await conn.rollback();

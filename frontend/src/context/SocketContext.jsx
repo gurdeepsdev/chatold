@@ -80,9 +80,13 @@ socket.on('connect_error', err => {
       console.log('[Socket] task_update event received:', data);
     });
 
-socket.on('campaign_created', (data) => {
-  console.log('🔍 [SocketContext] campaign_created event received:', data);
-});
+    socket.on('message_deleted', (data) => {
+      console.log('[Socket] message_deleted event received:', data);
+    });
+
+    socket.on('campaign_created', (data) => {
+      console.log('🔍 [SocketContext] campaign_created event received:', data);
+    });
     socket.on('disconnect', reason => {
       setConnected(false);
       console.log('[Socket] disconnected:', reason);

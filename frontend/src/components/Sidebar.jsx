@@ -213,40 +213,160 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
     ? groups.filter(g => g.group_name?.toLowerCase().includes(search.toLowerCase()) || g.campaign_name?.toLowerCase().includes(search.toLowerCase()))
     : null;
 
-  // Sort groups: pinned groups first, then by last message time
-  // const sortedGroups = filteredGroups || groups;
-  // const groupsToRender = sortedGroups ? 
-  
-  //   [...sortedGroups].sort((a, b) => {
-  //     // Pinned groups come first
-  //     const aPinned = isGroupPinned(a.id);
-  //     const bPinned = isGroupPinned(b.id);
-  //     if (aPinned && !bPinned) return -1;
-  //     if (!aPinned && bPinned) return 1;
-  //     // If both pinned or both not pinned, sort by last message time
-  //     return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
-  //   }) : sortedGroups;
-const sortedGroups = filteredGroups || groups;
+  // Maintain backward compatibility for existing code
+  const sortedGroups = filteredGroups || groups;
+  const groupsToRender = sortedGroups ? 
+    [...sortedGroups].sort((a, b) => {
+      const aPinned = isGroupPinned(a.id);
+      const bPinned = isGroupPinned(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+    }) 
+    : sortedGroups;
 
-const groupsToRender = sortedGroups ? 
-  [...sortedGroups].sort((a, b) => {
-    const aPinned = isGroupPinned(a.id);
-    const bPinned = isGroupPinned(b.id);
+  // Helper to get thread group IDs
+  const validThreads = threads.filter(thread => (thread.groups || []).length > 1);
+  const threadGroupIds = new Set(
+    validThreads.flatMap(t => t.groups.map(g => g.id))
+  );
 
-    if (aPinned && !bPinned) return -1;
-    if (!aPinned && bPinned) return 1;
+  // Enhanced sorting function for unified Groups + Threads listing
+  const getUnifiedSortedItems = useCallback(() => {
+    if (search) {
+      // When searching, just return filtered groups
+      return groupsToRender.map(group => ({
+        type: 'group',
+        item: group,
+        priority: 0,
+        unreadCount: unreadCounts[group.id] || 0,
+        lastMessageAt: new Date(group.last_message_at || 0),
+        isPinned: isGroupPinned(group.id)
+      }));
+    }
 
-    return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
-  }) 
-  : sortedGroups;
+    const allItems = [];
 
+    // Add pinned groups
+    const pinnedGroupItems = groups
+      .filter(g => pinnedGroups.includes(g.id))
+      .map(group => ({
+        type: 'group',
+        item: group,
+        priority: 1, // Highest priority for pinned
+        unreadCount: unreadCounts[group.id] || 0,
+        lastMessageAt: new Date(group.last_message_at || 0),
+        isPinned: true
+      }));
 
-// ✅ YAHI ADD KARNA HAI (IMPORTANT)
-const validThreads = threads.filter(thread => (thread.groups || []).length > 1);
+    // Add threads with their groups
+    const threadItems = threads
+      .filter(thread => (thread.groups || []).length > 1)
+      .map(thread => {
+        const threadGroups = thread.groups || [];
+        const totalUnreadCount = threadGroups.reduce((sum, group) => 
+          sum + (unreadCounts[group.id] || 0), 0
+        );
+        const latestMessageAt = threadGroups.reduce((latest, group) => {
+          const groupTime = new Date(group.last_message_at || 0);
+          return groupTime > latest ? groupTime : latest;
+        }, new Date(0));
 
-const threadGroupIds = new Set(
-  validThreads.flatMap(t => t.groups.map(g => g.id))
-);
+        return {
+          type: 'thread',
+          item: thread,
+          priority: 0, // Normal priority for threads
+          unreadCount: totalUnreadCount,
+          lastMessageAt: latestMessageAt,
+          isPinned: false,
+          groups: threadGroups
+        };
+      });
+
+    // Add unpinned groups (not in threads)
+    const unpinnedGroupItems = groups
+      .filter(g => 
+        !pinnedGroups.includes(g.id) && !threadGroupIds.has(g.id)
+      )
+      .map(group => ({
+        type: 'group',
+        item: group,
+        priority: 0, // Normal priority for unpinned
+        unreadCount: unreadCounts[group.id] || 0,
+        lastMessageAt: new Date(group.last_message_at || 0),
+        isPinned: false
+      }));
+
+    allItems.push(...pinnedGroupItems, ...threadItems, ...unpinnedGroupItems);
+
+    // Sort items by priority and notification count
+    return allItems.sort((a, b) => {
+      // 1. Pinned items first
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+
+      // 2. Higher notification count first
+      if (a.unreadCount !== b.unreadCount) {
+        return b.unreadCount - a.unreadCount;
+      }
+
+      // 3. Latest activity first (secondary sorting)
+      return b.lastMessageAt - a.lastMessageAt;
+    });
+  }, [search, groupsToRender, groups, threads, pinnedGroups, unreadCounts, threadGroupIds, isGroupPinned]);
+
+  const renderUnifiedItem = (itemData) => {
+    const { type, item, unreadCount } = itemData;
+
+    if (type === 'thread') {
+      return (
+        <div key={item.package_id} className="thread-section">
+          <div className="thread-header" onClick={() => toggleThread(item.package_id)}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            </svg>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {(() => {
+                // Extract campaign name from crm_campaign_data JSON field
+                const firstGroup = item.groups?.[0];
+                if (firstGroup?.crm_campaign_data) {
+                  try {
+                    const crmData = typeof firstGroup.crm_campaign_data === 'string' 
+                      ? JSON.parse(firstGroup.crm_campaign_data) 
+                      : firstGroup.crm_campaign_data;
+                    if (crmData?.campaign_name) {
+                      return crmData.campaign_name;
+                    }
+                  } catch (e) {
+                    console.error('Failed to parse crm_campaign_data:', e);
+                  }
+                }
+                // Fallback to package_id if no campaign name found
+                return item.package_id.replace(/^com\./, '');
+              })()}
+            </span>
+            <span style={{ fontSize: 10, background: 'var(--bg-active)', padding: '1px 5px', borderRadius: 4 }}>
+              {item.groups.length}
+            </span>
+            {unreadCount > 0 && (
+              <span className="group-badge" style={{ background: 'var(--accent)', marginLeft: 4 }}>
+                {unreadCount}
+              </span>
+            )}
+            <svg
+              className={`thread-chevron ${expandedThreads[item.package_id] ? 'open' : ''}`}
+              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            >
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+          {expandedThreads[item.package_id] && item.groups.map(group => renderGroup(group, true))}
+        </div>
+      );
+    }
+
+    return renderGroup(item, false);
+  };
   const renderGroup = (group, isThreadGroup = false) => (
     <div
       key={group.id}
@@ -343,110 +463,32 @@ console.log("ALL GROUPS:", groupsToRender.map(g => g.id));
         />
       </div>
 
-      {/* Groups */}
+      {/* Groups - Unified Priority-Based Listing */}
       <div className="sidebar-groups">
         {loading ? (
           <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading groups...</div>
         ) : (
           <>
-            {/* Pinned Groups Section - Always at Top */}
-            {!search && pinnedGroups.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ 
-                  fontSize: 11, 
-                  fontWeight: 600, 
-                  color: 'var(--text-muted)', 
-                  marginBottom: 8,
-                  padding: '0 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}>
-                  📌 Pinned Groups ({pinnedGroups.length})
-                </div>
-                {groups
-                  .filter(g => pinnedGroups.includes(g.id))
-                  .sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0))
-                  .map(group => renderGroup(group, false))}
+            {getUnifiedSortedItems().length > 0 ? (
+              getUnifiedSortedItems().map(renderUnifiedItem)
+            ) : (
+              <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                {search ? 'No results' : 'No groups yet.<br/>Create one from a campaign.'}
               </div>
             )}
 
-            {search ? (
-              // Show filtered groups when searching
-              groupsToRender.length ? groupsToRender.map(renderGroup) : (
-                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No results</div>
-              )
-            ) : (
-              // Show threads and remaining individual groups when not searching
-              <>
-                {/* {threads.map(thread => ( */}
-                {threads
-  .filter(thread => (thread.groups || []).length > 1)
-  .map(thread => (
-                  <div key={thread.package_id} className="thread-section">
-                    {thread.package_id && !thread.package_id.startsWith('custom_') && (
-                      <div className="thread-header" onClick={() => toggleThread(thread.package_id)}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                        </svg>
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {(() => {
-                            // Extract campaign name from crm_campaign_data JSON field
-                            const firstGroup = thread.groups?.[0];
-                            if (firstGroup?.crm_campaign_data) {
-                              try {
-                                const crmData = typeof firstGroup.crm_campaign_data === 'string' 
-                                  ? JSON.parse(firstGroup.crm_campaign_data) 
-                                  : firstGroup.crm_campaign_data;
-                                if (crmData?.campaign_name) {
-                                  return crmData.campaign_name;
-                                }
-                              } catch (e) {
-                                console.error('Failed to parse crm_campaign_data:', e);
-                              }
-                            }
-                            // Fallback to package_id if no campaign name found
-                            return thread.package_id.replace(/^com\./, '');
-                          })()}
-                        </span>
-                        <span style={{ fontSize: 10, background: 'var(--bg-active)', padding: '1px 5px', borderRadius: 4 }}>
-                          {thread.groups.length}
-                        </span>
-                        <svg
-                          className={`thread-chevron ${expandedThreads[thread.package_id] ? 'open' : ''}`}
-                          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                        >
-                          <polyline points="9 18 15 12 9 6"/>
-                        </svg>
-                      </div>
-                    )}
-                    {expandedThreads[thread.package_id] && thread.groups.map(group => renderGroup(group, true))}
-                  </div>
-                ))}
-                
-                {/* Show ALL individual groups with pin buttons (excluding pinned ones to avoid duplication) */}
-                {/* {groupsToRender.filter(g => !pinnedGroups.includes(g.id)).map(renderGroup)} */}
-{groupsToRender
-  .filter(g => 
-    !pinnedGroups.includes(g.id) &&
-    !threadGroupIds.has(g.id)
-  )
-  .map(renderGroup)}
-              </>
+            {!loading && groups.length === 0 && !search && (
+              <div className="empty-state" style={{ padding: 40 }}>
+                <div className="empty-state-icon">🗂️</div>
+                <p>No groups yet.<br/>Create one from a campaign.</p>
+                {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser') && (
+                  <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
+                    Create Group
+                  </button>
+                )}
+              </div>
             )}
           </>
-        )}
-
-        {!loading && groups.length === 0 && !search && (
-          <div className="empty-state" style={{ padding: 40 }}>
-            <div className="empty-state-icon">🗂️</div>
-            <p>No groups yet.<br/>Create one from a campaign.</p>
-            {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser') && (
-              <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
-                Create Group
-              </button>
-            )}
-          </div>
         )}
       </div>
 

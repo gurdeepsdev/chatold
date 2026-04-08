@@ -41,8 +41,8 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
   const [showOptions, setShowOptions] = useState(false);
   const [localReactions, setLocalReactions] = useState(msg.reactions || []);
   const [showForwardModal, setShowForwardModal] = useState(false);
-  const [onDeleteMessageState, setOnDeleteMessageState] = useState(onDeleteMessage);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [onDeleteMessageState, setOnDeleteMessageState] = useState(null);
   const messageRef = useRef(null);
   
   // Sync local reactions with message reactions when they change
@@ -61,10 +61,15 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
 
   const handleDelete = async () => {
     try {
+      console.log('[ChatMessages] Attempting to delete message:', { messageId: msg.id, groupId: group.id, userId: user?.id });
       await messagesAPI.deleteMessage(group.id, msg.id);
-      onDeleteMessageState(msg.id);
+      if (onDeleteMessageState) {
+        onDeleteMessageState(msg.id);
+      }
       toast.success('Message deleted');
+      console.log('[ChatMessages] Message deleted successfully:', { messageId: msg.id });
     } catch (error) {
+      console.error('[ChatMessages] Delete failed:', { messageId: msg.id, error: error, errorDetails: error?.response?.data || error?.message });
       toast.error('Failed to delete message');
     }
   };
@@ -333,6 +338,20 @@ export default function ChatMessages({group,onTaskClick}){
       return; // Don't add own messages from socket - they come from API response
     }
     
+    // Handle real-time message deletion
+    if (msg.message_type === 'message_deleted' || (msg.message_id && msg.group_id && msg.deleted_by)) {
+      console.log('[ChatMessages] Removing deleted message from state:', msg.message_id);
+      // Remove the deleted message from the current state
+      setMessages(prev => prev.filter(m => m.id !== msg.message_id));
+      return; // Don't show deleted messages
+    }
+    
+    // Handle messages marked as deleted in database
+    if (msg.is_deleted) {
+      console.log('[ChatMessages] Hiding message marked as deleted:', msg.message_id);
+      return; // Don't show deleted messages
+    }
+    
     // For other users' messages, add them normally
     setMessages(prev => {
       if (prev.some(m => m.id === msg.id)) {
@@ -357,12 +376,20 @@ export default function ChatMessages({group,onTaskClick}){
     typingTmr.current=setTimeout(()=>setTypingUsers([]),3000);
   },[]);
 
+  const handleDeletedMessage=useCallback((data)=>{
+    if(Number(data.group_id)!==groupIdRef.current)return;
+    console.log('[ChatMessages] Received message_deleted event:', data);
+    // Remove the deleted message from the current state
+    setMessages(prev => prev.filter(m => m.id !== data.message_id));
+  },[]);
+
   useEffect(()=>{
     const unsubNewMsg=on('new_message',handleNewMsg);
     const unsubReaction=on('reaction_update',handleReactionUpdate);
     const unsubTyping=on('typing',handleTyping);
-    return()=>{unsubNewMsg();unsubReaction();unsubTyping();};
-  },[on,handleNewMsg,handleReactionUpdate,handleTyping]);
+    const unsubDeleted=on('message_deleted',handleDeletedMessage);
+    return()=>{unsubNewMsg();unsubReaction();unsubTyping();unsubDeleted();};
+  },[on,handleNewMsg,handleReactionUpdate,handleTyping,handleDeletedMessage]);
 
   const typingTmr=useRef(null);
 
