@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Backend runs on :5000, frontend on :3000
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5500';
+// Use environment variable for API URL
+const API_BASE = process.env.REACT_APP_API_URL;
 
 const api = axios.create({
   baseURL: `${API_BASE}/api`,
