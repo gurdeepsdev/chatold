@@ -15,7 +15,9 @@ require('fs').mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL,
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+        // origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com',
+
     methods: ['GET','POST','PUT','PATCH','DELETE'],
     credentials: true,
   },
@@ -32,7 +34,7 @@ const io = new Server(server, {
 app.set('io', io);
 app.set('UPLOAD_DIR', UPLOAD_DIR);  // routes can get it via req.app.get('UPLOAD_DIR')
 
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:3000', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));

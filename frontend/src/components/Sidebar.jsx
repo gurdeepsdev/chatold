@@ -141,24 +141,35 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
     });
 
     const unsubGroupCreated = on('group_created', (data) => {
+      console.log('Frontend received group_created event:', data);
+      console.log('Current user ID:', user?.id);
+      console.log('Current user full_name:', user?.full_name);
+      console.log('Group member_ids:', data.group?.member_ids);
+      console.log('Group created_by:', data.group?.created_by);
+      
       // Only add the group if the current user is a member
       if (data.group && (data.group.created_by === user?.full_name || data.group.member_ids?.includes(user?.id))) {
+        console.log('User is authorized to see this group');
         setGroups(prev => {
           // Check if group already exists to avoid duplicates
           const existingIndex = prev.findIndex(g => g.id === data.group.id);
           if (existingIndex >= 0) {
             // Update existing group
+            console.log('Updating existing group');
             return prev.map((g, index) => 
               index === existingIndex ? { ...g, ...data.group } : g
             );
           } else {
             // Add new group at the beginning
+            console.log('Adding new group to list');
             return [data.group, ...prev];
           }
         });
         
         // Refresh groups list to get latest data
         loadGroups();
+      } else {
+        console.log('User NOT authorized to see this group');
       }
     });
 

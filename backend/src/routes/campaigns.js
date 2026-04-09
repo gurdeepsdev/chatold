@@ -150,16 +150,18 @@ console.log(campaigns,"data")
       }
     });
 
-    // 🔹 STEP 4: Extract sub_ids (deduplicated by user_id + sub_campaign_id)
+    // 🔹 STEP 4: Extract sub_ids (deduplicated by user_id + sub_campaign_id + adv_d)
     const subIdMap = new Map();
     campaigns.forEach(c => {
       if (c.sub_campaign_id) {
         // Use composite key to ensure each user sees their own campaigns
-        const compositeKey = `${c.sub_campaign_id}_${c.user_id}`;
+        // Include adv_d to create separate campaigns when they differ
+        const compositeKey = `${c.sub_campaign_id}_${c.user_id}_${c.adv_d || 'null'}`;
         subIdMap.set(compositeKey, {
           sub_id: c.sub_campaign_id,
           campaign_name: c.campaign_name,
-          user_id: c.user_id
+          user_id: c.user_id,
+          adv_d: c.adv_d
         });
       }
     });

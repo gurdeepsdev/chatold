@@ -433,6 +433,11 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                             </div>
                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                               {row.campaign_name}
+                              {row.adv_d && (
+                                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '4px' }}>
+                                  ({row.adv_d})
+                                </span>
+                              )}
                             </div>
                           </div>
                         ))

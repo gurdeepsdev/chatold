@@ -8,7 +8,7 @@ import { useSocket } from '../../context/SocketContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TaskDetailsModal from './TaskDetailsModal';
-import { groupsAPI, authAPI, tasksAPI } from '../../utils/api';
+import { groupsAPI, authAPI, tasksAPI, getFileUrl } from '../../utils/api';
 
 export const TASK_TYPES={
   initial_setup:{label:'Initial Setup',icon:'🚀',color:'#a855f7'},
@@ -175,6 +175,37 @@ export default function TasksPanel({group, taskTarget}){
   const [members,setMembers]=useState([]);
   const [form,setForm]=useState(emptyForm());
   const [creating,setCreating]=useState(false);
+  const [uploadingFile, setUploadingFile] = useState(null);
+
+  // File upload function for tasks (no auth required)
+  const handleTaskFileUpload = async (file) => {
+    try {
+      setUploadingFile(file.name);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/tasks/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+      
+      const result = await response.json();
+      console.log('Task file uploaded:', result.file);
+      return result.file;
+    } catch (error) {
+      console.error('Task file upload error:', error);
+      toast.error(error.message || 'Failed to upload file');
+      return null;
+    } finally {
+      setUploadingFile(null);
+    }
+  };
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskDetails, setTaskDetails] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -414,7 +445,16 @@ export default function TasksPanel({group, taskTarget}){
                           type="file" 
                           style={{display:'none'}} 
                           id={`file-${entryIndex}`}
-                          onChange={e => updateOptimiseEntry(entryIndex, 'attachment', e.target.files[0])}
+                          onChange={async e => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              const uploadedFile = await handleTaskFileUpload(file);
+                              if (uploadedFile) {
+                                updateOptimiseEntry(entryIndex, 'attachment', uploadedFile.url);
+                                updateOptimiseEntry(entryIndex, 'attachment_name', uploadedFile.originalname);
+                              }
+                            }
+                          }}
                         />
                         <button
                           type="button"
@@ -433,10 +473,13 @@ export default function TasksPanel({group, taskTarget}){
                         </button>
                         {entry.attachment && (
                           <span style={{fontSize:9,color:'rgba(255,255,255,0.7)'}}>
-                            {entry.attachment.name}
+                            {entry.attachment_name || entry.attachment.split('/').pop()}
                             <button
                               type="button"
-                              onClick={() => updateOptimiseEntry(entryIndex, 'attachment', null)}
+                              onClick={() => {
+                                updateOptimiseEntry(entryIndex, 'attachment', null);
+                                updateOptimiseEntry(entryIndex, 'attachment_name', null);
+                              }}
                               style={{background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.5)',marginLeft:2}}
                             >
                               ✕
@@ -673,14 +716,12 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
       );
       if (validOptimiseEntries.length === 0) {
         return toast.error('Please fill in at least one entry (PubID, PID, FP, FA, F1, F2, or Scenario)');
-
       }
-       // 🔥 NEW VALIDATION (IMPORTANT)
-  const invalidAssign = form.optimise_entries.some(entry => !entry.assigned_to);
-
-  if (invalidAssign) {
-    return toast.error('Please select "Assign To" for all entries');
-  }
+      // 🔥 NEW VALIDATION (IMPORTANT)
+      const invalidAssign = form.optimise_entries.some(entry => !entry.assigned_to);
+      if (invalidAssign) {
+        return toast.error('Please select "Assign To" for all entries');
+      }
     }
     setCreating(true);
     try{
@@ -695,41 +736,27 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
         if(form.task_type === 'optimise') {
           // Process optimise entries to handle attachments properly
           console.log('🔍 Raw optimise_entries before processing:', form.optimise_entries);
-          const processedOptimiseEntries = form.optimise_entries.map((entry, index) => {
+          payload.optimise_entries = form.optimise_entries.map((entry, index) => {
             console.log(`🔍 Processing optimise entry ${index}:`, entry);
             const processedEntry = {
               ...entry,
-              attachment: entry.attachment ? entry.attachment.name || entry.attachment.filename : null,
-              attachment_name: entry.attachment ? entry.attachment.name || entry.attachment.filename : null
+              attachment: entry.attachment, // Already contains the URL from upload
+              attachment_name: entry.attachment_name
             };
             console.log(`🔍 Processed optimise entry ${index}:`, processedEntry);
             return processedEntry;
           });
-          console.log('🔍 Final processed optimise_entries:', processedOptimiseEntries);
-          payload.append('optimise_entries',JSON.stringify(processedOptimiseEntries));
+          console.log('🔍 Final processed optimise_entries:', payload.optimise_entries);
+          payload.append('optimise_entries',JSON.stringify(payload.optimise_entries));
         }
-        payload.append('attachment',form.attachment);
+        // Remove direct file attachment since we're using upload endpoint
+        // payload.append('attachment',form.attachment);
       }else{
         payload={group_id:group.id,campaign_id:group.campaign_id,...form};
         delete payload.attachment;
         if(form.task_type !== 'share_link') delete payload.entries;
         if(form.task_type !== 'pause_pid') delete payload.pause_entries;
         if(form.task_type !== 'optimise') delete payload.optimise_entries;
-        else {
-          // Process optimise entries to handle attachments properly
-          console.log('🔍 Raw optimise_entries before processing (else):', form.optimise_entries);
-          payload.optimise_entries = form.optimise_entries.map((entry, index) => {
-            console.log(`🔍 Processing optimise entry ${index} (else):`, entry);
-            const processedEntry = {
-              ...entry,
-              attachment: entry.attachment ? entry.attachment.name || entry.attachment.filename : null,
-              attachment_name: entry.attachment ? entry.attachment.name || entry.attachment.filename : null
-            };
-            console.log(`🔍 Processed optimise entry ${index} (else):`, processedEntry);
-            return processedEntry;
-          });
-          console.log('🔍 Final processed optimise_entries (else):', payload.optimise_entries);
-        }
       }
       console.log('🔍 Frontend Task Payload:', payload);
       const data=await tasksAPI.create(payload);

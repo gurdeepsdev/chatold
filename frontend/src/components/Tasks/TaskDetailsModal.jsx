@@ -11,10 +11,52 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
   // File download utility function
   const getFileDownloadUrl = (attachmentUrl) => {
     if (!attachmentUrl) return '#';
+    
+    console.log('getFileDownloadUrl - attachmentUrl:', attachmentUrl);
+    
+    // If it's already a full URL, return as-is
+    if (attachmentUrl.startsWith('http')) {
+      return attachmentUrl;
+    }
+    
+    // If it's already a relative path starting with /uploads/, use direct URL
+    if (attachmentUrl.startsWith('/uploads/')) {
+      const fullUrl = `${process.env.REACT_APP_API_URL}${attachmentUrl}`;
+      console.log('getFileDownloadUrl - fullUrl:', fullUrl);
+      return fullUrl;
+    }
+    
+    // For backward compatibility with old format (just filename)
     const fileName = attachmentUrl.split('/').pop();
-    // Use the dedicated download API endpoint
     const encodedFileName = encodeURIComponent(fileName);
-    return `/api/tasks/download/${encodedFileName}`;
+    const fullUrl = `${process.env.REACT_APP_API_URL}/uploads/${encodedFileName}`;
+    console.log('getFileDownloadUrl - extracted fileName:', fileName);
+    console.log('getFileDownloadUrl - fullUrl:', fullUrl);
+    return fullUrl;
+  };
+
+  // Simple file download function - direct URL like chat
+  const handleFileDownload = async (attachmentUrl, attachmentName) => {
+    try {
+      const downloadUrl = getFileDownloadUrl(attachmentUrl);
+      if (downloadUrl === '#') return;
+
+      console.log('Downloading file from:', downloadUrl);
+      
+      // Create download link for direct URL (like chat system)
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = attachmentName || 'attachment';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log('File download initiated');
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('Failed to download file. Please try again.');
+    }
   };
 
   if (!task) return null;
@@ -276,26 +318,27 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                       {subTask.attachment_url && (
                         <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
                           <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginBottom: '4px' }}>Attachment</div>
-                          <a 
-                            href={getFileDownloadUrl(subTask.attachment_url)}
-                            download={subTask.attachment_name || 'attachment'}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            onClick={() => handleFileDownload(subTask.attachment_url, subTask.attachment_name)}
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '6px',
+                              gap: '4px',
                               color: 'var(--accent)',
                               fontSize: '11px',
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              background: 'var(--bg-active)',
+                              marginTop: '4px',
+                              textDecoration: 'none',
+                              background: 'var(--bg-primary)',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
                               border: '1px solid var(--border)',
-                              textDecoration: 'none'
+                              cursor: 'pointer'
                             }}
                           >
-                            📎 {subTask.attachment_name || 'Download File'} ⬇
-                          </a>
+                            <span>Download</span>
+                            <span> {subTask.attachment_name || 'File'} </span>
+                            <span>...</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -442,26 +485,27 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                   {task.attachment_url && (
                     <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
                       <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginBottom: '4px' }}>Attachment</div>
-                      <a 
-                        href={getFileDownloadUrl(task.attachment_url)}
-                        download={task.attachment_name || 'attachment'}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        onClick={() => handleFileDownload(task.attachment_url, task.attachment_name)}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '6px',
+                          gap: '4px',
                           color: 'var(--accent)',
                           fontSize: '11px',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          background: 'var(--bg-active)',
+                          marginTop: '4px',
+                          textDecoration: 'none',
+                          background: 'var(--bg-primary)',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
                           border: '1px solid var(--border)',
-                          textDecoration: 'none'
+                          cursor: 'pointer'
                         }}
                       >
-                        📎 {task.attachment_name || 'Download File'} ⬇
-                      </a>
+                        <span>Download</span>
+                        <span> {task.attachment_name || 'File'} </span>
+                        <span>...</span>
+                      </button>
                     </div>
                   )}
 

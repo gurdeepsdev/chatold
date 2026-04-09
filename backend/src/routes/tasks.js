@@ -914,73 +914,27 @@ router.get('/followups/group/:groupId',auth,async(req,res)=>{
   res.json({ followups: r });
 });
 
-// File download endpoint
-router.get('/download/:filename', auth, async (req, res) => {
+// Task file upload endpoint - similar to chat upload (no auth required)
+router.post('/upload', upload.single('file'), async (req, res) => {
   try {
-    const { filename } = req.params;
-    const UPLOAD_DIR = req.app.get('UPLOAD_DIR');
-    const filePath = path.join(UPLOAD_DIR, filename);
-
-    // Security check - ensure file is within uploads directory
-    const normalizedPath = path.normalize(filePath);
-    if (!normalizedPath.startsWith(UPLOAD_DIR)) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    // Get file info
-    const stats = fs.statSync(filePath);
-
-    // Set appropriate headers
-    res.setHeader('Content-Type', getMimeType(filename));
-    res.setHeader('Content-Length', stats.size);
-    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
-
-    // Force download for non-image/audio files
-    const ext = path.extname(filename).toLowerCase();
-    const inline = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp3', '.wav', '.ogg', '.webm', '.m4a'];
-    if (!inline.includes(ext)) {
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    } else {
-      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-    }
-
-    // Send file
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
-
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+    
+    // Return file info similar to chat system
+    const relPath = `${file.filename}`;
+    const fileInfo = {
+      filename: file.filename,
+      originalname: file.originalname,
+      size: file.size,
+      mimetype: file.mimetype,
+      url: relPath
+    };
+    
+    res.status(201).json({ file: fileInfo });
   } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).json({ error: 'Download failed' });
+    console.error('Task upload error:', error);
+    res.status(500).json({ error: 'Upload failed' });
   }
 });
-
-// Helper function to get MIME type
-function getMimeType(filename) {
-  const ext = path.extname(filename).toLowerCase();
-  const mimeTypes = {
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp',
-    '.pdf': 'application/pdf',
-    '.doc': 'application/msword',
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    '.xls': 'application/vnd.ms-excel',
-    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    '.csv': 'text/csv',
-    '.txt': 'text/plain',
-    '.zip': 'application/zip',
-    '.mp3': 'audio/mpeg',
-    '.wav': 'audio/wav',
-    '.ogg': 'audio/ogg'
-  };
-  return mimeTypes[ext] || 'application/octet-stream';
-}
 
 module.exports = router;
