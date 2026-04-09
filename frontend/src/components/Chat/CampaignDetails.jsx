@@ -64,7 +64,6 @@ export default function CampaignDetails({ group }) {
     navigator.clipboard.writeText(details).then(() => {
       toast.success('Campaign details copied to clipboard!');
     }).catch(err => {
-      console.error('Failed to copy campaign details:', err);
       toast.error('Failed to copy campaign details');
     });
   };

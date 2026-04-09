@@ -17,10 +17,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res.data,
   (err) => {
-    console.error('API Error:', err);
     // Only logout on actual authentication errors, not temporary connection issues
     if (err.response?.status === 401 && err.response?.data?.error !== 'Authentication failed') {
-      console.log('Authentication error - logging out');
       localStorage.removeItem('crm_chat_token');
       window.location.href = '/';
     }

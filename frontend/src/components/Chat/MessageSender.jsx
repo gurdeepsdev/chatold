@@ -12,7 +12,6 @@ const MessageSender = ({
   replyTo = null,
   onReplyCancel = null 
 }) => {
-  console.log('🔍 MessageSender props:', { groupId, onMessageSent, currentUser, replyTo });
   
   const [content, setContent] = useState('');
   const [recipientId, setRecipientId] = useState(''); // 🔄 Back to single recipient
@@ -53,7 +52,6 @@ const MessageSender = ({
       const data = await messagesAPI.getRecipients(groupId);
       setRecipients(data.recipients || []);
     } catch (error) {
-      console.error('Failed to load recipients:', error);
     } finally {
       setLoadingRecipients(false);
     }
@@ -65,7 +63,6 @@ const MessageSender = ({
       setAssignmentInfo(info);
       setShowSecondaryOption(info.isAssigned && info.secondaryUsers.length > 0);
     } catch (error) {
-      console.error('Failed to load assignment info:', error);
       setAssignmentInfo(null);
       setShowSecondaryOption(false);
     }
@@ -82,7 +79,6 @@ const MessageSender = ({
       }
       
       if (typeof content === 'undefined') {
-        console.error('❌ content is undefined');
         alert('Please enter a message.');
         return;
       }
@@ -92,7 +88,6 @@ const MessageSender = ({
         return;
       }
 
-      console.log('📤 Sending message:', { recipientId, secondaryRecipientId, content: content.trim() });
 
       setLoading(true);
       
@@ -123,7 +118,6 @@ const MessageSender = ({
       }
 
     } catch (error) {
-      console.error('❌ Message send error:', error);
       alert(error?.error || 'Failed to send message');
     } finally {
       setLoading(false);
@@ -212,7 +206,6 @@ const MessageSender = ({
 
       toast.success(`${file.name} uploaded successfully!`, { id: 'file-upload' });
     } catch (error) {
-      console.error('File upload error:', error);
       const errorMessage = error.error || 'Failed to upload file';
       toast.error(errorMessage, { id: 'file-upload' });
     } finally {
@@ -221,7 +214,6 @@ const MessageSender = ({
   };
 
   const handleTaskClick = () => {
-    console.log('Task button clicked, opening popup...');
     setShowTaskPopup(true);
   };
 

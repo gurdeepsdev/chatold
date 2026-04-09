@@ -7,7 +7,6 @@ export async function registerServiceWorker(){
   if(!('serviceWorker' in navigator))return null;
   try{
     const reg=await navigator.serviceWorker.register('/service-worker.js',{scope:'/'});
-    console.log('[PWA] SW registered');
     return reg;
   }catch(e){console.error('[PWA] SW failed',e);return null;}
 }

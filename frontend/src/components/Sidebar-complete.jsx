@@ -46,7 +46,6 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       
       // Join all group rooms for real-time updates
       if (data.groups && data.groups.length > 0) {
-        console.log('[Sidebar] Joining group rooms:', data.groups.map(g => g.id));
         data.groups.forEach(group => {
           if (group.id) {
             joinGroup(group.id);
@@ -54,7 +53,6 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
         });
       }
     } catch (error) {
-      console.error('Failed to load groups:', error);
       toast.error('Failed to load groups');
     } finally {
       setLoading(false);

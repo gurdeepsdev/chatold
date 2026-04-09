@@ -307,7 +307,6 @@ router.get('/:groupId/recipients', auth, checkMember, async (req, res) => {
     
     res.json({ recipients });
   } catch (error) {
-    console.error('Error getting recipients:', error);
     res.status(500).json({ error: 'Failed to get recipients' });
   }
 });
@@ -327,7 +326,6 @@ router.get('/:groupId/assignment/:recipientId', auth, checkMember, async (req, r
     
     res.json(assignmentInfo);
   } catch (error) {
-    console.error('Error getting assignment info:', error);
     res.status(500).json({ error: 'Failed to get assignment info' });
   }
 });
@@ -401,12 +399,6 @@ router.post('/:groupId/upload',auth,checkMember,upload.single('file'),async(req,
     if(io)io.to(`group_${groupId}`).emit('new_message',message);
     await pushToMembers(io,groupId,req.user.id,message,grp?.group_name||'');
     
-    console.log('✅ File uploaded successfully:', {
-      name: file.originalname,
-      size: file.size,
-      type: file.mimetype,
-      msgType: msgType
-    });
     
     res.status(201).json({message});
   }catch(e){
@@ -430,7 +422,6 @@ router.delete('/:groupId/:messageId',auth,async(req,res)=>{
       deleted_by: req.user.id,
       deleted_by_name: req.user.full_name
     });
-    console.log('🗑️ Message deleted and emitted to group:', req.params.groupId);
   }else{
     console.log('Socket.io not available');
   }
@@ -477,7 +468,6 @@ router.post('/:groupId/:messageId/reaction',auth,checkMember,async(req,res)=>{
           user_name: r.user_name
         }))
       };
-      console.log('Emitting reaction_update:', eventData);
       io.to(`group_${groupId}`).emit('reaction_update', eventData);
     }else{
       console.log('Socket.io not available');
@@ -519,7 +509,6 @@ router.delete('/:groupId/:messageId/reaction',auth,checkMember,async(req,res)=>{
           user_name: r.user_name
         }))
       };
-      console.log('Emitting reaction_update:', eventData);
       io.to(`group_${groupId}`).emit('reaction_update', eventData);
     }else{
       console.log('Socket.io not available');
@@ -537,9 +526,7 @@ router.delete('/:groupId/:messageId/reaction',auth,checkMember,async(req,res)=>{
 router.get('/unread-counts', auth, async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log('=== UNREAD COUNTS DEBUG ===');
-    console.log('User ID:', userId, 'User:', req.user.full_name);
-    
+
     // Get all groups the user is a member of
     const [groups] = await db.query(`
       SELECT DISTINCT g.id 
@@ -549,12 +536,10 @@ router.get('/unread-counts', auth, async (req, res) => {
     `, [userId]);
     
     if (groups.length === 0) {
-      console.log('No groups found for user');
       return res.json({ unreadCounts: {} });
     }
     
     const groupIds = groups.map(g => g.id);
-    console.log('User groups:', groupIds);
     
     // Get unread message counts for each group
     const [unreadCounts] = await db.query(`
@@ -570,12 +555,10 @@ router.get('/unread-counts', auth, async (req, res) => {
       GROUP BY m.group_id
     `, [userId, ...groupIds, userId, userId, userId]);
     
-    console.log('Unread counts result:', unreadCounts);
     
     // Debug first group if available
     if (unreadCounts.length > 0) {
       const firstUnread = unreadCounts[0];
-      console.log(`\n--- Debug Group ${firstUnread.group_id} ---`);
       
       // Check all unread messages for this group
       const [allUnread] = await db.query(`
@@ -599,12 +582,9 @@ router.get('/unread-counts', auth, async (req, res) => {
         LIMIT 5
       `, [userId, firstUnread.group_id, userId]);
       
-      console.log('All unread messages in group:');
       allUnread.forEach(m => {
         const isUserRecipient = m.recipient_id === userId || m.secondary_recipient_id === userId;
-        console.log(`  ID ${m.id}: ${m.sender_name} -> ${m.recipient_name || 'NULL'}${m.secondary_name ? ' + ' + m.secondary_name : ''} (User is recipient: ${isUserRecipient})`);
       });
-      console.log('============================\n');
     }
     
     // Convert to object with group_id as key
@@ -615,7 +595,6 @@ router.get('/unread-counts', auth, async (req, res) => {
     
     res.json({ unreadCounts: countsMap });
   } catch (error) {
-    console.error('Failed to get unread counts:', error);
     res.status(500).json({ error: 'Failed to get unread counts' });
   }
 });

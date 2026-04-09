@@ -196,10 +196,8 @@ export default function TasksPanel({group, taskTarget}){
       }
       
       const result = await response.json();
-      console.log('Task file uploaded:', result.file);
       return result.file;
     } catch (error) {
-      console.error('Task file upload error:', error);
       toast.error(error.message || 'Failed to upload file');
       return null;
     } finally {
@@ -516,13 +514,11 @@ export default function TasksPanel({group, taskTarget}){
 
   useEffect(()=>{
     const unsub=on('task_update',({action,task,task_id,status,response,updated_by})=>{
-      console.log('Task update event received:', { action, task, task_id, status, response, updated_by, currentUserId: user?.id });
       
       if(action==='status_changed'){
         // Update task status in the list with single state update
         setTasks(prev => {
           const updatedTasks = prev.map(t=>t.id===task_id?{...t,status}:t);
-          console.log('Updated task status in list:', updatedTasks);
           return updatedTasks;
         });
         // Force re-render
@@ -546,7 +542,6 @@ export default function TasksPanel({group, taskTarget}){
           setTasks(prev => {
             // Avoid duplicates
             if(!prev.find(t => t.id === task.id)) {
-              console.log('Adding created task to list:', task);
               // Force re-render
               setRefreshKey(prev => prev + 1);
               return [task,...prev];
@@ -561,9 +556,7 @@ export default function TasksPanel({group, taskTarget}){
 
   // Listen for real-time task assignments
   useEffect(()=>{
-    console.log('[TasksPanel] Setting up task_assigned listener, connected:', on);
     const unsub=on('task_assigned',({task,subTasks,assigned_by,message,group_id})=>{
-      console.log('[TasksPanel] Task assigned event received:', { task, subTasks, assigned_by, message, group_id, currentGroupId: group?.id, currentUserId: user?.id });
       
       // Only add task if it's for current user's group
       if(group_id === group?.id) {
@@ -580,20 +573,17 @@ export default function TasksPanel({group, taskTarget}){
         );
         
         if(shouldShowMainTask) {
-          console.log('[TasksPanel] Adding main task to list:', task);
           tasksToAdd.push(task);
         }
         
         // Add sub-tasks if any (only those assigned to current user)
         if(subTasks && subTasks.length > 0) {
           const userSubTasks = subTasks.filter(st => st.assigned_to === user?.id || st.assigned_by === user?.id);
-          console.log('[TasksPanel] Adding sub-tasks:', userSubTasks);
           tasksToAdd.push(...userSubTasks);
         }
         
         // Single state update to prevent race conditions
         if(tasksToAdd.length > 0) {
-          console.log('[TasksPanel] Adding all tasks to state:', tasksToAdd);
           setTasks(prev => {
             const newTasks = [...prev];
             // Add tasks in order and avoid duplicates
@@ -602,7 +592,6 @@ export default function TasksPanel({group, taskTarget}){
                 newTasks.unshift(newTask);
               }
             });
-            console.log('[TasksPanel] Updated task list:', newTasks);
             return newTasks;
           });
           // Force re-render
@@ -617,11 +606,9 @@ export default function TasksPanel({group, taskTarget}){
 
   // Listen for new task notifications (when tasks are created)
   useEffect(()=>{
-    console.log('[TasksPanel] Setting up new_message listener for task notifications, connected:', on);
     const unsub=on('new_message',(msg)=>{
       // Only handle task notifications
       if(msg.message_type === 'task_notification' && Number(msg.group_id) === group?.id) {
-        console.log('[TasksPanel] New task notification received:', msg);
         
         // Reload tasks to get complete task data with user names
         load();
@@ -635,11 +622,9 @@ export default function TasksPanel({group, taskTarget}){
 
   // Listen for member updates (when members are added to group)
   useEffect(()=>{
-    console.log('[TasksPanel] Setting up member_added listener, connected:', on);
     const unsub=on('member_added',(data)=>{
       // Only handle member updates for current group
       if(Number(data.group_id) === group?.id) {
-        console.log('[TasksPanel] Member added event received:', data);
         
         // Reload group members to update the dropdown
         groupsAPI.getById(group.id).then(d => setMembers(d.members || []));
@@ -735,18 +720,14 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
         if(form.task_type === 'pause_pid') payload.append('pause_entries',JSON.stringify(form.pause_entries));
         if(form.task_type === 'optimise') {
           // Process optimise entries to handle attachments properly
-          console.log('🔍 Raw optimise_entries before processing:', form.optimise_entries);
           payload.optimise_entries = form.optimise_entries.map((entry, index) => {
-            console.log(`🔍 Processing optimise entry ${index}:`, entry);
             const processedEntry = {
               ...entry,
               attachment: entry.attachment, // Already contains the URL from upload
               attachment_name: entry.attachment_name
             };
-            console.log(`🔍 Processed optimise entry ${index}:`, processedEntry);
             return processedEntry;
           });
-          console.log('🔍 Final processed optimise_entries:', payload.optimise_entries);
           payload.append('optimise_entries',JSON.stringify(payload.optimise_entries));
         }
         // Remove direct file attachment since we're using upload endpoint
@@ -758,7 +739,6 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
         if(form.task_type !== 'pause_pid') delete payload.pause_entries;
         if(form.task_type !== 'optimise') delete payload.optimise_entries;
       }
-      console.log('🔍 Frontend Task Payload:', payload);
       const data=await tasksAPI.create(payload);
       if(data.subTasks && data.subTasks.length > 0){
         setTasks(prev=>[...(data.task ? [data.task] : []),...prev,...data.subTasks]);

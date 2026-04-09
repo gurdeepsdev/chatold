@@ -61,15 +61,12 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
 
   const handleDelete = async () => {
     try {
-      console.log('[ChatMessages] Attempting to delete message:', { messageId: msg.id, groupId: group.id, userId: user?.id });
       await messagesAPI.deleteMessage(group.id, msg.id);
       if (onDeleteMessageState) {
         onDeleteMessageState(msg.id);
       }
       toast.success('Message deleted');
-      console.log('[ChatMessages] Message deleted successfully:', { messageId: msg.id });
     } catch (error) {
-      console.error('[ChatMessages] Delete failed:', { messageId: msg.id, error: error, errorDetails: error?.response?.data || error?.message });
       toast.error('Failed to delete message');
     }
   };
@@ -340,7 +337,6 @@ export default function ChatMessages({group,onTaskClick}){
     
     // Handle real-time message deletion
     if (msg.message_type === 'message_deleted' || (msg.message_id && msg.group_id && msg.deleted_by)) {
-      console.log('[ChatMessages] Removing deleted message from state:', msg.message_id);
       // Remove the deleted message from the current state
       setMessages(prev => prev.filter(m => m.id !== msg.message_id));
       return; // Don't show deleted messages
@@ -348,7 +344,6 @@ export default function ChatMessages({group,onTaskClick}){
     
     // Handle messages marked as deleted in database
     if (msg.is_deleted) {
-      console.log('[ChatMessages] Hiding message marked as deleted:', msg.message_id);
       return; // Don't show deleted messages
     }
     
@@ -378,7 +373,6 @@ export default function ChatMessages({group,onTaskClick}){
 
   const handleDeletedMessage=useCallback((data)=>{
     if(Number(data.group_id)!==groupIdRef.current)return;
-    console.log('[ChatMessages] Received message_deleted event:', data);
     // Remove the deleted message from the current state
     setMessages(prev => prev.filter(m => m.id !== data.message_id));
   },[]);

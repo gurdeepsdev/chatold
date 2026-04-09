@@ -41,7 +41,6 @@ const F_OPTIONS = ['F1', 'F2', 'F3', 'F4'];
  * No full-screen overlay — just a contained card.
  */
 export default function TaskQuickPopup({ group, onClose, initialType }) {
-  console.log('TaskQuickPopup rendered with group:', group);
   const { user } = useAuth();
   const [users,    setUsers]    = useState([]);
   const [form,     setForm]     = useState(empty(initialType || 'share_link'));

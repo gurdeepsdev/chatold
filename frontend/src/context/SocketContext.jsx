@@ -37,8 +37,7 @@ export const SocketProvider = ({ children, token }) => {
     const apiUrl = process.env.REACT_APP_API_URL;
     const socketUrl = apiUrl.replace('/api', '');
 
-    console.log('[Socket] Connecting to:', socketUrl);
-    console.log('[Socket] API URL:', apiUrl);
+
 
     //   auth: { token },
     //   reconnectionAttempts: Infinity,
@@ -59,36 +58,28 @@ export const SocketProvider = ({ children, token }) => {
 });
 socket.on('connect', () => {
   setConnected(true);
-  console.log('🔍 [Socket] connected with ID:', socket.id);
-  console.log('🔍 [Socket] User ID from token:', socket.user?.id);
-  console.log('🔍 [Socket] Socket available for events:', !!socket);
+
   reattach(socket);
   rejoin(socket);
 });
 
 socket.on('connect_error', err => {
-  console.error('🔍 [Socket] Connection error:', err);
-  console.error('🔍 [Socket] Error details:', err.message);
+
 });
 
     socket.on('task_assigned', (data) => {
-      console.log('[Socket] task_assigned event received:', data);
     });
 
     socket.on('task_update', (data) => {
-      console.log('[Socket] task_update event received:', data);
     });
 
     socket.on('message_deleted', (data) => {
-      console.log('[Socket] message_deleted event received:', data);
     });
 
     socket.on('campaign_created', (data) => {
-      console.log('🔍 [SocketContext] campaign_created event received:', data);
     });
     socket.on('disconnect', reason => {
       setConnected(false);
-      console.log('[Socket] disconnected:', reason);
     });
 
     socket.on('connect_error', err => console.warn('[Socket] error:', err.message));

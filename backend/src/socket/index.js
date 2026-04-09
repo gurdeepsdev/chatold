@@ -21,10 +21,30 @@ module.exports = (io) => {
 
   io.on('connection', async (socket) => {
     const userId = socket.user.id;
-    console.log(`🔌 User connected: ${socket.user.full_name} (${socket.id})`);
 
-    // Update online status
+    // Update online status asynchronously with retry logic (non-blocking connection)
+    setImmediate(async () => {
+      let retryCount = 0;
+      const maxRetries = 3;
+      const baseDelay = 500; // 500ms base delay
+      
+      while (retryCount < maxRetries) {
+        try {
     await db.query('UPDATE users SET is_online = TRUE WHERE id = ?', [userId]);
+          break; // Success - exit retry loop
+        } catch (err) {
+          if (err.code === 'ER_LOCK_WAIT_TIMEOUT' && retryCount < maxRetries - 1) {
+            retryCount++;
+            const delay = baseDelay * Math.pow(2, retryCount - 1);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          } else {
+            console.error('Failed to update socket online status (non-critical):', err.message);
+            break; // Don't throw - non-critical operation
+          }
+        }
+      }
+    });
     
 // Join user's groups
 const [groups] = await db.query(

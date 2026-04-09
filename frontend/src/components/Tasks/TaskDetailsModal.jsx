@@ -12,7 +12,6 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
   const getFileDownloadUrl = (attachmentUrl) => {
     if (!attachmentUrl) return '#';
     
-    console.log('getFileDownloadUrl - attachmentUrl:', attachmentUrl);
     
     // If it's already a full URL, return as-is
     if (attachmentUrl.startsWith('http')) {
@@ -22,7 +21,6 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
     // If it's already a relative path starting with /uploads/, use direct URL
     if (attachmentUrl.startsWith('/uploads/')) {
       const fullUrl = `${process.env.REACT_APP_API_URL}${attachmentUrl}`;
-      console.log('getFileDownloadUrl - fullUrl:', fullUrl);
       return fullUrl;
     }
     
@@ -30,8 +28,7 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
     const fileName = attachmentUrl.split('/').pop();
     const encodedFileName = encodeURIComponent(fileName);
     const fullUrl = `${process.env.REACT_APP_API_URL}/uploads/${encodedFileName}`;
-    console.log('getFileDownloadUrl - extracted fileName:', fileName);
-    console.log('getFileDownloadUrl - fullUrl:', fullUrl);
+   
     return fullUrl;
   };
 
@@ -41,7 +38,6 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
       const downloadUrl = getFileDownloadUrl(attachmentUrl);
       if (downloadUrl === '#') return;
 
-      console.log('Downloading file from:', downloadUrl);
       
       // Create download link for direct URL (like chat system)
       const link = document.createElement('a');
@@ -52,7 +48,6 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
       link.click();
       document.body.removeChild(link);
       
-      console.log('File download initiated');
     } catch (error) {
       console.error('Download error:', error);
       alert('Failed to download file. Please try again.');
@@ -60,9 +55,7 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
   };
 
   if (!task) return null;
-  console.log('TaskDetailsModal - Full task data:', task);
-  console.log('TaskDetailsModal - subTasks:', task.subTasks);
-  console.log('TaskDetailsModal - task keys:', Object.keys(task));
+ 
   return (
     <div style={{
       position: 'fixed',

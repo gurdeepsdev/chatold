@@ -24,7 +24,6 @@ export default function PinnedGroups({ pinnedGroups, onSelectGroup, onUnpinGroup
         const pinnedGroupData = allGroups.filter(g => pinnedGroups.includes(g.id));
         setGroups(pinnedGroupData);
       } catch (error) {
-        console.error('Failed to load pinned groups:', error);
         toast.error('Failed to load pinned groups');
       } finally {
         setLoading(false);

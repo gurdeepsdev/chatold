@@ -77,8 +77,7 @@ router.get('/group/:groupId',auth,async(req,res)=>{
     
     res.json({tasks: mainTasks});
   }catch (e) {
-  console.error("🔥 TASK API ERROR:", e);
-  console.error("🔥 STACK:", e.stack);
+
   res.status(500).json({ error: e.message || 'Server error' });
 }
 });
@@ -124,28 +123,21 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
     let parsedOptimiseEntries = [];
     if (task_type === 'optimise' && optimise_entries) {
       try {
-        console.log('🔍 Backend received optimise_entries:', optimise_entries);
         parsedOptimiseEntries = typeof optimise_entries === 'string' ? JSON.parse(optimise_entries) : optimise_entries;
-        console.log('🔍 Backend parsed optimise_entries:', parsedOptimiseEntries);
         
         // Handle attachment objects in optimise entries
         parsedOptimiseEntries = parsedOptimiseEntries.map((entry, index) => {
-          console.log(`🔍 Backend processing optimise entry ${index}:`, entry);
           if (entry.attachment && typeof entry.attachment === 'object') {
             const processedEntry = {
               ...entry,
               attachment: entry.attachment.name || entry.attachment.filename || null,
               attachment_name: entry.attachment.name || entry.attachment.filename || null
             };
-            console.log(`🔍 Backend processed optimise entry ${index} (object):`, processedEntry);
             return processedEntry;
           }
-          console.log(`🔍 Backend keeping optimise entry ${index} as-is:`, entry);
           return entry;
         });
-        console.log('🔍 Backend final optimise_entries after processing:', parsedOptimiseEntries);
       } catch (e) {
-        console.error('🔍 Backend optimise_entries parse error:', e);
         return res.status(400).json({error:'Invalid optimise_entries format'});
       }
     }
@@ -505,12 +497,7 @@ if (task_type === 'optimise') {
   let subTaskIds = [];
 
   for (const entry of parsedOptimiseEntries) {
-    console.log(`🔍 Backend optimise entry loop - entry:`, entry);
-    console.log(`🔍 Backend optimise entry - fa:`, entry.fa);
-    console.log(`🔍 Backend optimise entry - attachment:`, entry.attachment);
-    console.log(`🔍 Backend optimise entry - attachment_name:`, entry.attachment_name);
-    console.log(`🔍 Backend optimise entry - attachment_url:`, attachment_url);
-    console.log(`🔍 Backend optimise entry - attachment_name from req.file:`, attachment_name);
+
     if (
       entry.pub_id || 
       entry.pid || 
@@ -520,22 +507,7 @@ if (task_type === 'optimise') {
       entry.f2 || 
       entry.optimise_scenario
     ) {
-      console.log(`🔍 Backend inserting optimise entry with values:`, {
-        group_id,
-        campaign_id,
-        task_type,
-        assigned_to: entry.assigned_to,
-        assigned_by: req.user.id,
-        pub_id: entry.pub_id,
-        pid: entry.pid,
-        fp: entry.fp,
-        fa: entry.fa,
-        f1: entry.f1,
-        f2: entry.f2,
-        optimise_scenario: entry.optimise_scenario,
-        attachment_url,
-        attachment_name
-      });
+   
       const [subR] = await conn.query(
         `INSERT INTO tasks (
           group_id,
@@ -760,9 +732,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
       // notify assignees
       allAssignees.forEach(assigneeId => {
         if (assigneeId) {
-          console.log('Emitting task_assigned to user:', assigneeId);
-          console.log('Task data:', { task: taskRow, subTasks, assigned_by: req.user.full_name, group_id });
-          
+      
           io.to(`user_${assigneeId}`).emit('push_notification',{
             type:'task',title:`📋 New task: ${taskLabel}`,
             body:description||'You have a new task assigned',group_id,
@@ -775,7 +745,6 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
             message: `New task assigned to you by ${req.user.full_name}`,
             group_id
           });
-          console.log('task_assigned event emitted successfully');
         }
       });
     }
@@ -783,7 +752,6 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
     res.status(201).json({task:taskRow,subTasks});
   }catch(e){
     await conn.rollback();
-    console.error('Create task error:',e);
     res.status(500).json({error:'Failed to create task'});
   }finally{conn.release();}
 });
@@ -829,7 +797,6 @@ router.get('/:taskId', auth, async (req, res) => {
 
     res.json({ task: { ...task, subTasks } });
   } catch (e) {
-    console.error('Get task error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -932,7 +899,6 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     
     res.status(201).json({ file: fileInfo });
   } catch (error) {
-    console.error('Task upload error:', error);
     res.status(500).json({ error: 'Upload failed' });
   }
 });

@@ -1,6 +1,5 @@
 const getMessageAccessFilter = async (crmDb, userId) => {
   
-  console.log("👉 MESSAGE USER ID:", userId);
 
   // 🔹 STEP 1: Try CRM DB
   let user;
@@ -10,19 +9,16 @@ const getMessageAccessFilter = async (crmDb, userId) => {
     [userId]
   );
 
-  console.log("👉 MESSAGE LOGIN ROW (CRM):", rows);
 
   if (rows.length > 0) {
     user = rows[0];
   } else {
-    console.log("⚠️ Not found in CRM, trying main DB...");
 
     const [fallbackRows] = await db.query(
       `SELECT id, role FROM login WHERE id = ?`,
       [userId]
     );
 
-    console.log("👉 MESSAGE LOGIN ROW (MAIN DB):", fallbackRows);
 
     if (fallbackRows.length > 0) {
       user = fallbackRows[0];
@@ -106,6 +102,14 @@ const getReadableRole = (role) => {
 // 🔍 Get user assignment information for secondary recipient option
 const getUserAssignmentInfo = async (crmDb, db, userId, targetUserId) => {
   try {
+    // Get current user's role to determine if we need to add their managers
+    const [currentUserRows] = await crmDb.query(
+      `SELECT id, role FROM login WHERE id = ?`,
+      [userId]
+    );
+    
+    const currentUserRole = currentUserRows.length > 0 ? currentUserRows[0].role : null;
+    
     // Check if target user is assigned to someone
     const [assignments] = await crmDb.query(
       `SELECT manager_id FROM manager_subadmins WHERE sub_admin_id = ?`,
@@ -113,15 +117,46 @@ const getUserAssignmentInfo = async (crmDb, db, userId, targetUserId) => {
     );
 
     const secondaryUsers = [];
+    const managerIds = new Set(); // Use Set to avoid duplicates
     
+    // Add target user's managers
     if (assignments.length > 0) {
-      const managerIds = assignments.map(a => a.manager_id);
+      assignments.forEach(a => managerIds.add(a.manager_id));
+    }
+    
+    // Add current user's managers if they are pub_executive or adv_executive
+    if (currentUserRole === 'pub_executive' || currentUserRole === 'adv_executive') {
+      const [currentUserAssignments] = await crmDb.query(
+        `SELECT manager_id FROM manager_subadmins WHERE sub_admin_id = ?`,
+        [userId]
+      );
       
+      if (currentUserAssignments.length > 0) {
+        // Add direct managers (publishers for pub_executive, advertisers for adv_executive)
+        currentUserAssignments.forEach(a => managerIds.add(a.manager_id));
+        
+        // Now get the managers of these managers (publisher_managers for publishers, advertiser_managers for advertisers)
+        const directManagerIds = currentUserAssignments.map(a => a.manager_id);
+        if (directManagerIds.length > 0) {
+          const placeholders = directManagerIds.map(() => '?').join(',');
+          const [secondLevelManagers] = await crmDb.query(
+            `SELECT DISTINCT manager_id FROM manager_subadmins WHERE sub_admin_id IN (${placeholders})`,
+            directManagerIds
+          );
+          
+          // Add second-level managers
+          secondLevelManagers.forEach(m => managerIds.add(m.manager_id));
+        }
+      }
+    }
+    
+    if (managerIds.size > 0) {
       // Get manager details from CRM DB (login table)
-      const placeholders = managerIds.map(() => '?').join(',');
+      const managerIdArray = Array.from(managerIds);
+      const placeholders = managerIdArray.map(() => '?').join(',');
       const [managers] = await crmDb.query(
         `SELECT id, username, role FROM login WHERE id IN (${placeholders})`,
-        managerIds
+        managerIdArray
       );
       
       // Get full names from Chat DB (users table)
@@ -150,11 +185,10 @@ const getUserAssignmentInfo = async (crmDb, db, userId, targetUserId) => {
     }
 
     return {
-      isAssigned: assignments.length > 0,
+      isAssigned: assignments.length > 0 || secondaryUsers.length > 0,
       secondaryUsers: secondaryUsers
     };
   } catch (error) {
-    console.error('Error getting user assignment info:', error);
     return {
       isAssigned: false,
       secondaryUsers: []
@@ -178,7 +212,6 @@ const getAvailableRecipients = async (crmDb, db, groupId, currentUserId) => {
     // No hierarchy restrictions for messaging - only for task assignment
     return members;
   } catch (error) {
-    console.error('Error getting available recipients:', error);
     return [];
   }
 };

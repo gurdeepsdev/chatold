@@ -138,7 +138,6 @@ WHERE
 
     // 🔹 STEP 2: Fetch campaigns
     const [campaigns] = await crmPool.query(campaignsQuery, params);
-console.log(campaigns,"data")
     // 🔹 STEP 3: Extract advertisers (deduplicated)
     const advertisersMap = new Map();
     campaigns.forEach(c => {
@@ -173,7 +172,6 @@ console.log(campaigns,"data")
     });
 
   } catch (err) {
-    console.error('Error fetching campaign data:', err);
     res.status(500).json({ error: 'Failed to fetch campaign data' });
   }
 });

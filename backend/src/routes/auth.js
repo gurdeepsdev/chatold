@@ -31,8 +31,16 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    // Update online status
-    await db.query('UPDATE users SET is_online = TRUE WHERE id = ?', [user.id]);
+    // Update online status asynchronously (non-blocking login)
+    // This prevents login from being blocked by database lock issues
+    setImmediate(async () => {
+      try {
+        await db.query('UPDATE users SET is_online = TRUE WHERE id = ?', [user.id]);
+      } catch (err) {
+        console.error('Failed to update online status (non-critical):', err.message);
+        // Don't throw - login already succeeded
+      }
+    });
 
     res.json({
       token,
@@ -58,7 +66,15 @@ router.get('/me', auth, async (req, res) => {
 
 // Logout
 router.post('/logout', auth, async (req, res) => {
-  await db.query('UPDATE users SET is_online = FALSE, last_seen = NOW() WHERE id = ?', [req.user.id]);
+  // Update offline status asynchronously (non-blocking logout)
+  setImmediate(async () => {
+    try {
+      await db.query('UPDATE users SET is_online = FALSE, last_seen = NOW() WHERE id = ?', [req.user.id]);
+    } catch (err) {
+      console.error('Failed to update offline status (non-critical):', err.message);
+    }
+  });
+  
   res.json({ message: 'Logged out' });
 });
 
