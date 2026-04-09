@@ -102,13 +102,13 @@ const getReadableRole = (role) => {
 // 🔍 Get user assignment information for secondary recipient option
 const getUserAssignmentInfo = async (crmDb, db, userId, targetUserId) => {
   try {
-    // Get current user's role to determine if we need to add their managers
-    const [currentUserRows] = await crmDb.query(
+    // Get target user's role to determine if we need to add their managers
+    const [targetUserRows] = await crmDb.query(
       `SELECT id, role FROM login WHERE id = ?`,
-      [userId]
+      [targetUserId]
     );
     
-    const currentUserRole = currentUserRows.length > 0 ? currentUserRows[0].role : null;
+    const targetUserRole = targetUserRows.length > 0 ? targetUserRows[0].role : null;
     
     // Check if target user is assigned to someone
     const [assignments] = await crmDb.query(
@@ -124,19 +124,23 @@ const getUserAssignmentInfo = async (crmDb, db, userId, targetUserId) => {
       assignments.forEach(a => managerIds.add(a.manager_id));
     }
     
-    // Add current user's managers if they are pub_executive or adv_executive
-    if (currentUserRole === 'pub_executive' || currentUserRole === 'adv_executive') {
-      const [currentUserAssignments] = await crmDb.query(
+    // Add target user's managers if they are pub_executive or adv_executive
+    if (targetUserRole === 'pub_executive' || targetUserRole === 'adv_executive') {
+      console.log(`CC Debug: Target user ${targetUserId} has role ${targetUserRole} - adding hierarchy`);
+      
+      const [targetUserAssignments] = await crmDb.query(
         `SELECT manager_id FROM manager_subadmins WHERE sub_admin_id = ?`,
-        [userId]
+        [targetUserId]
       );
       
-      if (currentUserAssignments.length > 0) {
+      if (targetUserAssignments.length > 0) {
+        console.log(`CC Debug: Found ${targetUserAssignments.length} direct managers for target user`);
+        
         // Add direct managers (publishers for pub_executive, advertisers for adv_executive)
-        currentUserAssignments.forEach(a => managerIds.add(a.manager_id));
+        targetUserAssignments.forEach(a => managerIds.add(a.manager_id));
         
         // Now get the managers of these managers (publisher_managers for publishers, advertiser_managers for advertisers)
-        const directManagerIds = currentUserAssignments.map(a => a.manager_id);
+        const directManagerIds = targetUserAssignments.map(a => a.manager_id);
         if (directManagerIds.length > 0) {
           const placeholders = directManagerIds.map(() => '?').join(',');
           const [secondLevelManagers] = await crmDb.query(
@@ -144,9 +148,13 @@ const getUserAssignmentInfo = async (crmDb, db, userId, targetUserId) => {
             directManagerIds
           );
           
+          console.log(`CC Debug: Found ${secondLevelManagers.length} second-level managers`);
+          
           // Add second-level managers
           secondLevelManagers.forEach(m => managerIds.add(m.manager_id));
         }
+      } else {
+        console.log(`CC Debug: No direct managers found for target user ${targetUserId}`);
       }
     }
     
@@ -183,6 +191,11 @@ const getUserAssignmentInfo = async (crmDb, db, userId, targetUserId) => {
         secondaryUsers.push(...managersWithReadableRoles);
       }
     }
+    
+    console.log(`CC Debug: Final result for target user ${targetUserId}: ${secondaryUsers.length} secondary users`);
+    secondaryUsers.forEach(user => {
+      console.log(`CC Debug: - ${user.full_name} (${user.role})`);
+    });
 
     return {
       isAssigned: assignments.length > 0 || secondaryUsers.length > 0,
