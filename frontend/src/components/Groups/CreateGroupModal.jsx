@@ -5,7 +5,8 @@ import toast from 'react-hot-toast';
 
 const ROLE_COLORS = {
   admin: '#a855f7', advertiser_manager: '#4f7dff', publisher_manager: '#06b6d4',
-  advertiser: '#22c55e', publisher: '#f59e0b', am: '#4f7dff'
+  advertiser: '#22c55e', publisher: '#f59e0b', am: '#4f7dff',
+  operations: '#ef4444', optimization: '#f97316'
 };
 
 export default function CreateGroupModal({ onClose, onCreated }) {
@@ -23,7 +24,9 @@ export default function CreateGroupModal({ onClose, onCreated }) {
       adv_executive: [],
       advertiser: [],
       advertiser_manager: []
-    }
+    },
+    operations: [],
+    optimization: []
   });
   const [selectedSubId, setSelectedSubId] = useState('');
   const [campaignSearch, setCampaignSearch] = useState('');
@@ -91,7 +94,9 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                   ...response.users_by_role.publisher_side.publisher_manager,
                   ...response.users_by_role.advertiser_side.adv_executive,
                   ...response.users_by_role.advertiser_side.advertiser,
-                  ...response.users_by_role.advertiser_side.advertiser_manager
+                  ...response.users_by_role.advertiser_side.advertiser_manager,
+                  ...response.users_by_role.operations || [],
+                  ...response.users_by_role.optimization || []
                 ];
                 setUsers(allUsers);
               } else if (response && response.members) {
@@ -202,6 +207,19 @@ export default function CreateGroupModal({ onClose, onCreated }) {
   const toggleMember = (id) => {
     setSelectedMembers(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]);
   };
+
+  const renderUserItem = (u) => (
+    <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', background: selectedMembers.includes(u.id) ? 'var(--accent-dim)' : 'transparent', borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
+      onClick={() => toggleMember(u.id)}
+    >
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: selectedMembers.includes(u.id) ? 'var(--accent)' : 'var(--border)', flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 500 }}>{u.full_name || u.username}</div>
+        <div style={{ fontSize: 11, color: ROLE_COLORS[u.role] || 'var(--text-muted)' }}>{u.role} · {u.email || u.username}</div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{u.file_name || 'No file'}</div>
+      </div>
+    </div>
+  );
 
   const handleCreate = async () => {
     setLoading(true);
@@ -465,7 +483,8 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                 <div style={{ padding: '20px', color: 'var(--text-muted)', textAlign: 'center' }}>
                   {memberSearch ? 'No users found matching your search' : 'No additional users available'}
                 </div>
-              ) : (
+              ) : memberSearch ? (
+                // Show flattened results when searching
                 filteredUsers.map(u => (
                   <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', background: selectedMembers.includes(u.id) ? 'var(--accent-dim)' : 'transparent', borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
                     onClick={() => toggleMember(u.id)}
@@ -478,6 +497,73 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                     </div>
                   </div>
                 ))
+              ) : (
+                // Show grouped results when not searching
+                <>
+                  {/* Publisher Side */}
+                  {usersByRole.publisher_side && (
+                    <>
+                      {usersByRole.publisher_side.pub_executive && usersByRole.publisher_side.pub_executive.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Publisher Executive</div>
+                          {usersByRole.publisher_side.pub_executive.map(u => renderUserItem(u))}
+                        </div>
+                      )}
+                      {usersByRole.publisher_side.publisher && usersByRole.publisher_side.publisher.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Publisher</div>
+                          {usersByRole.publisher_side.publisher.map(u => renderUserItem(u))}
+                        </div>
+                      )}
+                      {usersByRole.publisher_side.publisher_manager && usersByRole.publisher_side.publisher_manager.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Publisher Manager</div>
+                          {usersByRole.publisher_side.publisher_manager.map(u => renderUserItem(u))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Advertiser Side */}
+                  {usersByRole.advertiser_side && (
+                    <>
+                      {usersByRole.advertiser_side.adv_executive && usersByRole.advertiser_side.adv_executive.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Advertiser Executive</div>
+                          {usersByRole.advertiser_side.adv_executive.map(u => renderUserItem(u))}
+                        </div>
+                      )}
+                      {usersByRole.advertiser_side.advertiser && usersByRole.advertiser_side.advertiser.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Advertiser</div>
+                          {usersByRole.advertiser_side.advertiser.map(u => renderUserItem(u))}
+                        </div>
+                      )}
+                      {usersByRole.advertiser_side.advertiser_manager && usersByRole.advertiser_side.advertiser_manager.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Advertiser Manager</div>
+                          {usersByRole.advertiser_side.advertiser_manager.map(u => renderUserItem(u))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Operations */}
+                  {usersByRole.operations && usersByRole.operations.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Operations</div>
+                      {usersByRole.operations.map(u => renderUserItem(u))}
+                    </div>
+                  )}
+
+                  {/* Optimization */}
+                  {usersByRole.optimization && usersByRole.optimization.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Optimization</div>
+                      {usersByRole.optimization.map(u => renderUserItem(u))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

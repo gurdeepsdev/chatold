@@ -95,12 +95,25 @@ WHERE
   -- ✅ Own campaigns
   c.user_id = ?
 
-  -- ✅ Sub advertisers
-  OR c.user_id IN (
-    SELECT sub_admin_id 
-    FROM manager_subadmins 
-    WHERE manager_id = ?
+  -- ✅ Assigned campaigns (FIXED 🔥)
+  OR c.adv_d IN (
+    SELECT adv_id 
+    FROM advids 
+    WHERE assign_id = ?
   )
+      `;
+      params = [userId, userId];
+    }
+
+    // 🧑 ADVERTISER
+    else if (role === 'advertiser') {
+      campaignsQuery = `
+SELECT DISTINCT c.*, l.username
+FROM campaign_data c
+LEFT JOIN login l ON l.id = c.user_id
+WHERE 
+  -- ✅ Own campaigns
+  c.user_id = ?
 
   -- ✅ Assigned campaigns (FIXED 🔥)
   OR c.adv_d IN (
@@ -109,11 +122,11 @@ WHERE
     WHERE assign_id = ?
   )
       `;
-      params = [userId, userId, userId];
+      params = [userId, userId];
     }
 
-    // 🧑 ADVERTISER
-    else if (role === 'advertiser') {
+    // 🧑‍💼 ADV EXECUTIVE
+    else if (role === 'adv_executive') {
       campaignsQuery = `
 SELECT DISTINCT c.*, l.username
 FROM campaign_data c

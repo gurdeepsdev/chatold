@@ -42,15 +42,23 @@ const OPTIMISE_FIELDS = {
   am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment']
 };
 
-const emptyForm=(type='share_link')=>({
-  task_type:type, description:'',
-  entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' , geo:''}],
-  pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'',geo:'' }],
-optimise_entries: [{
-  assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null
-}],  pause_reason:'', request_type:'geo', request_details:'',
-  fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
-});
+const emptyForm=(userRole, type=null)=>{
+  // If no type specified, use the first available task type for the user's role
+  if (!type) {
+    const visibleActions = getVisibleActions(userRole);
+    type = visibleActions.length > 0 ? visibleActions[0] : 'share_link';
+  }
+  
+  return({
+    task_type:type, description:'',
+    entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' , geo:''}],
+    pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'',geo:'' }],
+    optimise_entries: [{
+      assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null
+    }],  pause_reason:'', request_type:'geo', request_details:'',
+    fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
+  });
+};
 
 /* ── Task item ─────────────────────────────────────────────── */
 function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
@@ -173,7 +181,7 @@ export default function TasksPanel({group, taskTarget}){
   const [loadingTasks, setLoadingTasks] = useState(false); // Add loading state for tasks
   const [users,setUsers]=useState([]);
   const [members,setMembers]=useState([]);
-  const [form,setForm]=useState(emptyForm());
+  const [form,setForm]=useState(emptyForm(user?.role));
   const [creating,setCreating]=useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
 
@@ -636,6 +644,22 @@ export default function TasksPanel({group, taskTarget}){
     return unsub;
   },[on,group?.id]);
 
+  // Listen for member removal updates (when members are removed from group)
+  useEffect(()=>{
+    const unsub=on('member_removed',(data)=>{
+      // Only handle member updates for current group
+      if(Number(data.group_id) === group?.id) {
+        
+        // Reload group members to update the dropdown
+        groupsAPI.getById(group.id).then(d => setMembers(d.members || []));
+        
+        // Show notification
+        toast.success(`${data.removed_by_name} removed a member`);
+      }
+    });
+    return unsub;
+  },[on,group?.id]);
+
   /* ── Handle taskTarget from chat pill click ──
      If taskTarget.openForm === true: open the create form pre-set to that task type
      Also highlight the task if we have a taskId */
@@ -656,7 +680,7 @@ export default function TasksPanel({group, taskTarget}){
     }
     // Open create form pre-filled with that task type
     if(openForm&&taskType){
-      setForm(emptyForm(taskType));
+      setForm(emptyForm(user?.role, taskType));
       setShowCreate(true);
     }
   },[taskTarget]);// re-runs each time taskTarget changes (new ts)
@@ -746,7 +770,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
         setTasks(prev=>[data.task,...prev]);
       }
       setShowCreate(false);
-      setForm(emptyForm());
+      setForm(emptyForm(user?.role));
       toast.success('Task created!');
     }catch(e){toast.error(e?.error||'Failed');}
     setCreating(false);
@@ -818,7 +842,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             )}
           </button>
         ))}
-        <button className="btn btn-xs btn-primary" style={{marginLeft:'auto'}} onClick={()=>{setShowCreate(x=>!x);if(!showCreate)setForm(emptyForm());}}>
+        <button className="btn btn-xs btn-primary" style={{marginLeft:'auto'}} onClick={()=>{setShowCreate(x=>!x);if(!showCreate)setForm(emptyForm(user?.role));}}>
           {showCreate?'✕ Cancel':'+ New Task'}
         </button>
       </div>

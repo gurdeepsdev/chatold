@@ -20,6 +20,7 @@ export default function CampaignDetails({ group }) {
   const [adding, setAdding] = useState(false);
   const [showAllMembers, setShowAllMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
+  const [addMemberSearch, setAddMemberSearch] = useState('');
   
   // Parse CRM campaign data
   const crmData = group.crm_campaign_data ? 
@@ -78,8 +79,14 @@ export default function CampaignDetails({ group }) {
     if (selectedUsers.length === 0) return;
     setAdding(true);
     try {
-      // Add all selected users in parallel
-      await Promise.all(selectedUsers.map(userId => groupsAPI.addMember(group.id, parseInt(userId))));
+      // Expand selected members with hierarchy (same logic as group creation)
+      const expandedMembers = selectedUsers.length > 0 ? await groupsAPI.expandHierarchy(selectedUsers) : selectedUsers;
+      
+      // Extract user IDs from the response
+      const memberIds = expandedMembers.users ? expandedMembers.users.map(u => u.id) : expandedMembers;
+      
+      // Add all expanded users in parallel
+      await Promise.all(memberIds.map(userId => groupsAPI.addMember(group.id, parseInt(userId))));
       
       // Refresh members list
       const data = await groupsAPI.getById(group.id);
@@ -87,8 +94,17 @@ export default function CampaignDetails({ group }) {
       
       // Reset form
       setSelectedUsers([]);
+      setAddMemberSearch('');
       setShowAddMember(false);
-      toast.success(`Added ${selectedUsers.length} member${selectedUsers.length > 1 ? 's' : ''}!`);
+      
+      // Show appropriate success message
+      const addedCount = memberIds.length;
+      const originalCount = selectedUsers.length;
+      if (addedCount > originalCount) {
+        toast.success(`Added ${addedCount} members (${originalCount} selected + ${addedCount - originalCount} hierarchy members)!`);
+      } else {
+        toast.success(`Added ${addedCount} member${addedCount > 1 ? 's' : ''}!`);
+      }
     } catch { 
       toast.error('Failed to add member(s)'); 
     }
@@ -116,6 +132,12 @@ export default function CampaignDetails({ group }) {
 
   const existingIds = new Set(members.map(m => m.id));
   const addableUsers = allUsers.filter(u => !existingIds.has(u.id));
+
+  // Filter addable users based on search
+  const filteredAddableUsers = addableUsers.filter(user => 
+    user.full_name?.toLowerCase().includes(addMemberSearch.toLowerCase()) ||
+    user.role?.toLowerCase().includes(addMemberSearch.toLowerCase())
+  );
 
   // Filter members based on search
   const filteredMembers = members.filter(member => 
@@ -216,20 +238,27 @@ export default function CampaignDetails({ group }) {
           <button className="btn-icon" style={{ fontSize: 16 }} onClick={() => setShowAddMember(!showAddMember)} title="Add member">+</button>
         </div>
 
-        {/* Member Search Bar */}
-        <div style={{ marginBottom: 10 }}>
-          <input
-            type="text"
-            className="form-control"
-            style={{ fontSize: 12, padding: '6px 10px' }}
-            placeholder="Search members..."
-            value={memberSearch}
-            onChange={e => setMemberSearch(e.target.value)}
-          />
-        </div>
-
-        {showAddMember && (
+   {showAddMember && (
           <div style={{ marginBottom: 10 }}>
+            {/* Add Member Search Bar */}
+            <div style={{ marginBottom: 8 }}>
+              <input
+                type="text"
+                placeholder="Search users to add..."
+                value={addMemberSearch}
+                onChange={(e) => setAddMemberSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 4,
+                  fontSize: 12,
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)'
+                }}
+              />
+            </div>
+            
             {/* User List with Checkboxes */}
             <div style={{ 
               maxHeight: 200, 
@@ -239,8 +268,8 @@ export default function CampaignDetails({ group }) {
               marginBottom: 8,
               background: 'var(--bg-secondary)'
             }}>
-              {addableUsers.length > 0 ? (
-                addableUsers.map(u => (
+              {filteredAddableUsers.length > 0 ? (
+                filteredAddableUsers.map(u => (
                   <div 
                     key={u.id} 
                     style={{ 
@@ -268,7 +297,7 @@ export default function CampaignDetails({ group }) {
                 ))
               ) : (
                 <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-                  No users available to add
+                  {addMemberSearch ? 'No users found matching "' + addMemberSearch + '"' : 'No users available to add'}
                 </div>
               )}
             </div>
@@ -283,6 +312,7 @@ export default function CampaignDetails({ group }) {
                   className="btn btn-secondary btn-xs" 
                   onClick={() => {
                     setSelectedUsers([]);
+                    setAddMemberSearch('');
                     setShowAddMember(false);
                   }}
                   style={{ fontSize: 11 }}
@@ -301,6 +331,19 @@ export default function CampaignDetails({ group }) {
             </div>
           </div>
         )}
+        {/* Member Search Bar */}
+        <div style={{ marginBottom: 10 }}>
+          <input
+            type="text"
+            className="form-control"
+            style={{ fontSize: 12, padding: '6px 10px' }}
+            placeholder="Search members..."
+            value={memberSearch}
+            onChange={e => setMemberSearch(e.target.value)}
+          />
+        </div>
+
+     
 
         {displayMembers.map(member => (
           <div key={member.id} className="member-item">

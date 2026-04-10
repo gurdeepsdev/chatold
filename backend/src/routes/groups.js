@@ -358,7 +358,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         
         try {
           // Get all members of the created group
-          const [members] = await conn.query(
+          const [members] = await db.query(
             'SELECT user_id FROM group_members WHERE group_id = ?',
             [group.id]
           );
@@ -509,7 +509,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
       await conn.commit();
 
-      const [newGroup] = await conn.query(
+      const [newGroup] = await db.query(
         'SELECT g.*, c.campaign_name FROM chat_groups g LEFT JOIN campaigns c ON c.id = g.campaign_id WHERE g.id = ?',
         [groupId]
       );
@@ -518,7 +518,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
       const io = req.app.get('io');
       if (io && newGroup[0]) {
         // Get all members of the created group
-        const [members] = await conn.query(
+        const [members] = await db.query(
           'SELECT user_id FROM group_members WHERE group_id = ?',
           [groupId]
         );
@@ -539,27 +539,29 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         });
 
         // Emit campaign creation notification to all group members
-        io.to(`group_${groupId}`).emit('campaign_created', {
-          type: 'campaign_created',
-          campaign: {
-            id: campaign.id,
-            campaign_name: campaign.campaign_name,
-            geo: campaign.geo,
-            payout: campaign.payout,
-            status: campaign.status,
-            advertiser_id: campaign.advertiser_id,
-            advertiser_name: advRows[0]?.full_name || 'Unknown',
-            package_id: packageId,
-            sub_id: campaign.sub_id,
-            preview_url: campaign.preview_url,
-            kpi: campaign.kpi,
-            mmp_tracker: campaign.mmp_tracker,
-            created_by: req.user.full_name,
-            created_at: new Date(),
-            group_id: groupId,
-            group_name: groupName
-          },
-          message: `New campaign "${campaign.campaign_name}" created by ${req.user.full_name}`
+        members.forEach(member => {
+          io.to(`user_${member.user_id}`).emit('campaign_created', {
+            type: 'campaign_created',
+            campaign: {
+              id: campaign.id,
+              campaign_name: campaign.campaign_name,
+              geo: campaign.geo,
+              payout: campaign.payout,
+              status: campaign.status,
+              advertiser_id: campaign.advertiser_id,
+              advertiser_name: advRows[0]?.full_name || 'Unknown',
+              package_id: packageId,
+              sub_id: campaign.sub_id,
+              preview_url: campaign.preview_url,
+              kpi: campaign.kpi,
+              mmp_tracker: campaign.mmp_tracker,
+              created_by: req.user.full_name,
+              created_at: new Date(),
+              group_id: groupId,
+              group_name: groupName
+            },
+            message: `New campaign "${campaign.campaign_name}" created by ${req.user.full_name}`
+          });
         });
 
       
@@ -626,7 +628,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
       const io = req.app.get('io');
       if (io) {
         // Get all members of the created group
-        const [members] = await conn.query(
+        const [members] = await db.query(
           'SELECT user_id FROM group_members WHERE group_id = ?',
           [groupId]
         );
@@ -665,7 +667,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
       // Get all users from CRM database
       const [allUsers] = await crmPool.query(
-        `SELECT id, username, role FROM login WHERE role IN ('pub_executive', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager') ORDER BY role, username`
+        `SELECT id, username, role FROM login WHERE role IN ('pub_executive', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization') ORDER BY role, username`
       );
 
 
@@ -680,7 +682,9 @@ router.post('/from-campaign-data', auth, async (req, res) => {
           adv_executive: allUsers.filter(u => u.role === 'adv_executive'),
           advertiser: allUsers.filter(u => u.role === 'advertiser'),
           advertiser_manager: allUsers.filter(u => u.role === 'advertiser_manager')
-        }
+        },
+        operations: allUsers.filter(u => u.role === 'operations'),
+        optimization: allUsers.filter(u => u.role === 'optimization')
       };
 
    
@@ -749,7 +753,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
     }
   });
 
-  // Add member (also auto-add publisher_manager if publisher is added)
+  // Add member (use hierarchy expansion like group creation)
   router.post('/:groupId/members', auth, async (req, res) => {
     const conn = await db.getConnection();
     try {
@@ -762,22 +766,6 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         [groupId, user_id, 'member', req.user.id]
       );
 
-      // If added user is a publisher → auto-add their publisher_manager
-      const [addedUser] = await conn.query('SELECT role FROM users WHERE id = ?', [user_id]);
-      if (addedUser[0]?.role === 'publisher') {
-        const [pubManagers] = await conn.query("SELECT id FROM users WHERE role = 'publisher_manager'");
-        for (const pm of pubManagers) {
-          await conn.query(
-            'INSERT IGNORE INTO group_members (group_id, user_id, role, added_by) VALUES (?, ?, ?, ?)',
-            [groupId, pm.id, 'member', req.user.id]
-          );
-        }
-      }
-
-      await conn.query(
-        'INSERT INTO workflow_summary (group_id, event_type, event_data, triggered_by) VALUES (?, ?, ?, ?)',
-        [groupId, 'member_added', JSON.stringify({ user_id }), req.user.id]
-      );
       await conn.commit();
 
       // Emit real-time member update to all group members
@@ -804,6 +792,19 @@ router.post('/from-campaign-data', auth, async (req, res) => {
     try {
       const { groupId, userId } = req.params;
       await db.query('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
+      
+      // Emit real-time member removal to all group members
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`group_${groupId}`).emit('member_removed', {
+          group_id: parseInt(groupId),
+          user_id: parseInt(userId),
+          removed_by: req.user.id,
+          removed_by_name: req.user.full_name,
+          timestamp: new Date()
+        });
+      }
+      
       res.json({ message: 'Member removed' });
     } catch (err) { res.status(500).json({ error: 'Server error' }); }
   });

@@ -139,10 +139,9 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
     });
 
     const unsubGroupCreated = on('group_created', (data) => {
-
       
       // Only add the group if the current user is a member
-      if (data.group && (data.group.created_by === user?.full_name || data.group.member_ids?.includes(user?.id))) {
+      if (data.group && data.group.member_ids?.includes(user?.id)) {
         setGroups(prev => {
           // Check if group already exists to avoid duplicates
           const existingIndex = prev.findIndex(g => g.id === data.group.id);
@@ -197,11 +196,31 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
       }
     });
 
+    // Listen for member added events
+    const unsubMemberAdded = on('member_added', (data) => {
+      // If current user was added to a group, reload groups
+      if (Number(data.user_id) === user?.id) {
+        loadGroups();
+        toast.success(`You were added to a group by ${data.added_by_name}`);
+      }
+    });
+
+    // Listen for member removed events
+    const unsubMemberRemoved = on('member_removed', (data) => {
+      // If current user was removed from a group, reload groups
+      if (Number(data.user_id) === user?.id) {
+        loadGroups();
+        toast.success(`You were removed from a group by ${data.removed_by_name}`);
+      }
+    });
+
     return () => {
       unsub();
       unsubGroupCreated();
       unsubCampaignCreated();
       unsubNewMessage();
+      unsubMemberAdded();
+      unsubMemberRemoved();
     };
   }, [on, user?.full_name, user?.id, loadGroups, user?.id]);
 

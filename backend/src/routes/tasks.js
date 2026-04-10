@@ -234,7 +234,7 @@ if (task_type === 'share_link') {
   await conn.commit();
 
   // Fetch the created tasks to return proper format
-  const [createdTasks] = await conn.query(
+  const [createdTasks] = await db.query(
     `SELECT * FROM tasks WHERE id IN (${subTaskIds.map(() => '?').join(',')})`,
     subTaskIds
   );
@@ -246,7 +246,7 @@ if (task_type === 'share_link') {
  let assigneeText = '';
 
 if (assignees.length > 0) {
-  const [users] = await conn.query(
+  const [users] = await db.query(
     `SELECT id, full_name FROM users WHERE id IN (?)`,
     [assignees]
   );
@@ -260,13 +260,13 @@ if (assignees.length > 0) {
   const entryCount = parsedEntries.filter(e => e.pub_id || e.pid || e.link).length;
   const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const {encrypted, iv} = encrypt(chatContent);
-  const [mRes] = await conn.query(
+  const [mRes] = await db.query(
     `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
      VALUES(?,?,'task_notification',?,?,?)`,
-    [group_id, req.user.id, encrypted, iv, null]
+    [group_id, req.user.id, encrypted, iv, taskId]
   );
 
-  await conn.query(
+  await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
     [group_id, 'task_created', JSON.stringify({task_type: 'share_link', entries: subTaskIds.length}), req.user.id]
   );
@@ -299,7 +299,7 @@ if (task_type === 'pause_pid') {
 
   for (const entry of parsedPauseEntries) {
     if (entry.pub_id || entry.pid || entry.pause_reason) {
-      const [subR] = await conn.query(
+      const [subR] = await db.query(
         `INSERT INTO tasks (
           group_id,
           campaign_id,
@@ -339,7 +339,7 @@ if (task_type === 'pause_pid') {
   await conn.commit();
 
   // Fetch the created tasks to return proper format
-  const [createdTasks] = await conn.query(
+  const [createdTasks] = await db.query(
     `SELECT * FROM tasks WHERE id IN (${subTaskIds.map(() => '?').join(',')})`,
     subTaskIds
   );
@@ -351,7 +351,7 @@ if (task_type === 'pause_pid') {
  let assigneeText = '';
 
 if (assignees.length > 0) {
-  const [users] = await conn.query(
+  const [users] = await db.query(
     `SELECT id, full_name FROM users WHERE id IN (?)`,
     [assignees]
   );
@@ -366,13 +366,13 @@ if (assignees.length > 0) {
   const entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
   const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const {encrypted, iv} = encrypt(chatContent);
-  const [mRes] = await conn.query(
+  const [mRes] = await db.query(
     `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
      VALUES(?,?,'task_notification',?,?,?)`,
-    [group_id, req.user.id, encrypted, iv, null]
+    [group_id, req.user.id, encrypted, iv, taskId]
   );
 
-  await conn.query(
+  await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
     [group_id, 'task_created', JSON.stringify({task_type: 'pause_pid', entries: subTaskIds.length}), req.user.id]
   );
@@ -405,7 +405,7 @@ if (assignees.length > 0) {
 
 //   for (const entry of parsedOptimiseEntries) {
 //     if (entry.pub_id || entry.pid || entry.fp || entry.fa || entry.f1 || entry.f2 || entry.optimise_scenario) {
-//       const [subR] = await conn.query(
+//       const [subR] = await db.query(
 //         `INSERT INTO tasks (
 //           group_id,
 //           campaign_id,
@@ -450,7 +450,7 @@ if (assignees.length > 0) {
 //   await conn.commit();
 
 //   // Fetch the created tasks to return proper format
-//   const [createdTasks] = await conn.query(
+//   const [createdTasks] = await db.query(
 //     `SELECT * FROM tasks WHERE id IN (${subTaskIds.map(() => '?').join(',')})`,
 //     subTaskIds
 //   );
@@ -460,13 +460,13 @@ if (assignees.length > 0) {
 //   const entryCount = parsedOptimiseEntries.filter(e => e.pub_id || e.pid || e.fp  || e.f1 || e.f2 || e.optimise_scenario).length;
 //   const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}`;
 //   const {encrypted, iv} = encrypt(chatContent);
-//   const [mRes] = await conn.query(
+//   const [mRes] = await db.query(
 //     `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
 //      VALUES(?,?,'task_notification',?,?,?)`,
-//     [group_id, req.user.id, encrypted, iv, null]
+//     [group_id, req.user.id, encrypted, iv, taskId]
 //   );
 
-//   await conn.query(
+//   await db.query(
 //     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
 //     [group_id, 'task_created', JSON.stringify({task_type: 'optimise', entries: subTaskIds.length}), req.user.id]
 //   );
@@ -508,7 +508,7 @@ if (task_type === 'optimise') {
       entry.optimise_scenario
     ) {
    
-      const [subR] = await conn.query(
+      const [subR] = await db.query(
         `INSERT INTO tasks (
           group_id,
           campaign_id,
@@ -554,7 +554,7 @@ if (task_type === 'optimise') {
 
   await conn.commit();
 
-  const [createdTasks] = await conn.query(
+  const [createdTasks] = await db.query(
     `SELECT * FROM tasks WHERE id IN (${subTaskIds.map(() => '?').join(',')})`,
     subTaskIds
   );
@@ -572,7 +572,7 @@ const assignees = [...new Set(parsedOptimiseEntries
  let assigneeText = '';
 
 if (assignees.length > 0) {
-  const [users] = await conn.query(
+  const [users] = await db.query(
     `SELECT id, full_name FROM users WHERE id IN (?)`,
     [assignees]
   );
@@ -584,13 +584,13 @@ if (assignees.length > 0) {
 const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const { encrypted, iv } = encrypt(chatContent);
 
-  const [mRes] = await conn.query(
+  const [mRes] = await db.query(
     `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
      VALUES(?,?,'task_notification',?,?,?)`,
-    [group_id, req.user.id, encrypted, iv, null]
+    [group_id, req.user.id, encrypted, iv, taskId]
   );
 
-  await conn.query(
+  await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
     [group_id, 'task_created', JSON.stringify({ task_type: 'optimise', entries: subTaskIds.length }), req.user.id]
   );
@@ -625,7 +625,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
     let entryCount = 1;
     if (task_type === 'raise_request' || task_type === 'initial_setup') {
       if (assigned_to && assigned_to !== 'null') {
-        const [users] = await conn.query(
+        const [users] = await db.query(
           `SELECT id, full_name FROM users WHERE id = ?`,
           [assigned_to]
         );
@@ -646,7 +646,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
       )];
       
       if (assignees.length > 0) {
-        const [users] = await conn.query(
+        const [users] = await db.query(
           `SELECT id, full_name FROM users WHERE id IN (?)`,
           [assignees]
         );
@@ -662,13 +662,13 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
 
     const chatContent=`📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
     const{encrypted,iv}=encrypt(chatContent);
-    const[mRes]=await conn.query(
+    const[mRes]=await db.query(
       `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
        VALUES(?,?,'task_notification',?,?,?)`,
       [group_id,req.user.id,encrypted,iv,taskId]
     );
 
-    await conn.query(
+    await db.query(
       'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
       [group_id,'task_created',JSON.stringify({task_type,task_id:taskId,entries:subTaskIds.length}),req.user.id]
     );
@@ -704,7 +704,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
     await conn.commit();
 
     // Get main task
-    const[[taskRow]]=await conn.query(`
+    const[[taskRow]]=await db.query(`
       SELECT t.*,u1.full_name AS assigned_to_name,u2.full_name AS assigned_by_name
       FROM tasks t LEFT JOIN users u1 ON u1.id=t.assigned_to LEFT JOIN users u2 ON u2.id=t.assigned_by
       WHERE t.id=?`,[taskId]);
@@ -712,7 +712,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
     // Get sub-tasks if any
     let subTasks = [];
     if (subTaskIds.length > 0) {
-      const[subRows]=await conn.query(`
+      const[subRows]=await db.query(`
         SELECT t.*,u1.full_name AS assigned_to_name,u2.full_name AS assigned_by_name
         FROM tasks t LEFT JOIN users u1 ON u1.id=t.assigned_to LEFT JOIN users u2 ON u2.id=t.assigned_by
         WHERE t.id IN (${subTaskIds.map(() => '?').join(',')})`,subTaskIds);
@@ -826,7 +826,7 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
     await conn.commit();
     
     // Get updated task with full details
-    const[[updatedTask]]=await conn.query(`
+    const[[updatedTask]]=await db.query(`
       SELECT t.*, 
         u1.full_name AS assigned_to_name,
         u2.full_name AS assigned_by_name
@@ -836,7 +836,7 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
       WHERE t.id=?`,[taskId]);
     
     // Get the latest response/comment
-    const[[latestResponse]]=await conn.query(`
+    const[[latestResponse]]=await db.query(`
       SELECT tr.*, u.full_name AS user_name
       FROM task_responses tr 
       JOIN users u ON u.id=tr.user_id 
@@ -861,24 +861,30 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
 });
 
 router.get('/:taskId/responses',auth,async(req,res)=>{
-  const[r]=await db.query(
-    'SELECT tr.*,u.full_name FROM task_responses tr JOIN users u ON u.id=tr.user_id WHERE tr.task_id=? ORDER BY tr.responded_at',
-    [req.params.taskId]);
-  res.json({responses:r});
+  try {
+    const[r]=await db.query(
+      'SELECT tr.*,u.full_name FROM task_responses tr JOIN users u ON u.id=tr.user_id WHERE tr.task_id=? ORDER BY tr.responded_at',
+      [req.params.taskId]);
+    res.json({responses:r});
+  } catch(e) { console.error('responses error:',e.message); res.status(500).json({error:'Server error'}); }
 });
 
 router.post('/followup',auth,async(req,res)=>{
-  const{group_id,task_id,message,scheduled_at}=req.body;
-  const[r]=await db.query('INSERT INTO followups (group_id,task_id,created_by,message,scheduled_at) VALUES(?,?,?,?,?)',
-    [group_id,task_id||null,req.user.id,message,scheduled_at||null]);
-  res.status(201).json({followup_id:r.insertId});
+  try {
+    const{group_id,task_id,message,scheduled_at}=req.body;
+    const[r]=await db.query('INSERT INTO followups (group_id,task_id,created_by,message,scheduled_at) VALUES(?,?,?,?,?)',
+      [group_id,task_id||null,req.user.id,message,scheduled_at||null]);
+    res.status(201).json({followup_id:r.insertId});
+  } catch(e) { console.error('followup error:',e.message); res.status(500).json({error:'Server error'}); }
 });
 
 router.get('/followups/group/:groupId',auth,async(req,res)=>{
-  const[r]=await db.query(
-    'SELECT f.*,u.full_name AS created_by_name FROM followups f JOIN users u ON u.id=f.created_by WHERE f.group_id=? ORDER BY f.created_at DESC',
-    [req.params.groupId]);
-  res.json({ followups: r });
+  try {
+    const[r]=await db.query(
+      'SELECT f.*,u.full_name AS created_by_name FROM followups f JOIN users u ON u.id=f.created_by WHERE f.group_id=? ORDER BY f.created_at DESC',
+      [req.params.groupId]);
+    res.json({ followups: r });
+  } catch(e) { console.error('followups error:',e.message); res.status(500).json({error:'Server error'}); }
 });
 
 // Task file upload endpoint - similar to chat upload (no auth required)

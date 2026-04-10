@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { messagesAPI } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import toast from 'react-hot-toast';
 import TaskQuickPopup from '../Tasks/TaskQuickPopup';
 import './MessageSender.css';
@@ -12,6 +13,8 @@ const MessageSender = ({
   replyTo = null,
   onReplyCancel = null 
 }) => {
+  const { user } = useAuth();
+  const { on } = useSocket();
   
   const [content, setContent] = useState('');
   const [recipientId, setRecipientId] = useState(''); // 🔄 Back to single recipient
@@ -34,6 +37,30 @@ const MessageSender = ({
       loadRecipients();
     }
   }, [groupId]);
+
+  // Listen for member updates (when members are added to group)
+  useEffect(() => {
+    const unsub = on('member_added', (data) => {
+      // Only handle member updates for current group
+      if (Number(data.group_id) === groupId) {
+        // Reload recipients to update the dropdown
+        loadRecipients();
+      }
+    });
+    return unsub;
+  }, [on, groupId]);
+
+  // Listen for member removal updates (when members are removed from group)
+  useEffect(() => {
+    const unsub = on('member_removed', (data) => {
+      // Only handle member updates for current group
+      if (Number(data.group_id) === groupId) {
+        // Reload recipients to update the dropdown
+        loadRecipients();
+      }
+    });
+    return unsub;
+  }, [on, groupId]);
 
   // 🔍 Load assignment info when recipient is selected
   useEffect(() => {

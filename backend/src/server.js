@@ -6,6 +6,27 @@ const morgan = require('morgan');
 const path   = require('path');
 require('dotenv').config();
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX: Global process-level safety net.
+//
+// Without these, ANY unhandled async error anywhere in the codebase (route
+// handlers, socket events, utilities) silently kills the entire server.
+// These handlers log the error and keep the process alive.
+//
+// NOTE: These must be registered BEFORE anything else runs.
+// ─────────────────────────────────────────────────────────────────────────────
+process.on('uncaughtException', (err) => {
+  console.error('🔥 UNCAUGHT EXCEPTION — server will NOT exit:', err);
+  // Do NOT process.exit() here — keep the server alive
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔥 UNHANDLED PROMISE REJECTION at:', promise, '— reason:', reason);
+  // Do NOT process.exit() here — keep the server alive
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const app    = express();
 const server = http.createServer(app);
 
@@ -15,9 +36,7 @@ require('fs').mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const io = new Server(server, {
   cors: {
-    // origin: process.env.CLIENT_URL || 'http://localhost:3000',
-        origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com',
-
+    origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com',
     methods: ['GET','POST','PUT','PATCH','DELETE'],
     credentials: true,
   },
@@ -25,24 +44,22 @@ const io = new Server(server, {
   transports: ['websocket','polling'],
   pingTimeout: 60000,
   pingInterval: 25000,
-  // Add production-specific settings
   allowEIO3: true,
   upgrade: true,
   rememberUpgrade: true,
 });
 
 app.set('io', io);
-app.set('UPLOAD_DIR', UPLOAD_DIR);  // routes can get it via req.app.get('UPLOAD_DIR')
+app.set('UPLOAD_DIR', UPLOAD_DIR);
 
 app.use(cors({ origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// ✅ Serve uploads — same absolute path multer writes to
+// Serve uploads — same absolute path multer writes to
 app.use('/uploads', express.static(UPLOAD_DIR, {
   setHeaders(res, filePath) {
-    // Force download for non-image/audio files
     const ext = path.extname(filePath).toLowerCase();
     const inline = ['.jpg','.jpeg','.png','.gif','.webp','.mp3','.wav','.ogg','.webm','.m4a'];
     if (!inline.includes(ext)) {
@@ -62,8 +79,9 @@ app.get('/health', (req, res) => res.json({ status:'ok', port:process.env.PORT||
 
 require('./socket')(io);
 
+// Global Express error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err.message);
+  console.error('Express error:', err.message);
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 

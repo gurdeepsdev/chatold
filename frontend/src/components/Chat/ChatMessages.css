@@ -218,7 +218,7 @@
 .reactions-bar {
   display: flex;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 50px;
   flex-wrap: wrap;
 }
 
@@ -293,7 +293,7 @@
 .emoji-picker {
   position: absolute;
   bottom: 100%;
-  left: 0;
+  right: 0;  /* Changed from left: 0 to right: 0 */
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
