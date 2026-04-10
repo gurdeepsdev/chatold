@@ -351,11 +351,12 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
     // Emit real-time notifications to group members
     const io = req.app.get('io');
-
-    if (io) {
     
+    if (io) {
+      // Collect all member notifications to emit in batch
+      const notifications = [];
+      
       for (const group of createdGroups) {
-        
         try {
           // Get all members of the created group
           const [members] = await db.query(
@@ -363,33 +364,34 @@ router.post('/from-campaign-data', auth, async (req, res) => {
             [group.id]
           );
           
-
-          // Notify each member about the new group
+          // Prepare notification for each member
           for (const member of members) {
-            
-            // Check if user is connected
-            const sockets = await io.in(`user_${member.user_id}`).allSockets();
-            
-            io.to(`user_${member.user_id}`).emit('group_created', {
-              type: 'group_created',
-              group: {
-                id: group.id,
-                group_name: group.group_name,
-                group_type: group.group_type,
-                campaign_name: group.campaign_name,
-                platform: group.platform,
-                created_by: req.user.full_name,
-                created_at: new Date(),
-                member_ids: members.map(m => m.user_id) // Add member IDs for frontend validation
+            notifications.push({
+              room: `user_${member.user_id}`,
+              data: {
+                type: 'group_created',
+                group: {
+                  id: group.id,
+                  group_name: group.group_name,
+                  group_type: group.group_type,
+                  campaign_name: group.campaign_name,
+                  platform: group.platform,
+                  created_by: req.user.full_name,
+                  created_at: new Date(),
+                  member_ids: members.map(m => m.user_id)
+                }
               }
             });
-            
           }
         } catch (error) {
           console.error(`Error processing group ${group.id}:`, error);
         }
       }
-    } else {
+      
+      // Emit all notifications in parallel (non-blocking)
+      await Promise.all(notifications.map(({ room, data }) => 
+        io.to(room).emit('group_created', data)
+      ));
     }
 
     res.status(201).json({
