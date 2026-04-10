@@ -725,8 +725,6 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
   // Expand users with hierarchy (for group creation)
   router.post('/expand-hierarchy', auth, async (req, res) => {
-    // FIX: declare conn outside try so finally can always release it.
-    let conn;
     try {
       const { user_ids } = req.body;
 
@@ -734,7 +732,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         return res.status(400).json({ error: 'user_ids array required' });
       }
 
-      conn = await db.getConnection();
+      const conn = await db.getConnection();
 
       // Get full user objects for selected users
       const [userObjects] = await conn.query(
@@ -754,13 +752,6 @@ router.post('/from-campaign-data', auth, async (req, res) => {
       res.json({ users: expandedUsers });
     } catch (err) {
       res.status(500).json({ error: 'Failed to expand hierarchy' });
-    } finally {
-      // FIX: CRITICAL — always return the connection to the pool.
-      // Previously this was missing: every call to this endpoint permanently
-      // consumed one connection until the pool (limit=15) was fully exhausted,
-      // at which point ALL database operations across the entire server queued
-      // up indefinitely, causing the server-wide freeze after 5–10 minutes.
-      if (conn) conn.release();
     }
   });
 
