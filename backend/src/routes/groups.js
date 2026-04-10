@@ -779,12 +779,20 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
       await conn.commit();
 
+      // Get user details of added member for frontend display
+      const [addedUser] = await db.query(
+        'SELECT id, full_name, email FROM users WHERE id = ?',
+        [user_id]
+      );
+
       // Emit real-time member update to all group members
       const io = req.app.get('io');
       if (io) {
         io.to(`group_${groupId}`).emit('member_added', {
           group_id: parseInt(groupId),
           user_id: parseInt(user_id),
+          user_name: addedUser[0]?.full_name || `User ${user_id}`,
+          user_email: addedUser[0]?.email || '',
           added_by: req.user.id,
           added_by_name: req.user.full_name,
           timestamp: new Date()

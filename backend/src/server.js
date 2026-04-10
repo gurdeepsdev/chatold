@@ -33,10 +33,10 @@ const server = http.createServer(app);
 // Resolve upload dir to absolute path once — both multer and static use this
 const UPLOAD_DIR = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
 require('fs').mkdirSync(UPLOAD_DIR, { recursive: true });
-
+console.log("CLIENT_URL:", process.env.CLIENT_URL);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com',
+    origin: process.env.CLIENT_URL || "https://chat.pidmetric.com" ,
     methods: ['GET','POST','PUT','PATCH','DELETE'],
     credentials: true,
   },
@@ -52,7 +52,7 @@ const io = new Server(server, {
 app.set('io', io);
 app.set('UPLOAD_DIR', UPLOAD_DIR);
 
-app.use(cors({ origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com', credentials: true }));
+app.use(cors({ origin: process.env.CLIENT_URL || "https://chat.pidmetric.com", credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));

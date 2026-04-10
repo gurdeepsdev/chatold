@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { groupsAPI, authAPI } from '../../utils/api';
+import { useSocket } from '../../context/SocketContext';
 import toast from 'react-hot-toast';
 
 const AVATAR_COLORS = ['#4f7dff','#a855f7','#22c55e','#f59e0b','#ef4444','#06b6d4'];
@@ -13,6 +14,7 @@ function getInitials(name = '') {
 }
 
 export default function CampaignDetails({ group }) {
+  const { on } = useSocket();
   const [members, setMembers] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -74,6 +76,48 @@ export default function CampaignDetails({ group }) {
     groupsAPI.getById(group.id).then(d => setMembers(d.members || []));
     authAPI.getUsers().then(d => setAllUsers(d.users || []));
   }, [group?.id]);
+
+  // Listen for member removal updates
+  useEffect(() => {
+    const unsub = on('member_removed', (data) => {
+      // Only handle member updates for current group
+      if (Number(data.group_id) === group?.id) {
+        // Update members list in real-time (no API call)
+        setMembers(prev => prev.filter(member => member.id !== Number(data.user_id)));
+        
+        // Show notification
+        toast.success(`${data.removed_by_name} removed a member`);
+      }
+    });
+
+    return unsub;
+  }, [on, group?.id]);
+
+  // Listen for member addition updates
+  useEffect(() => {
+    const unsub = on('member_added', (data) => {
+      // Only handle member updates for current group
+      if (Number(data.group_id) === group?.id) {
+        // Update members list in real-time (no API call)
+        setMembers(prev => {
+          const newMember = {
+            id: Number(data.user_id),
+            full_name: data.user_name || `User ${data.user_id}`,
+            email: data.user_email || ''
+          };
+          
+          // Check if member already exists
+          const exists = prev.some(member => member.id === newMember.id);
+          return exists ? prev : [...prev, newMember];
+        });
+        
+        // Show notification
+        toast.success(`${data.added_by_name} added a new member`);
+      }
+    });
+
+    return unsub;
+  }, [on, group?.id]);
 
   const addMembers = async () => {
     if (selectedUsers.length === 0) return;

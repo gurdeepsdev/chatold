@@ -88,9 +88,27 @@ socket.on('connect_error', err => {
       setOnlineUsers(prev => ({ ...prev, [user_id]: is_online }))
     );
 
+    // Unread count listeners
+    socket.on('initial_unread', (data) => {
+      setUnread(data);
+    });
+    socket.on('unread_increment', ({ groupId, count }) => {
+      setUnread(prev => ({
+        ...prev,
+        [groupId]: (prev[groupId] || 0) + count
+      }));
+    });
+    socket.on('unread_reset', ({ groupId }) => {
+      setUnread(prev => ({
+        ...prev,
+        [groupId]: 0
+      }));
+    });
+
     socketRef.current = socket;
     return () => { socket.removeAllListeners(); socket.disconnect(); socketRef.current = null; };
   }, [token, reattach, rejoin]);
+
 
   // Stable on() — stores handler AND attaches to live socket; returns unsub fn
   const on = useCallback((event, handler) => {

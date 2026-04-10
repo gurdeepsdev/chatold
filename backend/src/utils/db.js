@@ -12,9 +12,11 @@ const pool = mysql.createPool({
   // FIX #1: Increased from 5 → 15. With transactions, socket queries, and
   // concurrent API requests all sharing 5 connections, the pool was
   // guaranteed to exhaust under real load.
-  connectionLimit: 15,
-  queueLimit: 50,          // FIX #2: Cap the queue — don't let requests pile up forever
-  connectTimeout: 10000,   // FIX #3: Fail fast (10s) instead of hanging indefinitely
+  connectionLimit: 25,
+  queueLimit: 0,          // FIX #2: Cap the queue — don't let requests pile up forever
+  connectTimeout: 10000, 
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,  // FIX #3: Fail fast (10s) instead of hanging indefinitely
   timezone: '+00:00',
   decimalNumbers: true,
   // FIX #4: Reduced from 300000 (5 min) → 60000 (60s). The 5-minute idle
@@ -47,7 +49,7 @@ crmPool = mysql.createPool({
   password: process.env.CRM_DB_PASSWORD || process.env.DB_PASSWORD || 'Clickorbits@123',
   database: process.env.CRM_DB_NAME     || 'crmclickorbits',
   waitForConnections: true,
-  connectionLimit: 5,
+  connectionLimit: 25,
   queueLimit: 20,
   connectTimeout: 10000,
   timezone: '+00:00',

@@ -53,7 +53,7 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       }
       
       // Load unread message counts
-      loadUnreadCounts();
+      // loadUnreadCounts();
     } catch (error) {
       toast.error('Failed to load groups');
     } finally {
@@ -61,21 +61,10 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
     }
   }, [joinGroup]);
 
-  const loadUnreadCounts = useCallback(async () => {
-    try {
-      const data = await messagesAPI.getUnreadCounts();
-      setUnreadCounts(data.unreadCounts || {});
-    } catch (error) {
-      console.error('Failed to load unread counts:', error);
-    }
-  }, []);
-
+  
   const markGroupAsRead = useCallback(async (groupId) => {
     try {
-      // Mark messages as seen by calling the messages API
-      await messagesAPI.getMessages(groupId); // This automatically marks messages as seen
-      
-      // Update unread counts locally
+      // Update unread counts locally instead of API call
       setUnreadCounts(prev => ({
         ...prev,
         [groupId]: 0
@@ -95,34 +84,85 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
 
   // Load pinned groups from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('pinnedGroups');
-    if (saved) {
+    if (!user?.id) return;
+    
+    console.log('🔍 Loading pinned groups for user:', user.id);
+    
+    // Clear old global key and migrate to user-specific key (only once)
+    const oldGlobalKey = localStorage.getItem('pinnedGroups');
+    if (oldGlobalKey) {
       try {
-        setPinnedGroups(JSON.parse(saved));
+        const oldPinned = JSON.parse(oldGlobalKey);
+        localStorage.removeItem('pinnedGroups'); // Clear old global key
+        
+        // Set user-specific key with old data
+        localStorage.setItem(`pinned_groups_${user.id}`, JSON.stringify(oldPinned));
+        setPinnedGroups(oldPinned);
+        console.log('🔄 Migrated pinned groups:', oldPinned);
+        return;
       } catch (e) {
-        console.error('Failed to load pinned groups:', e);
+        console.error('Failed to migrate pinned groups:', e);
+        localStorage.removeItem('pinnedGroups'); // Clear old key anyway
       }
     }
-  }, []);
+    
+    const saved = localStorage.getItem(`pinned_groups_${user.id}`);
+    console.log('📦 Found pinned groups in localStorage:', saved);
+    
+    // Only load if pinnedGroups is empty (to avoid overriding during re-renders)
+    if (pinnedGroups.length === 0) {
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setPinnedGroups(parsed);
+          console.log('✅ Loaded pinned groups:', parsed);
+        } catch (e) {
+          console.error('Failed to load pinned groups:', e);
+          setPinnedGroups([]); // Reset to empty on error
+        }
+      } else {
+        console.log('📝 No pinned groups found, initializing empty array');
+        setPinnedGroups([]); // Explicitly set empty array
+      }
+    } else {
+      console.log('⚠️ Pinned groups already loaded, skipping localStorage read');
+    }
+  }, [user?.id, pinnedGroups.length]);
   
   // Save pinned groups to localStorage whenever they change
   useEffect(() => {
-    if (pinnedGroups.length > 0) {
-      localStorage.setItem('pinnedGroups', JSON.stringify(pinnedGroups));
+    if (!user?.id) return;
+    console.log('💾 Saving pinned groups:', pinnedGroups);
+    localStorage.setItem(`pinned_groups_${user.id}`, JSON.stringify(pinnedGroups));
+    
+    // Verify the save was successful
+    const saved = localStorage.getItem(`pinned_groups_${user.id}`);
+    const verified = JSON.parse(saved || '[]');
+    console.log('✅ Verification - saved pinned groups:', verified);
+    
+    if (JSON.stringify(pinnedGroups) !== saved) {
+      console.error('❌ CRITICAL: localStorage save verification failed!');
     }
-  }, [pinnedGroups]);
+  }, [pinnedGroups, user?.id]);
 
   // Pin/unpin group functionality
   const togglePinGroup = useCallback((groupId) => {
+    console.log('📌 Toggling pin for group:', groupId);
     setPinnedGroups(prev => {
       const isPinned = prev.includes(groupId);
+      console.log('📍 Current pin state:', isPinned ? 'pinned' : 'not pinned');
+      
+      let newPinned;
       if (isPinned) {
         // Remove from pinned groups
-        return prev.filter(id => id !== groupId);
+        newPinned = prev.filter(id => id !== groupId);
+        console.log('🔓 Unpinning group, new pinned list:', newPinned);
       } else {
         // Add to pinned groups
-        return [...prev, groupId];
+        newPinned = [...prev, groupId];
+        console.log('📌 Pinning group, new pinned list:', newPinned);
       }
+      return newPinned;
     });
   }, []);
 
@@ -131,7 +171,12 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
     return pinnedGroups.includes(groupId);
   }, [pinnedGroups]);
 
-  useEffect(() => { loadGroups(); }, [loadGroups]);
+  useEffect(() => { 
+    // Only load groups after pinned groups are initialized
+    if (user?.id && pinnedGroups.length >= 0) {
+      loadGroups(); 
+    }
+  }, [user?.id, pinnedGroups.length]);
 
   useEffect(() => {
     const unsub = on('new_message', (msg) => {
@@ -196,12 +241,46 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
       }
     });
 
+    // Listen for message seen events to decrement unread counts
+    const unsubMessageSeen = on('message_status_update', (data) => {
+      if (data.status === 'seen' && data.message_id && data.user_id === user?.id) {
+        // Find which group this message belongs to and decrement unread count
+        setUnreadCounts(prev => {
+          const newCounts = { ...prev };
+          
+          // Find the group containing this message and decrement count
+          Object.keys(newCounts).forEach(groupId => {
+            if (newCounts[groupId] > 0) {
+              newCounts[groupId] = Math.max(0, newCounts[groupId] - 1);
+            }
+          });
+          
+          return newCounts;
+        });
+      }
+    });
+
     // Listen for member added events
     const unsubMemberAdded = on('member_added', (data) => {
       // If current user was added to a group, reload groups
       if (Number(data.user_id) === user?.id) {
         loadGroups();
         toast.success(`You were added to a group by ${data.added_by_name}`);
+      } else {
+        // For other members, update the specific group in state
+        setGroups(prev => prev.map(group => {
+          if (group.id === Number(data.group_id)) {
+            // Add the new member to the group's member list
+            return {
+              ...group,
+              members: group.members ? [...group.members, {
+                id: Number(data.user_id),
+                full_name: data.user_name || `User ${data.user_id}`
+              }] : [{ id: Number(data.user_id), full_name: data.user_name || `User ${data.user_id}` }]
+            };
+          }
+          return group;
+        }));
       }
     });
 
@@ -211,6 +290,18 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
       if (Number(data.user_id) === user?.id) {
         loadGroups();
         toast.success(`You were removed from a group by ${data.removed_by_name}`);
+      } else {
+        // For other members, update the specific group in state
+        setGroups(prev => prev.map(group => {
+          if (group.id === Number(data.group_id)) {
+            // Remove the member from the group's member list
+            return {
+              ...group,
+              members: group.members?.filter(member => member.id !== Number(data.user_id)) || []
+            };
+          }
+          return group;
+        }));
       }
     });
 
@@ -219,6 +310,7 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
       unsubGroupCreated();
       unsubCampaignCreated();
       unsubNewMessage();
+      unsubMessageSeen();
       unsubMemberAdded();
       unsubMemberRemoved();
     };

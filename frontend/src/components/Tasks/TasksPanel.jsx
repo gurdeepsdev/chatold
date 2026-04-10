@@ -632,10 +632,20 @@ export default function TasksPanel({group, taskTarget}){
   useEffect(()=>{
     const unsub=on('member_added',(data)=>{
       // Only handle member updates for current group
-      if(Number(data.group_id) === group?.id) {
+      if(Number(data.group_id) === group?.id){
         
-        // Reload group members to update the dropdown
-        groupsAPI.getById(group.id).then(d => setMembers(d.members || []));
+        // Update members list in real-time (no API call)
+        setMembers(prev => {
+          const newMember = {
+            id: Number(data.user_id),
+            full_name: data.user_name || `User ${data.user_id}`,
+            email: data.user_email || ''
+          };
+          
+          // Check if member already exists
+          const exists = prev.some(member => member.id === newMember.id);
+          return exists ? prev : [...prev, newMember];
+        });
         
         // Show notification
         toast.success(`${data.added_by_name} added a new member`);
@@ -648,10 +658,10 @@ export default function TasksPanel({group, taskTarget}){
   useEffect(()=>{
     const unsub=on('member_removed',(data)=>{
       // Only handle member updates for current group
-      if(Number(data.group_id) === group?.id) {
+      if(Number(data.group_id) === group?.id){
         
-        // Reload group members to update the dropdown
-        groupsAPI.getById(group.id).then(d => setMembers(d.members || []));
+        // Update members list in real-time (no API call)
+        setMembers(prev => prev.filter(member => member.id !== Number(data.user_id)));
         
         // Show notification
         toast.success(`${data.removed_by_name} removed a member`);
