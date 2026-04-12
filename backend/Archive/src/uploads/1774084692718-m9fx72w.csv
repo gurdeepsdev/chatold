@@ -1,0 +1,18 @@
+Campaign Name,Vertical,GEO,State Or City,OS,Payable Event,MMP Tracker,ADV ID,ADV Payout $,PUB AM,PubID,PID,DA,PUB Payout $,Shared Date,Paused Date,FP,FA (Step 1),pub_Apno,ADV Total Numbers,ADV Deductions,ADV Approved Numbers,user_id
+Moneyman MX,Finance,MX,NA,Android,application_approved,Singular,6022,12.2,Tarun,345,smartlead,Agency,9,01/02/26,28/02/26,,,523.7,552,0,552,51
+Moneyman MX,Finance,MX,NA,iOS,application_approved,Singular,6022,12.2,Tarun,345,smartlead,Agency,9,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,Android,application_approved,Singular,6022,12.2,Tarun,345,VIBEWAVE,Agency,9,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,iOS,application_approved,Singular,6022,12.2,Tarun,345,VIBEWAVE,Agency,9,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,Android,application_approved,Singular,6022,12.2,Tarun,345,Athenmobi ,Agency,9,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,iOS,application_approved,Singular,6022,12.2,Tarun,345,Athenmobi ,Agency,9,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,Android,application_approved,Singular,6022,12.2,Tarun,345,Zoneads,Agency,9,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,iOS,application_approved,Singular,6022,12.2,Tarun,345,Zoneads,Agency,9,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,Android,application_approved,Singular,6022,12.2,Tarun,345,WingAds ,Agency,9,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,iOS,application_approved,Singular,6022,12.2,Tarun,345,WingAds ,Agency,9,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,Android,application_approved,Singular,6022,12.2,Tarun,2028,Fightmob,Agency,8,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,iOS,application_approved,Singular,6022,12.2,Tarun,2028,Fightmob,Agency,8,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,Android,application_approved,Singular,6022,12.2,Tarun,2028,COOLCLICK,Agency,8,01/02/26,28/02/26,,,0,0,0,0,51
+Moneyman MX,Finance,MX,NA,iOS,application_approved,Singular,6022,12.2,Tarun,2028,COOLCLICK,Agency,8,01/02/26,28/02/26,,,0,0,0,0,51
+G500,E-commerce,MX,NA,Android,new_active_user,AppsFlyer,6012,1,Monika,1156,usaadripxt2_int,Agency,0.7,01/12/25,31/12/25,,,1028,1559,531,1028,51
+G500,E-commerce,MX,NA,Android,new_active_user,AppsFlyer,6012,1,Monika,1156,confilio_int,Agency,"0.7	",01/12/25,31/12/25,,,0,0,0,0,51
+Maybank,Finance & Insurance,ID,NA,Android,Full KYC Eligibility - rmlund,Adjust,40,2,Prayag,557,557,Agency,1.4,01/01/26,31/01/26,Live,,35,35,0,35,51
