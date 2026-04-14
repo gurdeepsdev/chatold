@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { campaignsAPI } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
-import { format } from 'date-fns';
+import { formatPIDStatusIST } from '../../utils/timezone';
 import toast from 'react-hot-toast';
 
 const PAUSE_SCENARIOS = [
@@ -167,7 +167,7 @@ export default function PreviewPanel({ group }) {
                       )}
                     </td>
                     <td style={{ color: 'var(--text-muted)', fontSize: 10 }}>
-                      {format(new Date(pid.updated_at), 'MMM d HH:mm')}
+                      {formatPIDStatusIST(pid.updated_at)}
                     </td>
                     <td>
                       <button

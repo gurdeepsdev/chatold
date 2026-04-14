@@ -78,15 +78,15 @@ function makePool(config) {
     waitForConnections: true,
     connectionLimit:    10,   // reduced from 15 — remote MySQL on shared host;
                               // fewer persistent TCP sockets = fewer EADDRNOTAVAIL
-                              // events when the OS port table is under pressure.
+                              // events when OS port table is under pressure.
     queueLimit:         30,   // hard cap — surface backpressure early
     connectTimeout:     8000, // 8 s — fail fast on network hiccup
     idleTimeout:        55000,// just under MySQL's default wait_timeout (60 s)
-                              // so the pool retires idle connections before the
+                              // so pool retires idle connections before
                               // server kills them, preventing "stale connection" errors
     enableKeepAlive:        true,
-    keepAliveInitialDelay:  15000, // 15 s — first keepalive after connection settles
-    timezone: '+00:00',
+    keepAliveInitialDelay: 15000, // 15 s — first keepalive after connection settles
+    timezone: '+05:30', // Indian Standard Time (IST)
     decimalNumbers: true,
     ...config,
   });

@@ -868,58 +868,131 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
     });
   }, [search, groupsToRender, groups, threads, pinnedGroups, unreadCounts, threadGroupIds, isGroupPinned]);
 
-  const renderUnifiedItem = (itemData) => {
-    const { type, item, unreadCount } = itemData;
+  // const renderUnifiedItem = (itemData) => {
+  //   const { type, item, unreadCount } = itemData;
 
-    if (type === 'thread') {
-      return (
-        <div key={item.package_id} className="thread-section">
-          <div className="thread-header" onClick={() => toggleThread(item.package_id)}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-            </svg>
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {(() => {
-                // Extract campaign name from crm_campaign_data JSON field
-                const firstGroup = item.groups?.[0];
-                if (firstGroup?.crm_campaign_data) {
-                  try {
-                    const crmData = typeof firstGroup.crm_campaign_data === 'string' 
-                      ? JSON.parse(firstGroup.crm_campaign_data) 
-                      : firstGroup.crm_campaign_data;
-                    if (crmData?.campaign_name) {
-                      return crmData.campaign_name;
-                    }
-                  } catch (e) {
-                    console.error('Failed to parse crm_campaign_data:', e);
-                  }
-                }
-                // Fallback to package_id if no campaign name found
-                return item.package_id.replace(/^com\./, '');
-              })()}
-            </span>
-            <span style={{ fontSize: 10, background: 'var(--bg-active)', padding: '1px 5px', borderRadius: 4 }}>
-              {item.groups.length}
-            </span>
+  //   if (type === 'thread') {
+  //     return (
+  //       <div key={item.package_id} className="thread-section">
+  //         <div className="thread-header" onClick={() => toggleThread(item.package_id)}>
+  //           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+  //             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+  //           </svg>
+  //           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+  //             {(() => {
+  //               // Extract campaign name from crm_campaign_data JSON field
+  //               const firstGroup = item.groups?.[0];
+  //               if (firstGroup?.crm_campaign_data) {
+  //                 try {
+  //                   const crmData = typeof firstGroup.crm_campaign_data === 'string' 
+  //                     ? JSON.parse(firstGroup.crm_campaign_data) 
+  //                     : firstGroup.crm_campaign_data;
+  //                   if (crmData?.campaign_name) {
+  //                     return crmData.campaign_name;
+  //                   }
+  //                 } catch (e) {
+  //                   console.error('Failed to parse crm_campaign_data:', e);
+  //                 }
+  //               }
+  //               // Fallback to package_id if no campaign name found
+  //               return item.package_id.replace(/^com\./, '');
+  //             })()}
+  //           </span>
+  //           <span style={{ fontSize: 10, background: 'var(--bg-active)', padding: '1px 5px', borderRadius: 4 }}>
+  //             {item.groups.length}
+  //           </span>
+  //           {unreadCount > 0 && (
+  //             <span className="group-badge" style={{ background: 'var(--accent)', marginLeft: 4 }}>
+  //               {unreadCount}
+  //             </span>
+  //           )}
+  //           <svg
+  //             className={`thread-chevron ${expandedThreads[item.package_id] ? 'open' : ''}`}
+  //             width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+  //           >
+  //             <polyline points="9 18 15 12 9 6"/>
+  //           </svg>
+  //         </div>
+  //         {expandedThreads[item.package_id] && item.groups.map(group => renderGroup(group, true))}
+  //       </div>
+  //     );
+  //   }
+
+
+  const renderUnifiedItem = (itemData) => {
+  const { type, item, unreadCount } = itemData;
+
+  if (type === 'thread') {
+    const threadName = (() => {
+      const firstGroup = item.groups?.[0];
+      if (firstGroup?.crm_campaign_data) {
+        try {
+          const crmData = typeof firstGroup.crm_campaign_data === 'string'
+            ? JSON.parse(firstGroup.crm_campaign_data)
+            : firstGroup.crm_campaign_data;
+
+          if (crmData?.campaign_name) return crmData.campaign_name;
+        } catch {}
+      }
+      return item.package_id.replace(/^com\./, '');
+    })();
+
+    return (
+      <div key={item.package_id}>
+        
+        {/* ✅ SAME UI AS GROUP */}
+        <div
+          className="group-item"
+          onClick={() => toggleThread(item.package_id)}
+          style={{
+            cursor: 'pointer',
+            background: 'var(--bg-secondary)'
+          }}
+        >
+          {/* Avatar */}
+          <div
+            className="group-avatar"
+            style={{
+              background: `${avatarColor(threadName)}22`,
+              color: avatarColor(threadName),
+              border: `1px solid ${avatarColor(threadName)}44`
+            }}
+          >
+            {getInitials(threadName)}
+          </div>
+
+          {/* Info */}
+          <div className="group-info">
+            <div className="group-name">{threadName}</div>
+            <div className="group-meta">
+              <span>{item.groups.length} campaigns</span>
+            </div>
+          </div>
+
+          {/* Right side */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
             {unreadCount > 0 && (
-              <span className="group-badge" style={{ background: 'var(--accent)', marginLeft: 4 }}>
+              <span className="group-badge" style={{ background: 'var(--accent)' }}>
                 {unreadCount}
               </span>
             )}
-            <svg
-              className={`thread-chevron ${expandedThreads[item.package_id] ? 'open' : ''}`}
-              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-            >
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </div>
-          {expandedThreads[item.package_id] && item.groups.map(group => renderGroup(group, true))}
-        </div>
-      );
-    }
 
-    return renderGroup(item, false);
-  };
+            <span style={{ fontSize: 12 }}>
+              {expandedThreads[item.package_id] ? '▲' : '▼'}
+            </span>
+          </div>
+        </div>
+
+        {/* Child groups */}
+        {expandedThreads[item.package_id] && item.groups.map(group => renderGroup(group, true))}
+      </div>
+    );
+  }
+
+  return renderGroup(item, false);
+};
+  //   return renderGroup(item, false);
+  // };
   const renderGroup = (group, isThreadGroup = false) => (
     <div
       key={group.id}

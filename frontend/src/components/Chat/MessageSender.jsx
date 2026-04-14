@@ -584,7 +584,9 @@ const MessageSender = ({
         'application/pdf', 
         'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/zip', 'application/x-zip-compressed'
+        'application/zip', 'application/x-zip-compressed',
+          'text/csv',                     // ← ADD THIS
+  'application/csv'  
       ];
 
       if (!allowedTypes.includes(file.type) && !file.type.startsWith('image/') && !file.type.startsWith('audio/') && !file.type.startsWith('video/')) {
@@ -756,9 +758,9 @@ const MessageSender = ({
               {/* <button type="button" className={`action-btn voice-btn ${isRecording ? 'recording' : ''}`} title="Voice message" onClick={handleVoiceRecord}>
                 🎤
               </button> */}
-              <button type="button" className="action-btn task-btn" title="Create task" onClick={handleTaskClick}>
+              {/* <button type="button" className="action-btn task-btn" title="Create task" onClick={handleTaskClick}>
                 ✅
-              </button>
+              </button> */}
             </div>
             
             {/* Hidden file input */}

@@ -608,6 +608,7 @@ const fs      = require('fs');
 const db      = require('../utils/db');
 const { auth }            = require('../middleware/auth');
 const { encrypt, decrypt} = require('../utils/encryption');
+const { formatISTForMySQL, getISTTimestamp } = require('../utils/timezone');
 const { 
   getMessageAccessFilter, 
   getUserAssignmentInfo, 
@@ -929,7 +930,7 @@ router.post('/:groupId',auth,checkMember,async(req,res)=>{
       username:req.user.username,sender_role:req.user.role,
       message_type,content:modifiedContent,reply_to_id:reply_to_id||null,
       ...replyData,
-      is_deleted:false,sent_at:new Date(),
+      is_deleted:false,sent_at:formatISTForMySQL(),
     };
     
     // 🚀 Emit single message to all group members
@@ -1037,10 +1038,10 @@ router.post('/:groupId/upload',auth,checkMember,upload.single('file'),async(req,
       username:req.user.username,sender_role:req.user.role,
       message_type:msgType,
       content:caption,
-      file_url:absUrl(req,relPath),   // ✅ absolute
+      file_url:absUrl(req,relPath),   // absolute
       file_name:file.originalname,file_size:file.size,mime_type:file.mimetype,
       file_icon:fileIcon, // Add file icon for better UI
-      sent_at:new Date(),
+      sent_at:formatISTForMySQL(),
     };
     
     const io=req.app.get('io');

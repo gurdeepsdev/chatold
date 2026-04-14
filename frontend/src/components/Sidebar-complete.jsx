@@ -4,18 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import CreateGroupModal from './Groups/CreateGroupModal';
 import toast from 'react-hot-toast';
-import { format, isToday, isYesterday } from 'date-fns';
+import { formatTimeIST } from '../utils/timezone';
 
 function getInitials(name = '') {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
-
-function formatTime(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isToday(d)) return format(d, 'HH:mm');
-  if (isYesterday(d)) return 'Yesterday';
-  return format(d, 'MMM d');
 }
 
 const AVATAR_COLORS = ['#4f7dff','#a855f7','#22c55e','#f59e0b','#ef4444','#06b6d4'];
@@ -168,7 +160,7 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-          {formatTime(group.last_message_at)}
+          {formatTimeIST(group.last_message_at)}
         </span>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           {/* Message count (total messages for this user) */}

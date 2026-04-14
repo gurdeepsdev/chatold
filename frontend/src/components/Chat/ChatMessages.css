@@ -82,7 +82,7 @@
 
 .message-bubble.own {
   background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-  color: white;
+  color: var(--text-primary);
   border-bottom-right-radius: 4px;
 }
 

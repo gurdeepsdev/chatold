@@ -7,6 +7,7 @@ const db      = require('../utils/db');
 const { auth }             = require('../middleware/auth');
 const { encrypt, decrypt } = require('../utils/encryption');
 const { getTaskAccessFilter } = require('../utils/taskAccess');
+const { formatISTForMySQL, getISTTimestamp } = require('../utils/timezone');
 
 // Multer for task attachments — same UPLOAD_DIR as messages
 const storage = multer.diskStorage({
@@ -283,7 +284,7 @@ if (assignees.length > 0) {
       message_type: 'task_notification',
       content: chatContent,
       task_ref: {task_id: taskId, task_type: 'share_link', task_title: taskLabel},
-      sent_at: new Date(),
+      sent_at: formatISTForMySQL(),
     });
   }
 
@@ -389,7 +390,7 @@ if (assignees.length > 0) {
       message_type: 'task_notification',
       content: chatContent,
       task_ref: {task_id: taskId, task_type: 'pause_pid', task_title: taskLabel},
-      sent_at: new Date(),
+      sent_at: formatISTForMySQL(),
     });
   }
 
@@ -606,7 +607,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
       message_type: 'task_notification',
       content: chatContent,
       task_ref: { task_id: taskId, task_type: 'optimise', task_title: taskLabel },
-      sent_at: new Date(),
+      sent_at: formatISTForMySQL(),
     });
   }
 
@@ -727,7 +728,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
         sender_id:req.user.id,sender_name:req.user.full_name,sender_role:req.user.role,
         message_type:'task_notification',content:chatContent,
         task_ref:{task_id:taskId,task_title:taskLabel,task_type},
-        sent_at:new Date(),
+        sent_at:formatISTForMySQL(),
       });
       // notify assignees
       allAssignees.forEach(assigneeId => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { groupsAPI } from '../../utils/api';
-import { format } from 'date-fns';
+import { formatGroupCreatedIST, formatTimelineIST } from '../../utils/timezone';
 
 const EVENT_ICONS = {
   group_created: '🚀',
@@ -60,7 +60,7 @@ export default function SummaryPanel({ group }) {
             {group.package_id && <div className="campaign-detail-row"><span className="campaign-detail-label">Package ID</span><span className="campaign-detail-value tag">{group.package_id}</span></div>}
             <div className="campaign-detail-row">
               <span className="campaign-detail-label">Created</span>
-              <span className="campaign-detail-value">{format(new Date(group.created_at || Date.now()), 'MMM d, yyyy')}</span>
+              <span className="campaign-detail-value">{formatGroupCreatedIST(group.created_at || Date.now())}</span>
             </div>
           </div>
         </div>
@@ -101,7 +101,7 @@ export default function SummaryPanel({ group }) {
                 </div>
                 <div className="timeline-time">
                   {event.triggered_by_name && <span>{event.triggered_by_name} · </span>}
-                  {format(new Date(event.created_at), 'MMM d, HH:mm')}
+                  {formatTimelineIST(event.created_at)}
                 </div>
               </div>
             </div>

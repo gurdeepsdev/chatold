@@ -787,8 +787,22 @@
 //           user_id: parseInt(user_id),
 //           added_by: req.user.id,
 //           added_by_name: req.user.full_name,
-//           timestamp: new Date()
+//           timestamp: getISTTimestamp()
 //         });
+
+//         // CRITICAL: Also emit to the newly added user's personal room
+//         // and tell them to join the group room
+//         io.to(`user_${user_id}`).emit('added_to_group', {
+//           group_id: parseInt(groupId),
+//           user_id: parseInt(user_id),
+//           added_by: req.user.id,
+//           added_by_name: req.user.full_name,
+//           timestamp: getISTTimestamp()
+//         });
+
+//         console.log(` Member added: User ${user_id} added to group ${groupId}`);
+//         console.log(` Emitted member_added to group_${groupId}`);
+//         console.log(` Emitted added_to_group to user_${user_id}`);
 //       }
 
 //       res.json({ message: 'Member added' });
@@ -842,6 +856,7 @@ const router = express.Router();
 const db = require('../utils/db');
 const { auth } = require('../middleware/auth');
 const { encrypt } = require('../utils/encryption');
+const { formatISTForMySQL, getISTTimestamp } = require('../utils/timezone');
 const {
   getUsersByRole,
   getAssignedHierarchyUsers,
@@ -1122,10 +1137,10 @@ router.post('/from-campaign-data', auth, async (req, res) => {
 
         // ── Auto-create default tasks ──────────────────────────
         // 1. Initial Setup
-        await conn.query(
-          'INSERT INTO tasks (group_id, task_type, title, description, assigned_by, status) VALUES (?, ?, ?, ?, ?, ?)',
-          [groupId, 'initial_setup', 'Campaign Setup & Verification', 'Verify campaign details, KPIs, and tracking setup. Confirm GEO targeting and payout structure.', req.user.id, 'pending']
-        );
+        // await conn.query(
+        //   'INSERT INTO tasks (group_id, task_type, title, description, assigned_by, status) VALUES (?, ?, ?, ?, ?, ?)',
+        //   [groupId, 'initial_setup', 'Campaign Setup & Verification', 'Verify campaign details, KPIs, and tracking setup. Confirm GEO targeting and payout structure.', req.user.id, 'pending']
+        // );
 
         // 2. Share Link
         const [shareLinkTask] = await conn.query(
@@ -1601,7 +1616,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         user: addedUser || null,        // full user object so UI can append without reload
         added_by: req.user.id,
         added_by_name: req.user.full_name,
-        timestamp: new Date()
+        timestamp: getISTTimestamp()
       };
 
       // Emit real-time member update
@@ -1636,7 +1651,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         user_id: parseInt(userId),
         removed_by: req.user.id,
         removed_by_name: req.user.full_name,
-        timestamp: new Date()
+        timestamp: getISTTimestamp()
       };
 
       // Emit real-time member removal

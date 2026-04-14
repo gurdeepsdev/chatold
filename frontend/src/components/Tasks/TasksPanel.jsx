@@ -357,7 +357,7 @@ export default function TasksPanel({group, taskTarget}){
                       // </select>
                       <select 
   className="form-control" 
-  style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+  style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}}
   value={entry.assigned_to || ""} 
   onChange={e => updateOptimiseEntry(entryIndex, 'assigned_to', e.target.value)}
   required
@@ -374,7 +374,7 @@ export default function TasksPanel({group, taskTarget}){
                     return (
                       <input 
                         className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
                         placeholder="PubID" 
                         value={entry.pub_id} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'pub_id', e.target.value)}
@@ -384,7 +384,7 @@ export default function TasksPanel({group, taskTarget}){
                     return (
                       <input 
                         className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
                         placeholder="PID" 
                         value={entry.pid} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'pid', e.target.value)}
@@ -394,7 +394,7 @@ export default function TasksPanel({group, taskTarget}){
                     return (
                       <input 
                         className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
                         placeholder="FP" 
                         value={entry.fp} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'fp', e.target.value)}
@@ -404,7 +404,7 @@ export default function TasksPanel({group, taskTarget}){
                     return (
                       <select 
                         className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}}
                         value={entry.fa} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'fa', e.target.value)}
                       >
@@ -416,7 +416,7 @@ export default function TasksPanel({group, taskTarget}){
                     return (
                       <input 
                         className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
                         placeholder="F1" 
                         value={entry.f1} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'f1', e.target.value)}
@@ -426,7 +426,7 @@ export default function TasksPanel({group, taskTarget}){
                     return (
                       <input 
                         className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
                         placeholder="F2" 
                         value={entry.f2} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'f2', e.target.value)}
@@ -436,7 +436,7 @@ export default function TasksPanel({group, taskTarget}){
                     return (
                       <select 
                         className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}}
                         value={entry.optimise_scenario} 
                         onChange={e => updateOptimiseEntry(entryIndex, 'optimise_scenario', e.target.value)}
                       >
@@ -468,7 +468,6 @@ export default function TasksPanel({group, taskTarget}){
                           style={{
                             background:'rgba(255,255,255,0.2)',
                             border:'1px solid rgba(255,255,255,0.3)',
-                            color:'#fff',
                             borderRadius:'4px',
                             padding:'4px 8px',
                             fontSize:'10px',
@@ -718,6 +717,17 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
     return toast.error('Please select "Assign To" for all entries');
   }
     }
+
+      // ✅ NEW: Validate raise_request
+  if (form.task_type === 'raise_request') {
+    if (!form.assigned_to) {
+      return toast.error('Please select "Assign To"');
+    }
+
+    if (!form.request_details || !form.request_details.trim()) {
+      return toast.error('Please enter request details');
+    }
+  }
     // Validate optimise entries
     if (form.task_type === 'optimise') {
       const validOptimiseEntries = form.optimise_entries.filter(entry => 
@@ -732,6 +742,8 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
         return toast.error('Please select "Assign To" for all entries');
       }
     }
+
+
     setCreating(true);
     try{
       let payload;
@@ -1180,6 +1192,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
   onChange={e => f('assigned_to', e.target.value)}
   required
 >
+
   <option value="">Select User *</option>
   {getFilteredMembersForTaskType('raise_request').map(member => (
     <option key={member.id} value={member.id}>

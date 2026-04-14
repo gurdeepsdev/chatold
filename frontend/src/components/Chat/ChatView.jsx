@@ -70,11 +70,11 @@ export default function ChatView({group}){
               onClick={()=>setActiveTab(tab.key)}>
               <span>{tab.icon}</span>
               <span>{tab.label}</span>
-              {tab.badge&&group.pending_tasks>0&&(
+              {/* {tab.badge&&group.pending_tasks>0&&(
                 <span style={{background:'#ef4444',color:'white',borderRadius:10,padding:'1px 5px',fontSize:9,fontWeight:700,marginLeft:2}}>
                   {group.pending_tasks}
                 </span>
-              )}
+              )} */}
             </button>
           ))}
         </div>
