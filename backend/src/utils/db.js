@@ -76,10 +76,10 @@ require('dotenv').config();
 function makePool(config) {
   const pool = mysql.createPool({
     waitForConnections: true,
-    connectionLimit:    10,   // reduced from 15 — remote MySQL on shared host;
+    connectionLimit:    50,   // reduced from 15 — remote MySQL on shared host;
                               // fewer persistent TCP sockets = fewer EADDRNOTAVAIL
                               // events when OS port table is under pressure.
-    queueLimit:         30,   // hard cap — surface backpressure early
+    queueLimit:         200,   // hard cap — surface backpressure early
     connectTimeout:     8000, // 8 s — fail fast on network hiccup
     idleTimeout:        55000,// just under MySQL's default wait_timeout (60 s)
                               // so pool retires idle connections before
