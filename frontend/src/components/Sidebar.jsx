@@ -524,7 +524,7 @@
 //     </div>
 //   );
 // }
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { groupsAPI, campaignsAPI, messagesAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -562,6 +562,9 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
   const [loading, setLoading] = useState(true);
   const [pinnedGroups, setPinnedGroups] = useState([]);
   const [unreadCounts, setUnreadCounts] = useState({});
+  
+  // Track if this is the first render to prevent saving on initial load
+  const isFirstRender = useRef(true);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -621,34 +624,51 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
 
   // Load pinned groups from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('pinnedGroups');
+    const storageKey = `pinned_groups_${user?.id}`;
+    console.log('Loading pinned groups for user:', user?.id, 'key:', storageKey);
+    const saved = localStorage.getItem(storageKey);
+    console.log('Found saved data:', saved);
     if (saved) {
       try {
-        setPinnedGroups(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        console.log('Parsed pinned groups:', parsed);
+        setPinnedGroups(parsed);
       } catch (e) {
         console.error('Failed to load pinned groups:', e);
       }
+    } else {
+      console.log('No saved pinned groups found, setting empty array');
+      setPinnedGroups([]);
     }
-  }, []);
+  }, [user?.id]);
   
   // Save pinned groups to localStorage whenever they change
   useEffect(() => {
-    if (pinnedGroups.length > 0) {
-      localStorage.setItem('pinnedGroups', JSON.stringify(pinnedGroups));
+    // Only save if user is available and this is not the first render
+    if (user?.id && !isFirstRender.current) {
+      const storageKey = `pinned_groups_${user.id}`;
+      console.log('Saving pinned groups for user:', user.id, 'data:', pinnedGroups);
+      localStorage.setItem(storageKey, JSON.stringify(pinnedGroups));
+      console.log('Saved to localStorage');
+    } else if (isFirstRender.current) {
+      console.log('First render - not saving');
+      isFirstRender.current = false;
+    } else {
+      console.log('Not saving - user not available');
     }
   }, [pinnedGroups]);
 
   // Pin/unpin group functionality
   const togglePinGroup = useCallback((groupId) => {
+    console.log('Toggle pin called for group:', groupId);
     setPinnedGroups(prev => {
       const isPinned = prev.includes(groupId);
-      if (isPinned) {
-        // Remove from pinned groups
-        return prev.filter(id => id !== groupId);
-      } else {
-        // Add to pinned groups
-        return [...prev, groupId];
-      }
+      console.log('Current pinned groups:', prev, 'isPinned:', isPinned);
+      const newPinned = isPinned 
+        ? prev.filter(id => id !== groupId)
+        : [...prev, groupId];
+      console.log('New pinned groups:', newPinned);
+      return newPinned;
     });
   }, []);
 
