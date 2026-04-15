@@ -177,7 +177,7 @@ export default function TasksPanel({group, taskTarget}){
   const [tasks,setTasks]=useState([]);
   const [filter,setFilter]=useState('all');
   const [showCreate,setShowCreate]=useState(false);
-  const [refreshKey, setRefreshKey] = useState(0); // Add refresh key for forcing re-renders
+  // const [refreshKey, setRefreshKey] = useState(0); // Add refresh key for forcing re-renders
   const [loadingTasks, setLoadingTasks] = useState(false); // Add loading state for tasks
   const [users,setUsers]=useState([]);
   const [members,setMembers]=useState([]);
@@ -498,21 +498,56 @@ export default function TasksPanel({group, taskTarget}){
                 }
               };
 
-  const load=useCallback(async()=>{
-    if(!group)return;
-    setLoadingTasks(true);
-    try {
-      // Add small delay to make loading state visible during testing
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const data=await tasksAPI.getByGroup(group.id);
-      setTasks(data.tasks||[]);
-    } catch (error) {
-      console.error('Failed to load tasks:', error);
-      setTasks([]);
-    } finally {
-      setLoadingTasks(false);
-    }
-  },[group?.id]);// eslint-disable-line
+  // const load=useCallback(async()=>{
+  //   if(!group)return;
+  //   setLoadingTasks(true);
+  //   try {
+  //     // Add small delay to make loading state visible during testing
+  //     await new Promise(resolve => setTimeout(resolve, 500));
+  //     const data=await tasksAPI.getByGroup(group.id);
+  //     // setTasks(data.tasks||[]);
+  //     setTasks((data.tasks || []).filter(t => t.group_id === group?.id));
+  //   } catch (error) {
+  //     console.error('Failed to load tasks:', error);
+  //     setTasks([]);
+  //   } finally {
+  //     setLoadingTasks(false);
+  //   }
+  // },[group?.id]);// eslint-disable-line
+
+  const load = useCallback(async () => {
+  if (!group) return;
+
+  console.log('[LOAD TASKS] Fetching for group:', group.id);
+
+  setLoadingTasks(true);
+
+  try {
+    const data = await tasksAPI.getByGroup(group.id);
+
+    console.log('[LOAD RESPONSE]', data.tasks);
+
+    const filteredTasks = (data.tasks || []).filter(t => {
+      const match = t.group_id === group?.id;
+
+      if (!match) {
+        console.warn('[API WRONG GROUP TASK]', t.id);
+      }
+
+      return match;
+    });
+
+    console.log('[FINAL TASKS AFTER LOAD]', filteredTasks);
+
+    setTasks(filteredTasks);
+
+  } catch (error) {
+    console.error('[LOAD ERROR]', error);
+    setTasks([]);
+  } finally {
+    setLoadingTasks(false);
+  }
+}, [group?.id]);
 
   useEffect(()=>{
     load();
@@ -521,6 +556,13 @@ export default function TasksPanel({group, taskTarget}){
 
   useEffect(()=>{
     const unsub=on('task_update',({action,task,task_id,status,response,updated_by})=>{
+ console.log('[SOCKET task_update]', {
+  action,
+  task_id,
+  status,
+  updated_by,
+  currentGroup: group?.id
+});
       
       if(action==='status_changed'){
         // Update task status in the list with single state update
@@ -529,7 +571,7 @@ export default function TasksPanel({group, taskTarget}){
           return updatedTasks;
         });
         // Force re-render
-        setRefreshKey(prev => prev + 1);
+        // setRefreshKey(prev => prev + 1);
         
         // Show notification about the update
         if(response && response.comment){
@@ -542,15 +584,25 @@ export default function TasksPanel({group, taskTarget}){
           setTaskDetails(prev=>prev ? {...prev,status} : null);
         }
       }
-      
+      console.log('[TASK CREATED CHECK]', {
+  taskId: task.id,
+  taskGroup: task.group_id,
+  currentGroup: group?.id,
+  assigned_to: task.assigned_to,
+  assigned_by: task.assigned_by,
+  currentUser: user?.id
+});
       if(action==='created' && task){
         // Only add if task is assigned to current user or created by current user
-        if(task.assigned_to === user?.id || task.assigned_by === user?.id){
+      if (
+  (task.assigned_to === user?.id || task.assigned_by === user?.id) &&
+  task.group_id === group?.id
+){
           setTasks(prev => {
             // Avoid duplicates
             if(!prev.find(t => t.id === task.id)) {
               // Force re-render
-              setRefreshKey(prev => prev + 1);
+              // setRefreshKey(prev => prev + 1);
               return [task,...prev];
             }
             return prev;
@@ -564,7 +616,12 @@ export default function TasksPanel({group, taskTarget}){
   // Listen for real-time task assignments
   useEffect(()=>{
     const unsub=on('task_assigned',({task,subTasks,assigned_by,message,group_id})=>{
-      
+      console.log('[SOCKET task_assigned]', {
+  task,
+  subTasks,
+  group_id,
+  currentGroup: group?.id
+});
       // Show toast notification for task assignment
       toast.success(message);
       
@@ -592,18 +649,74 @@ export default function TasksPanel({group, taskTarget}){
         
         // Single state update to prevent race conditions
         if(tasksToAdd.length > 0) {
-          setTasks(prev => {
-            const newTasks = [...prev];
-            // Add tasks in order and avoid duplicates
-            tasksToAdd.forEach(newTask => {
-              if(!newTasks.find(t => t.id === newTask.id)) {
-                newTasks.unshift(newTask);
-              }
-            });
-            return newTasks;
-          });
+          // setTasks(prev => {
+          //   const newTasks = [...prev];
+          //   // Add tasks in order and avoid duplicates
+          //   tasksToAdd.forEach(newTask => {
+          //     if(!newTasks.find(t => t.id === newTask.id)) {
+          //       newTasks.unshift(newTask);
+          //     }
+          //   });
+          //   return newTasks;
+          // });
+//           setTasks(prev => {
+//   const groupTasks = prev[group_id] || [];
+
+//   const updatedTasks = [...groupTasks];
+
+//   tasksToAdd.forEach(newTask => {
+//     if (!updatedTasks.find(t => t.id === newTask.id)) {
+//       updatedTasks.unshift(newTask);
+//     }
+//   });
+
+//   return {
+//     ...prev,
+//     [group_id]: updatedTasks
+//   };
+// });
+// setTasks(prev => {
+//   const newTasks = [...prev];
+
+//   tasksToAdd.forEach(newTask => {
+//     if (!newTasks.find(t => t.id === newTask.id)) {
+//       newTasks.unshift(newTask);
+//     }
+//   });
+
+//   return newTasks;
+// });
+
+setTasks(prev => {
+  console.log('[SOCKET ADD TASKS]', tasksToAdd);
+
+  const newTasks = [...prev];
+
+  tasksToAdd.forEach(newTask => {
+    console.log('[CHECK TASK GROUP]', {
+      taskId: newTask.id,
+      taskGroup: newTask.group_id,
+      currentGroup: group?.id
+    });
+
+    // 🚨 HARD FILTER (VERY IMPORTANT)
+    if (newTask.group_id !== group?.id) {
+      console.warn('[SKIPPED WRONG GROUP TASK]', newTask.id);
+      return;
+    }
+
+    if (!newTasks.find(t => t.id === newTask.id)) {
+      console.log('[ADDING TASK]', newTask.id);
+      newTasks.unshift(newTask);
+    } else {
+      console.log('[DUPLICATE SKIPPED]', newTask.id);
+    }
+  });
+
+  return newTasks;
+});
           // Force re-render
-          setRefreshKey(prev => prev + 1);
+          // setRefreshKey(prev => prev + 1);
         }
       } else {
         console.log('[TasksPanel] Task assigned to different group:', group_id, 'current group:', group?.id, '- switching to correct group');
@@ -839,11 +952,36 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
     }
   };
 
-  const filtered=tasks.filter(t=>filter==='all'?true:t.status===filter);
+  // const filtered=tasks.filter(t=>filter==='all'?true:t.status===filter);
+  // const filtered = tasks
+  // .filter(t => t.group_id === group?.id) // ✅ CRITICAL FIX
+  // .filter(t => filter === 'all' ? true : t.status === filter);
+  const filtered = tasks
+  .filter(t => {
+    const match = t.group_id === group?.id;
+
+    if (!match) {
+      console.warn('[FILTER REMOVED WRONG TASK]', {
+        taskId: t.id,
+        taskGroup: t.group_id,
+        currentGroup: group?.id
+      });
+    }
+
+    return match;
+  })
+  .filter(t => filter === 'all' ? true : t.status === filter);
   const pendingCount=tasks.filter(t=>t.status==='pending').length;
 
   return(
     <>
+    <div style={{fontSize:10, background:'#000', color:'#0f0', padding:6}}>
+  <div>Current Group: {group?.id}</div>
+  <div>Total Tasks: {tasks.length}</div>
+  <div>
+    Tasks Groups: {tasks.map(t => t.group_id).join(', ')}
+  </div>
+</div>
     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
 
       {/* filter bar */}
@@ -1357,11 +1495,12 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             </p>
           </div>
         ) : (
+          // key={`${task.id}-${refreshKey}`}
           // Task list
           filtered.map(task=>(
-            <div id={`task-${task.id}`} key={`${task.id}-${refreshKey}`}>
+            <div id={`task-${task.id}`} >
               <TaskItem 
-                key={`${task.id}-${refreshKey}`} 
+                // key={`${task.id}-${refreshKey}`} 
                 task={task} 
                 currentUser={user} 
                 onStatusUpdate={handleStatusUpdate} 

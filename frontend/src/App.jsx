@@ -244,6 +244,7 @@ function AppInner({ selectedGroup, setSelectedGroup }) {
 
       <div style={{ position: 'fixed', bottom: 16, right: 20, zIndex: 150 }}>
         <PWAInstallButton />
+        
       </div>
     </>
   );
