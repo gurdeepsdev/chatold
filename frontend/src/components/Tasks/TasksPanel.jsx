@@ -609,7 +609,7 @@ export default function TasksPanel({group, taskTarget}){
         console.log('[TasksPanel] Task assigned to different group:', group_id, 'current group:', group?.id, '- switching to correct group');
         // Auto-switch to the group where task was assigned
         // This ensures user sees the task in its correct group
-        window.location.hash = `#group/${group_id}`;
+  console.log('Task for another group:', group_id);
       }
     });
     return unsub;
