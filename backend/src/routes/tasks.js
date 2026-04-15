@@ -394,6 +394,20 @@ if (assignees.length > 0) {
     });
   }
 
+  allAssignees.forEach(assigneeId => {
+  io.to(`user_${assigneeId}`).emit('new_message', {
+    id: mRes.insertId,
+    group_id: Number(group_id),
+    sender_id: req.user.id,
+    sender_name: req.user.full_name,
+    sender_role: req.user.role,
+    message_type: 'task_notification',
+    content: chatContent,
+    recipient_id: Number(assigneeId), // ✅ IMPORTANT
+    sent_at: formatISTForMySQL(),
+  });
+});
+
   return res.status(201).json({
     task: null, // No parent task for pause_pid
     subTasks: createdTasks
@@ -744,8 +758,11 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
             subTasks: subTasks,
             assigned_by: req.user.full_name,
             message: `New task assigned to you by ${req.user.full_name}`,
-            group_id: Number(group_id)
+            group_id: Number(group_id),
+              recipient_id: Number(assigneeId) // ✅ add this
+
           });
+          
         }
       });
     }

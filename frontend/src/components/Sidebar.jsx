@@ -148,6 +148,12 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
 
   useEffect(() => {
     const unsub = on('new_message', (msg) => {
+      console.log('📩 NEW MESSAGE RECEIVED', msg);
+      console.log('[NEW_MESSAGE CHECK]', {
+  msg,
+  currentUser: user?.id,
+  condition: msg.recipient_id === user?.id
+});
       // FIX 3: Stamp stablePositionRef FIRST, before setGroups or loadGroups.
       // This ensures by the time the sort re-runs, the ref has the correct
       // timestamp and the fallback to last_message_at is never used.
@@ -166,17 +172,77 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       // The local setGroups above is enough to keep last_message_at current.
 
       // Update unread count for recipient only
+      // if (
+      //   msg.group_id &&
+      //   msg.sender_id !== user?.id &&
+      //   (msg.recipient_id === user?.id || msg.secondary_recipient_id === user?.id)
+      // ) 
       if (
-        msg.group_id &&
-        msg.sender_id !== user?.id &&
-        (msg.recipient_id === user?.id || msg.secondary_recipient_id === user?.id)
-      ) {
+  msg.group_id &&
+  msg.sender_id !== user?.id &&
+  (
+    msg.recipient_id === user?.id || 
+    msg.secondary_recipient_id === user?.id ||
+    msg.message_type === 'task_notification' // ✅ fallback safety
+  )
+)
+      {
         setUnreadCounts(prev => ({
           ...prev,
           [msg.group_id]: (prev[msg.group_id] || 0) + 1
         }));
       }
     });
+
+    const unsubTaskAssigned = on('task_assigned', (data) => {
+  console.log('[SOCKET task_assigned RECEIVED]', data);
+
+  const { task, group_id, assigned_to } = data;
+
+  // ✅ 1. PERSONALIZATION (IMPORTANT)
+  if (Number(assigned_to) !== Number(user?.id)) {
+    console.log('❌ Task not for this user, ignoring');
+    return;
+  }
+
+  // ✅ 2. FIX WRONG GROUP ISSUE
+  if (group_id) {
+    stablePositionRef.current[group_id] = Date.now();
+  }
+
+  // ✅ 3. UPDATE GROUP LAST ACTIVITY
+  setGroups(prev =>
+    prev.map(g =>
+      g.id === group_id
+        ? { ...g, last_message_at: new Date().toISOString() }
+        : g
+    )
+  );
+
+  // ✅ 4. INCREASE UNREAD COUNT
+  setUnreadCounts(prev => ({
+    ...prev,
+    [group_id]: (prev[group_id] || 0) + 1
+  }));
+});
+//add
+const unsubTaskUpdate = on('task_update', (data) => {
+  console.log('[SOCKET task_update RECEIVED]', data);
+
+  const { group_id, updated_by } = data;
+
+  // ❌ Ignore if current user updated it
+  if (Number(updated_by) === Number(user?.id)) return;
+
+  if (group_id) {
+    stablePositionRef.current[group_id] = Date.now();
+
+    setUnreadCounts(prev => ({
+      ...prev,
+      [group_id]: (prev[group_id] || 0) + 1
+    }));
+  }
+});
 
     const unsubGroupCreated = on('group_created', (data) => {
       console.log("📢 group_created event:", data);
@@ -229,6 +295,8 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       unsubCampaignCreated();
       unsubMemberAdded();
       unsubMemberRemoved();
+      unsubTaskAssigned(); //add
+      unsubTaskUpdate(); //add
     };
   }, [on, user?.id, loadGroups, loadUnreadCounts, joinGroup, leaveGroup]);
 
@@ -471,6 +539,10 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
 
   return (
     <div className="sidebar">
+      <div style={{fontSize:10, background:'#111', color:'#0f0', padding:6}}>
+  <div>UnreadCounts: {JSON.stringify(unreadCounts)}</div>
+  <div>StableRef: {JSON.stringify(stablePositionRef.current)}</div>
+</div>
       <div className="sidebar-header">
         <div className="sidebar-title">
           <span>💬</span>
