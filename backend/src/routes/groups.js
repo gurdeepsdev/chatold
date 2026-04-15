@@ -1183,20 +1183,20 @@ console.log("DEFAULT USERS:", defaultUsers);
         // );
 
         // 2. Share Link
-        const [shareLinkTask] = await conn.query(
-          'INSERT INTO tasks (group_id, task_type, title, description, assigned_by, status) VALUES (?, ?, ?, ?, ?, ?)',
-          [groupId, 'share_link', 'Share Campaign Link', 'Share the campaign tracking link with the assigned publisher.', req.user.id, 'pending']
-        );
-        const shareLinkTaskId = shareLinkTask.insertId;
+        // const [shareLinkTask] = await conn.query(
+        //   'INSERT INTO tasks (group_id, task_type, title, description, assigned_by, status) VALUES (?, ?, ?, ?, ?, ?)',
+        //   [groupId, 'share_link', 'Share Campaign Link', 'Share the campaign tracking link with the assigned publisher.', req.user.id, 'pending']
+        // );
+        // const shareLinkTaskId = shareLinkTask.insertId;
 
         // Post system message for share link task
         const { encrypt } = require('../utils/encryption');
         const { encrypted: enc1, iv: iv1 } = encrypt(`📌 Task created: "Share Campaign Link" [🔗 Share Link]`);
-        await conn.query(
-          `INSERT INTO messages (group_id, sender_id, message_type, encrypted_content, iv, task_ref_id)
-         VALUES (?, ?, 'task_notification', ?, ?, ?)`,
-          [groupId, req.user.id, enc1, iv1, shareLinkTaskId]
-        );
+        // await conn.query(
+        //   `INSERT INTO messages (group_id, sender_id, message_type, encrypted_content, iv, task_ref_id)
+        //  VALUES (?, ?, 'task_notification', ?, ?, ?)`,
+        //   [groupId, req.user.id, enc1, iv1, shareLinkTaskId]
+        // );
 
         createdGroups.push({
           id: groupId,
@@ -1350,29 +1350,29 @@ console.log("DEFAULT USERS:", defaultUsers);
       );
 
       // 2. Share Link (auto-created as per requirement)
-      const [shareLinkTask] = await conn.query(
-        `INSERT INTO tasks (group_id, campaign_id, task_type, title, description, assigned_by, status)
-       VALUES (?, ?, 'share_link', 'Share Campaign Link',
-       'Share the campaign tracking link with the assigned publisher.',
-       ?, 'pending')`,
-        [groupId, campaign_id, req.user.id]
-      );
-      const shareLinkTaskId = shareLinkTask.insertId;
+      // const [shareLinkTask] = await conn.query(
+      //   `INSERT INTO tasks (group_id, campaign_id, task_type, title, description, assigned_by, status)
+      //  VALUES (?, ?, 'share_link', 'Share Campaign Link',
+      //  'Share the campaign tracking link with the assigned publisher.',
+      //  ?, 'pending')`,
+      //   [groupId, campaign_id, req.user.id]
+      // );
+      // const shareLinkTaskId = shareLinkTask.insertId;
 
-      // Post a system message for the share link task
-      const shareLinkContent = `📌 Task created: "Share Campaign Link" [🔗 Share Link]`;
-      const { encrypted: enc1, iv: iv1 } = encrypt(shareLinkContent);
-      await conn.query(
-        `INSERT INTO messages (group_id, sender_id, message_type, encrypted_content, iv, task_ref_id)
-       VALUES (?, ?, 'task_notification', ?, ?, ?)`,
-        [groupId, req.user.id, enc1, iv1, shareLinkTaskId]
-      );
+      // // Post a system message for the share link task
+      // const shareLinkContent = `📌 Task created: "Share Campaign Link" [🔗 Share Link]`;
+      // const { encrypted: enc1, iv: iv1 } = encrypt(shareLinkContent);
+      // await conn.query(
+      //   `INSERT INTO messages (group_id, sender_id, message_type, encrypted_content, iv, task_ref_id)
+      //  VALUES (?, ?, 'task_notification', ?, ?, ?)`,
+      //   [groupId, req.user.id, enc1, iv1, shareLinkTaskId]
+      // );
 
       // Log workflow
-      await conn.query(
-        'INSERT INTO workflow_summary (group_id, event_type, event_data, triggered_by) VALUES (?, ?, ?, ?)',
-        [groupId, 'group_created', JSON.stringify({ campaign_name: campaign.campaign_name, group_name: groupName, campaign_type }), req.user.id]
-      );
+      // await conn.query(
+      //   'INSERT INTO workflow_summary (group_id, event_type, event_data, triggered_by) VALUES (?, ?, ?, ?)',
+      //   [groupId, 'group_created', JSON.stringify({ campaign_name: campaign.campaign_name, group_name: groupName, campaign_type }), req.user.id]
+      // );
 
       await conn.commit();
 
