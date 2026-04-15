@@ -1071,18 +1071,58 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         // Always add: creator + advertiser (if found) + all admins
         const allAdmins = await getAllAdminUsers(db.crmPool); // Use CRM DB for admin users
 
-        let defaultUsernames = [];
-        if (campaign_type === 'direct') {
-          // Direct campaigns: add akshat and ipsita
-          defaultUsernames = ['akshat', 'ipsita'];
-        }
+        // let defaultUsernames = [];
+        // if (campaign_type === 'direct') {
+        //   // Direct campaigns: add akshat and ipsita
+        //   defaultUsernames = ['akshat', 'ipsita'];
+        // }
         // Agency campaigns: no automatic users (only creator + advertiser + admins)
 
-        const [defaultUsers] = await conn.query(
-          'SELECT id FROM users WHERE username IN (?)',
-          defaultUsernames.length > 0 ? defaultUsernames : ['']
-        );
+        // const [defaultUsers] = await conn.query(
+        //   'SELECT id FROM users WHERE username IN (?)',
+        //   defaultUsernames.length > 0 ? defaultUsernames : ['']
+        // );
 
+        let defaultUsers = [];
+
+if (campaign_type === 'direct') {
+  // Step 1: Get adv_d values (these are adv_id)
+  const advIds = advdResult
+    .map(a => a.adv_d)
+    .filter(Boolean);
+
+  // if (DEBUG) console.log("ADV IDS (from CRM):", advIds);
+
+  if (advIds.length > 0) {
+
+    // Step 2: Find assign_id from advids table
+    const [assignedUsers] = await crmPool.query(
+      `SELECT DISTINCT assign_id 
+       FROM advids 
+       WHERE adv_id IN (${advIds.map(() => '?').join(',')})
+       AND assign_id IS NOT NULL`,
+      advIds
+    );
+
+    // if (DEBUG) console.log("ASSIGNED USER IDS:", assignedUsers);
+
+    const assignUserIds = assignedUsers
+      .map(u => u.assign_id)
+      .filter(Boolean);
+
+    if (assignUserIds.length > 0) {
+
+      // Step 3: Get actual users
+      const [users] = await conn.query(
+        `SELECT id FROM users WHERE id IN (${assignUserIds.map(() => '?').join(',')})`,
+        assignUserIds
+      );
+
+      defaultUsers = users;
+    }
+  }
+}
+console.log("DEFAULT USERS:", defaultUsers);
         // 🔄 NEW: Expand additional members with hierarchy
         let expandedMembers = [];
         if (additional_members && Array.isArray(additional_members) && additional_members.length > 0) {

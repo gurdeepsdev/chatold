@@ -704,48 +704,231 @@ async function pushToMembers(io,groupId,senderId,msg,groupName){
 }
 
 /* GET unread message counts per group — MUST be before /:groupId to avoid route conflict */
+// router.get('/unread-counts', auth, async (req, res) => {
+//   try {
+//     const userId = req.user.id;
+
+//     // Get all groups the user is a member of
+//     const [groups] = await db.query(`
+//       SELECT DISTINCT g.id 
+//       FROM chat_groups g
+//       JOIN group_members gm ON g.id = gm.group_id
+//       WHERE gm.user_id = ?
+//     `, [userId]);
+
+//     if (groups.length === 0) {
+//       return res.json({ unreadCounts: {} });
+//     }
+
+//     const groupIds = groups.map(g => g.id);
+
+//     // Get unread message counts for each group
+// const [unreadCounts] = await db.query(`
+//   SELECT 
+//     m.group_id,
+//     COUNT(*) as unread_count
+//   FROM messages m
+//   WHERE m.group_id IN (${groupIds.map(() => '?').join(',')})
+//   AND (
+//     m.recipient_id = ?
+//     OR m.secondary_recipient_id = ?
+//   )
+//   AND m.sender_id != ?
+//   AND NOT EXISTS (
+//     SELECT 1 
+//     FROM message_status ms
+//     WHERE ms.message_id = m.id
+//     AND ms.user_id = ?
+//     AND ms.status = 'seen'
+//   )
+//   GROUP BY m.group_id
+// `, [...groupIds, userId, userId, userId, userId]);
+//     // Convert to object with group_id as key
+//     const countsMap = {};
+//     unreadCounts.forEach(row => {
+//       countsMap[row.group_id] = row.unread_count;
+//     });
+
+//     res.json({ unreadCounts: countsMap });
+//   } catch (error) {
+//     console.error('Failed to get unread counts:', error);
+//     res.status(500).json({ error: 'Failed to get unread counts' });
+//   }
+// });
+// router.get('/unread-counts', auth, async (req, res) => {
+//   try {
+//     const userId = req.user.id;
+//     const DEBUG = true; // 🔥 toggle this when needed
+
+//     if (DEBUG) {
+//       console.log("========== UNREAD COUNT API START ==========");
+//       console.log("USER ID:", userId);
+//     }
+
+//     // Prevent caching (VERY IMPORTANT)
+//     res.set('Cache-Control', 'no-store');
+
+//     // Step 1: Get user groups
+//     const [groups] = await db.query(`
+//       SELECT gm.group_id AS id
+//       FROM group_members gm
+//       WHERE gm.user_id = ?
+//     `, [userId]);
+
+//     if (!groups.length) {
+//       if (DEBUG) console.log("No groups found");
+//       return res.json({ unreadCounts: {} });
+//     }
+
+//     const groupIds = groups.map(g => g.id);
+
+//     if (DEBUG) console.log("GROUP IDS:", groupIds);
+
+//     // Step 2: Main unread count query (optimized)
+//     const placeholders = groupIds.map(() => '?').join(',');
+
+//     const query = `
+//       SELECT 
+//         m.group_id,
+//         COUNT(*) AS unread_count
+//       FROM messages m
+//       WHERE m.group_id IN (${placeholders})
+//       AND (
+//         m.recipient_id = ?
+//         OR m.secondary_recipient_id = ?
+//       )
+//       AND m.sender_id != ?
+//       AND NOT EXISTS (
+//         SELECT 1 
+//         FROM message_status ms
+//         WHERE ms.message_id = m.id
+//         AND ms.user_id = ?
+//         AND ms.status = 'seen'
+//       )
+//       GROUP BY m.group_id
+//     `;
+
+//     const params = [...groupIds, userId, userId, userId, userId];
+
+//     if (DEBUG) {
+//       console.log("QUERY:", query);
+//       console.log("PARAMS:", params);
+//     }
+
+//     const [rows] = await db.query(query, params);
+
+//     if (DEBUG) console.log("RAW RESULT:", rows);
+
+//     // Step 3: Convert to map
+//     const unreadCounts = {};
+//     rows.forEach(row => {
+//       unreadCounts[row.group_id] = row.unread_count;
+//     });
+
+//     if (DEBUG) {
+//       console.log("FINAL MAP:", unreadCounts);
+//       console.log("========== END ==========");
+//     }
+
+//     return res.json({ unreadCounts });
+
+//   } catch (error) {
+//     console.error('❌ Failed to get unread counts:', error);
+//     return res.status(500).json({
+//       success: false,
+//       message: 'Failed to get unread counts'
+//     });
+//   }
+// });
+
 router.get('/unread-counts', auth, async (req, res) => {
   try {
     const userId = req.user.id;
+    const DEBUG = false;
 
-    // Get all groups the user is a member of
+    // if (DEBUG) {
+    //   console.log("========== UNREAD COUNT API START ==========");
+    //   console.log("USER ID:", userId);
+    // }
+
+    // 🔥 Prevent caching
+    res.set('Cache-Control', 'no-store');
+
+    // Step 1: Get user groups
     const [groups] = await db.query(`
-      SELECT DISTINCT g.id 
-      FROM chat_groups g
-      JOIN group_members gm ON g.id = gm.group_id
+      SELECT gm.group_id AS id
+      FROM group_members gm
       WHERE gm.user_id = ?
     `, [userId]);
 
-    if (groups.length === 0) {
+    if (!groups.length) {
+      if (DEBUG) console.log("No groups found");
       return res.json({ unreadCounts: {} });
     }
 
     const groupIds = groups.map(g => g.id);
+    const placeholders = groupIds.map(() => '?').join(',');
 
-    // Get unread message counts for each group
-    const [unreadCounts] = await db.query(`
+    // if (DEBUG) console.log("GROUP IDS:", groupIds);
+
+    // 🚀 UPDATED QUERY
+    const query = `
       SELECT 
         m.group_id,
-        COUNT(*) as unread_count
+        COUNT(*) AS unread_count
       FROM messages m
-      LEFT JOIN message_status ms ON m.id = ms.message_id AND ms.user_id = ? AND ms.status = 'seen'
-      WHERE m.group_id IN (${groupIds.map(() => '?').join(',')})
-      AND m.sender_id != ?
-      AND ms.message_id IS NULL
-      AND (m.recipient_id = ? OR m.secondary_recipient_id = ?)
-      GROUP BY m.group_id
-    `, [userId, ...groupIds, userId, userId, userId]);
+      WHERE m.group_id IN (${placeholders})
 
-    // Convert to object with group_id as key
-    const countsMap = {};
-    unreadCounts.forEach(row => {
-      countsMap[row.group_id] = row.unread_count;
+      -- ✅ NEW LOGIC
+      AND (
+        m.message_type = 'task_notification'
+        OR m.recipient_id = ?
+        OR m.secondary_recipient_id = ?
+      )
+
+      AND m.sender_id != ?
+
+      AND NOT EXISTS (
+        SELECT 1 
+        FROM message_status ms
+        WHERE ms.message_id = m.id
+        AND ms.user_id = ?
+        AND ms.status = 'seen'
+      )
+
+      GROUP BY m.group_id
+    `;
+
+    const params = [...groupIds, userId, userId, userId, userId];
+
+    if (DEBUG) {
+      console.log("QUERY:", query);
+      console.log("PARAMS:", params);
+    }
+
+    const [rows] = await db.query(query, params);
+
+    // if (DEBUG) console.log("RAW RESULT:", rows);
+
+    // Step 3: Convert to map
+    const unreadCounts = {};
+    rows.forEach(row => {
+      unreadCounts[row.group_id] = row.unread_count;
     });
 
-    res.json({ unreadCounts: countsMap });
+    // if (DEBUG) {
+    //   console.log("FINAL MAP:", unreadCounts);
+    //   console.log("========== END ==========");
+    // }
+
+    return res.json({ unreadCounts });
+
   } catch (error) {
-    console.error('Failed to get unread counts:', error);
-    res.status(500).json({ error: 'Failed to get unread counts' });
+    console.error('❌ Failed to get unread counts:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get unread counts'
+    });
   }
 });
 

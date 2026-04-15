@@ -609,6 +609,7 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
         ...prev,
         [groupId]: 0
       }));
+      await loadUnreadCounts();
     } catch (error) {
       console.error('Failed to mark group as read:', error);
     }
@@ -687,38 +688,79 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       setGroups(prev => prev.map(g =>
         g.id === msg.group_id ? { ...g, last_message_at: msg.sent_at } : g
       ));
-      if (msg.group_id && msg.sender_id !== user?.id) {
-        setUnreadCounts(prev => ({
-          ...prev,
-          [msg.group_id]: (prev[msg.group_id] || 0) + 1
-        }));
+      // if (msg.group_id && msg.sender_id !== user?.id) {
+      //   setUnreadCounts(prev => ({
+      //     ...prev,
+      //     [msg.group_id]: (prev[msg.group_id] || 0) + 1
+      //   }));
+      // }
+      if (
+  msg.group_id &&
+  msg.sender_id !== user?.id &&
+  (
+    msg.recipient_id === user?.id ||
+    msg.secondary_recipient_id === user?.id
+  )
+) {
+  setUnreadCounts(prev => ({
+    ...prev,
+    [msg.group_id]: (prev[msg.group_id] || 0) + 1
+  }));
+}
+    });
+
+ 
+
+    // const unsubGroupCreated = on('group_created', (data) => {
+      
+    //   // Only add the group if the current user is a member
+    //   if (data.group && data.group.member_ids?.includes(user?.id)) {
+    //     setGroups(prev => {
+    //       // Check if group already exists to avoid duplicates
+    //       const existingIndex = prev.findIndex(g => g.id === data.group.id);
+    //       if (existingIndex >= 0) {
+    //         // Update existing group
+    //         return prev.map((g, index) => 
+    //           index === existingIndex ? { ...g, ...data.group } : g
+    //         );
+    //       } else {
+    //         // Add new group at the beginning
+    //         return [data.group, ...prev];
+    //       }
+    //     });
+        
+    //     // Refresh groups list to get latest data
+    //     loadGroups();
+    //   } else {
+    //     console.log('User NOT authorized to see this group');
+    //   }
+    // });
+    const unsubGroupCreated = on('group_created', (data) => {
+  console.log("📢 group_created event:", data);
+
+  // ✅ Only if user is part of group
+  if (data.group && data.group.member_ids?.includes(user?.id)) {
+
+    setGroups(prev => {
+      const existingIndex = prev.findIndex(g => g.id === data.group.id);
+
+      if (existingIndex >= 0) {
+        return prev.map((g, index) =>
+          index === existingIndex ? { ...g, ...data.group } : g
+        );
+      } else {
+        return [data.group, ...prev];
       }
     });
 
-    const unsubGroupCreated = on('group_created', (data) => {
-      
-      // Only add the group if the current user is a member
-      if (data.group && data.group.member_ids?.includes(user?.id)) {
-        setGroups(prev => {
-          // Check if group already exists to avoid duplicates
-          const existingIndex = prev.findIndex(g => g.id === data.group.id);
-          if (existingIndex >= 0) {
-            // Update existing group
-            return prev.map((g, index) => 
-              index === existingIndex ? { ...g, ...data.group } : g
-            );
-          } else {
-            // Add new group at the beginning
-            return [data.group, ...prev];
-          }
-        });
-        
-        // Refresh groups list to get latest data
-        loadGroups();
-      } else {
-        console.log('User NOT authorized to see this group');
-      }
-    });
+    // ✅ IMPORTANT: sync with backend
+    loadGroups();
+    loadUnreadCounts();   // 🔥 ADD THIS LINE
+
+  } else {
+    console.log('User NOT authorized to see this group');
+  }
+});
 
 const unsubCampaignCreated = on('campaign_created', (data) => {
 
@@ -1035,7 +1077,8 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatTime(group.last_message_at)}</span>
-        {unreadCounts[group.id] > 0 && (
+        {/* {unreadCounts[group.id] > 0 && ( */}
+        {(unreadCounts[group.id] || 0) > 0 && (
           <span className="group-badge" style={{ background: 'var(--accent)' }}>{unreadCounts[group.id]}</span>
         )}
         {/* Pin button - only for groups NOT inside threads */}
