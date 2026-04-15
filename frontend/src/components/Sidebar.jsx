@@ -562,7 +562,12 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
   const [loading, setLoading] = useState(true);
   const [pinnedGroups, setPinnedGroups] = useState([]);
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [groupLastUnreadTime, setGroupLastUnreadTime] = useState({});
   
+
+  // ADD THIS LINE near your other state declarations
+const stablePositionRef = useRef({});
+
   // Track if this is the first render to prevent saving on initial load
   const isFirstRender = useRef(true);
 
@@ -590,14 +595,63 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
     }
   }, [joinGroup]);
 
-  const loadUnreadCounts = useCallback(async () => {
-    try {
-      const data = await messagesAPI.getUnreadCounts();
-      setUnreadCounts(data.unreadCounts || {});
-    } catch (error) {
-      console.error('Failed to load unread counts:', error);
-    }
-  }, []);
+  // const loadUnreadCounts = useCallback(async () => {
+  //   try {
+  //     const data = await messagesAPI.getUnreadCounts();
+  //     const newUnreadCounts = data.unreadCounts || {};
+  //     setUnreadCounts(newUnreadCounts);
+      
+  //     // Update last unread time for groups that currently have unread messages
+  //     setGroupLastUnreadTime(prev => {
+  //       const updated = { ...prev };
+  //       Object.keys(newUnreadCounts).forEach(groupId => {
+  //         if (newUnreadCounts[groupId] > 0) {
+  //           updated[groupId] = Date.now(); // Track when this group last had unread messages
+  //         }
+  //       });
+  //       return updated;
+  //     });
+  //   } catch (error) {
+  //     console.error('Failed to load unread counts:', error);
+  //   }
+  // }, []);
+  // REPLACE WITH THIS:
+const loadUnreadCounts = useCallback(async () => {
+  try {
+    const data = await messagesAPI.getUnreadCounts();
+    const newUnreadCounts = data.unreadCounts || {};
+
+    // Compare with previous unread counts to detect NEW messages only
+    setUnreadCounts(prev => {
+      Object.keys(newUnreadCounts).forEach(groupId => {
+        const prevCount = prev[groupId] || 0;
+        const newCount = newUnreadCounts[groupId] || 0;
+
+        // Only update stable position if count INCREASED (new message arrived)
+        // Reading a message decreases count — we do NOT update ref in that case
+        if (newCount > prevCount) {
+          stablePositionRef.current[groupId] = Date.now();
+        }
+      });
+
+      return newUnreadCounts; // still update unread counts normally
+    });
+
+    // Keep your existing groupLastUnreadTime logic unchanged
+    setGroupLastUnreadTime(prev => {
+      const updated = { ...prev };
+      Object.keys(newUnreadCounts).forEach(groupId => {
+        if (newUnreadCounts[groupId] > 0) {
+          updated[groupId] = Date.now();
+        }
+      });
+      return updated;
+    });
+
+  } catch (error) {
+    console.error('Failed to load unread counts:', error);
+  }
+}, []);
 
   const markGroupAsRead = useCallback(async (groupId) => {
     try {
@@ -847,88 +901,89 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
   );
 
   // Enhanced sorting function for unified Groups + Threads listing
-  const getUnifiedSortedItems = useCallback(() => {
-    if (search) {
-      // When searching, just return filtered groups
-      return groupsToRender.map(group => ({
-        type: 'group',
-        item: group,
-        priority: 0,
-        unreadCount: unreadCounts[group.id] || 0,
-        lastMessageAt: new Date(group.last_message_at || 0),
-        isPinned: isGroupPinned(group.id)
-      }));
-    }
+  // const getUnifiedSortedItems = useCallback(() => {
+  //   if (search) {
+  //     // When searching, just return filtered groups
+  //     return groupsToRender.map(group => ({
+  //       type: 'group',
+  //       item: group,
+  //       priority: 0,
+  //       unreadCount: unreadCounts[group.id] || 0,
+  //       lastMessageAt: new Date(group.last_message_at || 0),
+  //       isPinned: isGroupPinned(group.id)
+  //     }));
+  //   }
 
-    const allItems = [];
+  //   const allItems = [];
 
-    // Add pinned groups
-    const pinnedGroupItems = groups
-      .filter(g => pinnedGroups.includes(g.id))
-      .map(group => ({
-        type: 'group',
-        item: group,
-        priority: 1, // Highest priority for pinned
-        unreadCount: unreadCounts[group.id] || 0,
-        lastMessageAt: new Date(group.last_message_at || 0),
-        isPinned: true
-      }));
+  //   // Add pinned groups
+  //   const pinnedGroupItems = groups
+  //     .filter(g => pinnedGroups.includes(g.id))
+  //     .map(group => ({
+  //       type: 'group',
+  //       item: group,
+  //       priority: 1, // Highest priority for pinned
+  //       unreadCount: unreadCounts[group.id] || 0,
+  //       lastMessageAt: new Date(group.last_message_at || 0),
+  //       isPinned: true
+  //     }));
 
-    // Add threads with their groups
-    const threadItems = threads
-      .filter(thread => (thread.groups || []).length > 1)
-      .map(thread => {
-        const threadGroups = thread.groups || [];
-        const totalUnreadCount = threadGroups.reduce((sum, group) => 
-          sum + (unreadCounts[group.id] || 0), 0
-        );
-        const latestMessageAt = threadGroups.reduce((latest, group) => {
-          const groupTime = new Date(group.last_message_at || 0);
-          return groupTime > latest ? groupTime : latest;
-        }, new Date(0));
+  //   // Add threads with their groups
+  //   const threadItems = threads
+  //     .filter(thread => (thread.groups || []).length > 1)
+  //     .map(thread => {
+  //       const threadGroups = thread.groups || [];
+  //       const totalUnreadCount = threadGroups.reduce((sum, group) => 
+  //         sum + (unreadCounts[group.id] || 0), 0
+  //       );
+  //       const latestMessageAt = threadGroups.reduce((latest, group) => {
+  //         const groupTime = new Date(group.last_message_at || 0);
+  //         return groupTime > latest ? groupTime : latest;
+  //       }, new Date(0));
 
-        return {
-          type: 'thread',
-          item: thread,
-          priority: 0, // Normal priority for threads
-          unreadCount: totalUnreadCount,
-          lastMessageAt: latestMessageAt,
-          isPinned: false,
-          groups: threadGroups
-        };
-      });
+  //       return {
+  //         type: 'thread',
+  //         item: thread,
+  //         priority: 0, // Normal priority for threads
+  //         unreadCount: totalUnreadCount,
+  //         lastMessageAt: latestMessageAt,
+  //         isPinned: false,
+  //         groups: threadGroups
+  //       };
+  //     });
 
-    // Add unpinned groups (not in threads)
-    const unpinnedGroupItems = groups
-      .filter(g => 
-        !pinnedGroups.includes(g.id) && !threadGroupIds.has(g.id)
-      )
-      .map(group => ({
-        type: 'group',
-        item: group,
-        priority: 0, // Normal priority for unpinned
-        unreadCount: unreadCounts[group.id] || 0,
-        lastMessageAt: new Date(group.last_message_at || 0),
-        isPinned: false
-      }));
+  //   // Add unpinned groups (not in threads)
+  //   const unpinnedGroupItems = groups
+  //     .filter(g => 
+  //       !pinnedGroups.includes(g.id) && !threadGroupIds.has(g.id)
+  //     )
+  //     .map(group => ({
+  //       type: 'group',
+  //       item: group,
+  //       priority: 0, // Normal priority for unpinned
+  //       unreadCount: unreadCounts[group.id] || 0,
+  //       lastMessageAt: new Date(group.last_message_at || 0),
+  //       isPinned: false
+  //     }));
 
-    allItems.push(...pinnedGroupItems, ...threadItems, ...unpinnedGroupItems);
+  //   allItems.push(...pinnedGroupItems, ...threadItems, ...unpinnedGroupItems);
 
-    // Sort items by priority and notification count
-    return allItems.sort((a, b) => {
-      // 1. Pinned items first
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
+  //   // Sort items by priority, unread status, and latest activity
+  //   return allItems.sort((a, b) => {
+  //     // 1. Pinned items first
+  //     if (a.isPinned && !b.isPinned) return -1;
+  //     if (!a.isPinned && b.isPinned) return 1;
 
-      // 2. Higher notification count first
-      if (a.unreadCount !== b.unreadCount) {
-        return b.unreadCount - a.unreadCount;
-      }
+  //     // 2. Unread groups before read groups
+  //     const aHasUnread = a.unreadCount > 0;
+  //     const bHasUnread = b.unreadCount > 0;
+  //     if (aHasUnread && !bHasUnread) return -1;
+  //     if (!aHasUnread && bHasUnread) return 1;
 
-      // 3. Latest activity first (secondary sorting)
-      return b.lastMessageAt - a.lastMessageAt;
-    });
-  }, [search, groupsToRender, groups, threads, pinnedGroups, unreadCounts, threadGroupIds, isGroupPinned]);
+  //     // 3. Within same category (both unread or both read), sort by latest activity
+  //     return b.lastMessageAt - a.lastMessageAt;
+  //   });
+  // }, [search, groupsToRender, groups, threads, pinnedGroups, unreadCounts, threadGroupIds, isGroupPinned, groupLastUnreadTime]);
 
   // const renderUnifiedItem = (itemData) => {
   //   const { type, item, unreadCount } = itemData;
@@ -981,6 +1036,92 @@ const unsubCampaignCreated = on('campaign_created', (data) => {
   //   }
 
 
+  // REPLACE WITH THIS:
+const getUnifiedSortedItems = useCallback(() => {
+  if (search) {
+    return groupsToRender.map(group => ({
+      type: 'group',
+      item: group,
+      priority: 0,
+      unreadCount: unreadCounts[group.id] || 0,
+      lastMessageAt: new Date(group.last_message_at || 0),
+      isPinned: isGroupPinned(group.id)
+    }));
+  }
+
+  const allItems = [];
+
+  const pinnedGroupItems = groups
+    .filter(g => pinnedGroups.includes(g.id))
+    .map(group => ({
+      type: 'group',
+      item: group,
+      priority: 1,
+      unreadCount: unreadCounts[group.id] || 0,
+      lastMessageAt: new Date(group.last_message_at || 0),
+      // stableSortTime: use ref timestamp if exists, else fall back to last_message_at
+      stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
+      isPinned: true
+    }));
+
+  const threadItems = threads
+    .filter(thread => (thread.groups || []).length > 1)
+    .map(thread => {
+      const threadGroups = thread.groups || [];
+      const totalUnreadCount = threadGroups.reduce((sum, group) =>
+        sum + (unreadCounts[group.id] || 0), 0
+      );
+      const latestMessageAt = threadGroups.reduce((latest, group) => {
+        const groupTime = new Date(group.last_message_at || 0);
+        return groupTime > latest ? groupTime : latest;
+      }, new Date(0));
+      // For threads: pick the most recent stableSortTime across all groups in thread
+      const threadStableTime = threadGroups.reduce((latest, group) => {
+        const t = stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime();
+        return t > latest ? t : latest;
+      }, 0);
+      return {
+        type: 'thread',
+        item: thread,
+        priority: 0,
+        unreadCount: totalUnreadCount,
+        lastMessageAt: latestMessageAt,
+        stableSortTime: threadStableTime,
+        isPinned: false,
+        groups: threadGroups
+      };
+    });
+
+  const unpinnedGroupItems = groups
+    .filter(g => !pinnedGroups.includes(g.id) && !threadGroupIds.has(g.id))
+    .map(group => ({
+      type: 'group',
+      item: group,
+      priority: 0,
+      unreadCount: unreadCounts[group.id] || 0,
+      lastMessageAt: new Date(group.last_message_at || 0),
+      stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
+      isPinned: false
+    }));
+
+  allItems.push(...pinnedGroupItems, ...threadItems, ...unpinnedGroupItems);
+
+  return allItems.sort((a, b) => {
+    // 1. Pinned first
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+
+    // 2. Unread before read
+    const aHasUnread = a.unreadCount > 0;
+    const bHasUnread = b.unreadCount > 0;
+    if (aHasUnread && !bHasUnread) return -1;
+    if (!aHasUnread && bHasUnread) return 1;
+
+    // 3. Sort by stableSortTime — freezes position on read, only moves on new message
+    return b.stableSortTime - a.stableSortTime;
+  });
+
+}, [search, groupsToRender, groups, threads, pinnedGroups, unreadCounts, threadGroupIds, isGroupPinned]);
   const renderUnifiedItem = (itemData) => {
   const { type, item, unreadCount } = itemData;
 

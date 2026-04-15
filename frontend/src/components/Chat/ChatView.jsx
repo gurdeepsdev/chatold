@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import ChatMessages from './ChatMessages';
 import TasksPanel from '../Tasks/TasksPanel';
 import PreviewPanel from '../Preview/PreviewPanel';
@@ -18,6 +18,11 @@ export default function ChatView({group}){
   const [rightPanel,setRightPanel]=useState('cd');
   // task highlight: { taskId, openForm, taskType }
   const [taskTarget,setTaskTarget]=useState(null);
+
+  // Reset to chat tab when switching groups
+  useEffect(() => {
+    setActiveTab('chat');
+  }, [group]);
 
   // Called when user clicks a task pill in chat
   // taskType tells TasksPanel which form to open (e.g. 'share_link')

@@ -285,7 +285,7 @@ export default function App() {
   return (
     <AuthProvider>
       <ChatApp />
-      <Toaster
+      {/* <Toaster
         position="top-right"
         toastOptions={{
           style: {
@@ -298,7 +298,7 @@ export default function App() {
           success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
           error:   { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
         }}
-      />
+      /> */}
     </AuthProvider>
   );
 }
