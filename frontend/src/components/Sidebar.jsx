@@ -749,6 +749,8 @@ const loadUnreadCounts = useCallback(async () => {
       setGroups(prev => prev.map(g =>
         g.id === msg.group_id ? { ...g, last_message_at: msg.sent_at } : g
       ));
+      // Reload threads to update their latest message timestamps
+      loadGroups();
       // if (msg.group_id && msg.sender_id !== user?.id) {
       //   setUnreadCounts(prev => ({
       //     ...prev,
@@ -1078,11 +1080,13 @@ const getUnifiedSortedItems = useCallback(() => {
       const totalUnreadCount = threadGroups.reduce((sum, group) =>
         sum + (unreadCounts[group.id] || 0), 0
       );
+      // Calculate latest message time across all groups in thread
       const latestMessageAt = threadGroups.reduce((latest, group) => {
         const groupTime = new Date(group.last_message_at || 0);
         return groupTime > latest ? groupTime : latest;
       }, new Date(0));
       // For threads: pick the most recent stableSortTime across all groups in thread
+      // Use the same logic as groups for consistency
       const threadStableTime = threadGroups.reduce((latest, group) => {
         const t = stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime();
         return t > latest ? t : latest;

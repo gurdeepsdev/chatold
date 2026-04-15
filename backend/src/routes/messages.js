@@ -683,21 +683,42 @@ const checkMember=async(req,res,next)=>{
 
 async function pushToMembers(io,groupId,senderId,msg,groupName){
   try{
-    const[members]=await db.query('SELECT user_id FROM group_members WHERE group_id=? AND user_id!=?',[groupId,senderId]);
-    for(const m of members){
+    // Get recipients based on To/CC fields, not all group members
+    const recipients = [];
+    
+    // Add primary recipient (To field)
+    if(msg.recipient_id && msg.recipient_id !== senderId){
+      recipients.push(msg.recipient_id);
+    }
+    
+    // Add secondary recipient (CC field)
+    if(msg.secondary_recipient_id && msg.secondary_recipient_id !== senderId){
+      recipients.push(msg.secondary_recipient_id);
+    }
+    
+    // If no specific recipients, fall back to all group members (backward compatibility)
+    if(recipients.length === 0){
+      const[members]=await db.query('SELECT user_id FROM group_members WHERE group_id=? AND user_id!=?',[groupId,senderId]);
+      recipients.push(...members.map(m => m.user_id));
+    }
+    
+    // Remove duplicates and send notifications
+    const uniqueRecipients = [...new Set(recipients)];
+    
+    for(const recipientId of uniqueRecipients){
       await db.query('INSERT INTO notifications (user_id,group_id,message_id,type,title,body) VALUES(?,?,?,?,?,?)',
-        [m.user_id,groupId,msg.id,'message',`💬 ${msg.sender_name}`,msg.content?.slice(0,100)||'Sent a file']).catch(()=>{});
+        [recipientId,groupId,msg.id,'message',`Message from ${msg.sender_name}`,msg.content?.slice(0,100)||'Sent a file']).catch(()=>{});
       if(io){
-        io.to(`user_${m.user_id}`).emit('push_notification',{
+        io.to(`user_${recipientId}`).emit('push_notification',{
           type:'message',
-          title:`💬 ${msg.sender_name}`,
+          title:`Message from ${msg.sender_name}`,
           body:msg.content?.slice(0,100)||'Sent a file',
           group_id:groupId,
           group_name:groupName,
           message_id:msg.id,
         });
-        const[[{count}]]=await db.query('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=FALSE',[m.user_id]).catch(()=>[[{count:0}]]);
-        io.to(`user_${m.user_id}`).emit('notification_count',{count});
+        const[[{count}]]=await db.query('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=FALSE',[recipientId]).catch(()=>[[{count:0}]]);
+        io.to(`user_${recipientId}`).emit('notification_count',{count});
       }
     }
   }catch(e){console.error('Push err:',e.message);}
