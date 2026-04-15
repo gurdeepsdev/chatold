@@ -565,10 +565,11 @@ export default function TasksPanel({group, taskTarget}){
   useEffect(()=>{
     const unsub=on('task_assigned',({task,subTasks,assigned_by,message,group_id})=>{
       
+      // Show toast notification for task assignment
+      toast.success(message);
+      
       // Only add task if it's for current user's group
       if(group_id === group?.id) {
-        toast.success(message);
-        
         // Collect all tasks to add in a single state update
         const tasksToAdd = [];
         
@@ -605,11 +606,14 @@ export default function TasksPanel({group, taskTarget}){
           setRefreshKey(prev => prev + 1);
         }
       } else {
-        console.log('[TasksPanel] Ignoring task for different group:', group_id, 'current group:', group?.id);
+        console.log('[TasksPanel] Task assigned to different group:', group_id, 'current group:', group?.id, '- switching to correct group');
+        // Auto-switch to the group where task was assigned
+        // This ensures user sees the task in its correct group
+        window.location.hash = `#group/${group_id}`;
       }
     });
     return unsub;
-  },[on,group?.id,user?.id]);
+  },[on,user?.id,selectedTask,taskDetails]);
 
   // Listen for new task notifications (when tasks are created)
   useEffect(()=>{

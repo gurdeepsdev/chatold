@@ -83,6 +83,7 @@ router.get('/campaign-data', auth, async (req, res) => {
         SELECT c.*, l.username
         FROM campaign_data c
         LEFT JOIN login l ON l.id = c.user_id
+        WHERE c.status = 'Live'
       `;
     }
     // 🧑‍💼 ADVERTISER MANAGER
@@ -93,14 +94,14 @@ FROM campaign_data c
 LEFT JOIN login l ON l.id = c.user_id
 WHERE 
   -- ✅ Own campaigns
-  c.user_id = ?
+  (c.user_id = ? AND c.status = 'Live')
 
   -- ✅ Assigned campaigns (FIXED 🔥)
-  OR c.adv_d IN (
+  OR (c.adv_d IN (
     SELECT adv_id 
     FROM advids 
     WHERE assign_id = ?
-  )
+  ) AND c.status = 'Live')
       `;
       params = [userId, userId];
     }
@@ -113,14 +114,14 @@ FROM campaign_data c
 LEFT JOIN login l ON l.id = c.user_id
 WHERE 
   -- ✅ Own campaigns
-  c.user_id = ?
+  (c.user_id = ? AND c.status = 'Live')
 
   -- ✅ Assigned campaigns (FIXED 🔥)
-  OR c.adv_d IN (
+  OR (c.adv_d IN (
     SELECT adv_id 
     FROM advids 
     WHERE assign_id = ?
-  )
+  ) AND c.status = 'Live')
       `;
       params = [userId, userId];
     }
@@ -133,14 +134,14 @@ FROM campaign_data c
 LEFT JOIN login l ON l.id = c.user_id
 WHERE 
   -- ✅ Own campaigns
-  c.user_id = ?
+  (c.user_id = ? AND c.status = 'Live')
 
   -- ✅ Assigned campaigns (FIXED 🔥)
-  OR c.adv_d IN (
+  OR (c.adv_d IN (
     SELECT adv_id 
     FROM advids 
     WHERE assign_id = ?
-  )
+  ) AND c.status = 'Live')
       `;
       params = [userId, userId];
     }

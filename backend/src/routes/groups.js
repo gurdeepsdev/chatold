@@ -29,7 +29,7 @@
 //       INNER JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ?
 //       LEFT JOIN campaigns c ON c.id = g.campaign_id
 //       LEFT JOIN users u ON u.id = g.created_by
-//       WHERE g.is_archived = FALSE
+//       WHERE g.is_archived = FALSE AND (c.status IS NULL OR c.status = 'Live' OR c.status IS NOT IN ('Draft', 'Pending', 'Rejected', 'Paused', 'Completed'))
 //       ORDER BY last_message_at DESC, g.created_at DESC
 //     `, [req.user.id, req.user.id, req.user.id]);
 
@@ -422,6 +422,16 @@
 //       const [campaigns] = await conn.query('SELECT * FROM campaigns WHERE id = ?', [campaign_id]);
 //       if (!campaigns.length) return res.status(404).json({ error: 'Campaign not found' });
 //       const campaign = campaigns[0];
+      
+//       // Validate campaign status - only allow creation for Live campaigns
+//       if (campaign.status !== 'Live') {
+//         return res.status(400).json({ error: 'Campaign can only be created for Live entries' });
+//       }
+      
+//       // Validate campaign status - only allow creation for Live campaigns
+//       if (campaign.status !== 'Live') {
+//         return res.status(400).json({ error: 'Campaign can only be created for Live entries' });
+//       }
 
 //       // Extract package_id
 //       let packageId = campaign.package_id;
@@ -883,7 +893,7 @@ router.get('/', auth, async (req, res) => {
       INNER JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ?
       LEFT JOIN campaigns c ON c.id = g.campaign_id
       LEFT JOIN users u ON u.id = g.created_by
-      WHERE g.is_archived = FALSE
+      WHERE g.is_archived = FALSE AND (g.group_type = 'custom' OR (c.status IS NULL OR c.status = 'Live'))
       ORDER BY last_message_at DESC, g.created_at DESC
     `, [req.user.id, req.user.id, req.user.id]);
 
@@ -954,16 +964,17 @@ router.post('/from-campaign-data', auth, async (req, res) => {
       SELECT c.*, l.username
       FROM campaign_data c
       INNER JOIN login l ON l.id = c.user_id
-      WHERE c.sub_campaign_id = ? AND c.user_id = ?
+      WHERE c.sub_campaign_id = ? AND c.user_id = ? AND c.status = 'Live'
     `, [campaign_subid, req.user.id]);
 
     if (!crmCampaigns.length) {
       return res.status(404).json({
-        error: 'Campaign not found in CRM data with given sub campaign ID for this user',
+        error: 'Campaign not found in CRM data with given sub campaign ID for this user. Only Live campaigns are allowed.',
         debug: {
           looking_for: {
             campaign_subid,
-            user_id: req.user.id
+            user_id: req.user.id,
+            status: 'Live'
           }
         }
       });
@@ -1284,10 +1295,20 @@ console.log("DEFAULT USERS:", defaultUsers);
 
       const { campaign_id, additional_members = [], campaign_type = 'agency' } = req.body;
 
-      const [campaigns] = await conn.query('SELECT * FROM campaigns WHERE id = ?', [campaign_id]);
+      const [campaigns] = await conn.query('SELECT * FROM campaigns WHERE id = ? ', [campaign_id]);
       if (!campaigns.length) return res.status(404).json({ error: 'Campaign not found' });
       const campaign = campaigns[0];
 
+
+
+
+
+
+if (campaign.status !== 'Live') {
+  return res.status(400).json({ 
+    error: 'Only Live campaigns are allowed for group creation' 
+  });
+}
       // Extract package_id
       let packageId = campaign.package_id;
       if (!packageId && campaign.preview_url) {
