@@ -738,6 +738,13 @@ const loadUnreadCounts = useCallback(async () => {
     // Single combined new_message handler — updates both timestamps and unread counts.
     // Previously two separate on('new_message') calls existed here, causing every
     // incoming message to fire two handlers. Merged into one to avoid double work.
+      // ✅ ADD THIS LINE — stamp stable position BEFORE anything else
+
+        //new line added 
+  // if (msg?.group_id) {
+  //   stablePositionRef.current[msg.group_id] = Date.now();
+  // }
+  //end here
     const unsub = on('new_message', (msg) => {
       setGroups(prev => prev.map(g =>
         g.id === msg.group_id ? { ...g, last_message_at: msg.sent_at } : g
@@ -1122,6 +1129,7 @@ const getUnifiedSortedItems = useCallback(() => {
   });
 
 }, [search, groupsToRender, groups, threads, pinnedGroups, unreadCounts, threadGroupIds, isGroupPinned]);
+
   const renderUnifiedItem = (itemData) => {
   const { type, item, unreadCount } = itemData;
 

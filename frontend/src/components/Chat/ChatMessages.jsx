@@ -569,22 +569,44 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
           </div>
         )}
         
-     
+        <div className="message-content">
+          {msg.content}
+          <div className="message-time">
+            {format(new Date(msg.sent_at), 'HH:mm')}
+          </div>
+        </div>
 
+        {/* Image */}
+        {msg.message_type === 'image' && fileUrl && (
+          <div className="media-content">
+            <img
+              src={fileUrl}
+              alt="Shared image"
+              loading="lazy"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(fileUrl, '_blank');
+              }}
+            />
+          </div>
+        )}
 
-        {/* <div 
-  ref={messageRef}
-  className={`message-bubble ${isOwn ? 'own' : 'received'} ${msg.message_type}`}
-  onClick={() => setShowOptions(!showOptions)}
-  onMouseLeave={() => setShowOptions(false)}
-  
-> */}
-<div 
-  ref={messageRef}
-  className={`message-bubble ${isOwn ? 'own' : 'received'} ${msg.message_type}`}
-  onMouseEnter={() => setShowEmojiPicker(true)}
-  onMouseLeave={() => setShowEmojiPicker(false)}
->
+        {/* Audio */}
+        {msg.message_type === 'audio' && fileUrl && (
+          <div className="media-content">
+            <audio controls>
+              <source src={fileUrl} type={msg.mime_type || 'audio/mpeg'} />
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        )}
+        {/* </div> */}
+        <div 
+          ref={messageRef}
+          className={`message-bubble ${isOwn ? 'own' : 'received'} ${msg.message_type}`}
+          onMouseEnter={() => setShowEmojiPicker(true)}
+          onMouseLeave={() => setShowEmojiPicker(false)}
+        >
 
   {/* Image */}
   {msg.message_type === 'image' && fileUrl && (

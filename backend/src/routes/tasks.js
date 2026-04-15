@@ -736,7 +736,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
       
           io.to(`user_${assigneeId}`).emit('push_notification',{
             type:'task',title:`📋 New task: ${taskLabel}`,
-            body:description||'You have a new task assigned',group_id,
+            body:description||'You have a new task assigned',group_id: Number(group_id),
           });
           // Send real-time task assignment event
           io.to(`user_${assigneeId}`).emit('task_assigned', {
@@ -744,7 +744,7 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
             subTasks: subTasks,
             assigned_by: req.user.full_name,
             message: `New task assigned to you by ${req.user.full_name}`,
-            group_id
+            group_id: Number(group_id)
           });
         }
       });
