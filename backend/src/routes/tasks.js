@@ -444,6 +444,8 @@ if (task_type === 'pause_pid') {
   .filter(e => e.assigned_to && e.assigned_to !== 'null')
   .map(e => e.assigned_to)
 )];
+
+
  let assigneeText = '';
 
 if (assignees.length > 0) {
@@ -470,18 +472,46 @@ if (assignees.length > 0) {
   // );
 
   // REPLACE with (for multi-assignee blocks: share_link, pause_pid, optimise):
+// const taskAssigneeIds = [...new Set(
+//   parsedPauseEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
+//     .filter(e => e.assigned_to && e.assigned_to !== 'null')
+//     .map(e => Number(e.assigned_to))
+// )];
+
 const taskAssigneeIds = [...new Set(
-  parsedPauseEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
+  parsedPauseEntries
     .filter(e => e.assigned_to && e.assigned_to !== 'null')
     .map(e => Number(e.assigned_to))
 )];
+
+const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
+
+const messageIds = [];
+
+for (const assigneeId of taskAssigneeIds) {
+  const [mRes] = await db.query(
+    `INSERT INTO messages 
+     (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+     VALUES(?,?,'task_notification',?,?,?,?)`,
+    [
+      group_id,
+      req.user.id,
+      encrypted,
+      iv,
+      taskRefId,
+      assigneeId
+    ]
+  );
+
+  messageIds.push({ messageId: mRes.insertId, recipientId: assigneeId });
+}
 const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
 
-const [mRes] = await db.query(
-  `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-   VALUES(?,?,'task_notification',?,?,?,?)`,
-  [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
-);
+// const [mRes] = await db.query(
+//   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+//    VALUES(?,?,'task_notification',?,?,?,?)`,
+//   [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
+// );
 
   await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
@@ -505,27 +535,35 @@ const [mRes] = await db.query(
 //   });
 // });
 // Replace the broken allAssignees.forEach at bottom of pause_pid block with:
-const allAssigneesPause = [...new Set(parsedPauseEntries
-  .filter(e => e.assigned_to && e.assigned_to !== 'null')
-  .map(e => Number(e.assigned_to))
-)];
+// const allAssigneesPause = [...new Set(parsedPauseEntries
+//   .filter(e => e.assigned_to && e.assigned_to !== 'null')
+//   .map(e => Number(e.assigned_to))
+// )];
+// const io = req.app.get('io');
 
-if (io) {
-  // group emit (already there, just add is_task flag)
+const firstMessageId = messageIds[0]?.messageId;
+
+if (io && firstMessageId) {
+  // ✅ GROUP MESSAGE (same as share_link)
   io.to(`group_${group_id}`).emit('new_message', {
-    id: mRes.insertId,
+    id: firstMessageId,
     group_id: Number(group_id),
     sender_id: req.user.id,
     sender_name: req.user.full_name,
     sender_role: req.user.role,
     message_type: 'task_notification',
     content: chatContent,
-    task_ref: {task_id: taskId, task_type: 'pause_pid', task_title: taskLabel},
+    task_ref: {
+      task_id: taskRefId,
+      task_type: 'pause_pid',
+      task_title: taskLabel
+    },
     sent_at: formatISTForMySQL(),
-    is_task: true  // ✅ suppress count for non-assignees
+    is_task: true
   });
 
-  allAssigneesPause.forEach(assigneeId => {
+  // ✅ USER EVENTS
+  taskAssigneeIds.forEach(assigneeId => {
     io.to(`user_${assigneeId}`).emit('task_assigned', {
       group_id: Number(group_id),
       assigned_to: assigneeId,
@@ -533,6 +571,30 @@ if (io) {
     });
   });
 }
+
+// if (io) {
+//   // group emit (already there, just add is_task flag)
+//   io.to(`group_${group_id}`).emit('new_message', {
+//     id: mRes.insertId,
+//     group_id: Number(group_id),
+//     sender_id: req.user.id,
+//     sender_name: req.user.full_name,
+//     sender_role: req.user.role,
+//     message_type: 'task_notification',
+//     content: chatContent,
+//     task_ref: {task_id: taskId, task_type: 'pause_pid', task_title: taskLabel},
+//     sent_at: formatISTForMySQL(),
+//     is_task: true  // ✅ suppress count for non-assignees
+//   });
+
+//   allAssigneesPause.forEach(assigneeId => {
+//     io.to(`user_${assigneeId}`).emit('task_assigned', {
+//       group_id: Number(group_id),
+//       assigned_to: assigneeId,
+//       recipient_id: assigneeId
+//     });
+//   });
+// }
   return res.status(201).json({
     task: null, // No parent task for pause_pid
     subTasks: createdTasks
@@ -730,18 +792,46 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
   //   [group_id, req.user.id, encrypted, iv, taskId]
   // );
 // REPLACE with (for multi-assignee blocks: share_link, pause_pid, optimise):
+// const taskAssigneeIds = [...new Set(
+//   parsedOptimiseEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
+//     .filter(e => e.assigned_to && e.assigned_to !== 'null')
+//     .map(e => Number(e.assigned_to))
+// )];
+
 const taskAssigneeIds = [...new Set(
-  parsedOptimiseEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
+  parsedOptimiseEntries
     .filter(e => e.assigned_to && e.assigned_to !== 'null')
     .map(e => Number(e.assigned_to))
 )];
+
+const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
+
+const messageIds = [];
+
+for (const assigneeId of taskAssigneeIds) {
+  const [mRes] = await db.query(
+    `INSERT INTO messages 
+     (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+     VALUES(?,?,'task_notification',?,?,?,?)`,
+    [
+      group_id,
+      req.user.id,
+      encrypted,
+      iv,
+      taskRefId,
+      assigneeId
+    ]
+  );
+
+  messageIds.push({ messageId: mRes.insertId, recipientId: assigneeId });
+}
 const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
 
-const [mRes] = await db.query(
-  `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-   VALUES(?,?,'task_notification',?,?,?,?)`,
-  [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
-);
+// const [mRes] = await db.query(
+//   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+//    VALUES(?,?,'task_notification',?,?,?,?)`,
+//   [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
+// );
 
   await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
@@ -749,40 +839,61 @@ const [mRes] = await db.query(
   );
 
   const io = req.app.get('io');
-  // if (io) {
-  //   io.to(`group_${group_id}`).emit('new_message', {
-  //     id: mRes.insertId,
-  //     group_id: Number(group_id),
-  //     sender_id: req.user.id,
-  //     sender_name: req.user.full_name,
-  //     sender_role: req.user.role,
-  //     message_type: 'task_notification',
-  //     content: chatContent,
-  //     task_ref: { task_id: taskId, task_type: 'optimise', task_title: taskLabel },
-  //     sent_at: formatISTForMySQL(),
-  //   });
-  // }
+
   // In the optimise block, update the io emit section:
-if (io) {
+// if (io) {
+//   io.to(`group_${group_id}`).emit('new_message', {
+//     id: mRes.insertId,
+//     group_id: Number(group_id),
+//     sender_id: req.user.id,
+//     sender_name: req.user.full_name,
+//     sender_role: req.user.role,
+//     message_type: 'task_notification',
+//     content: chatContent,
+//     task_ref: { task_id: taskId, task_type: 'optimise', task_title: taskLabel },
+//     sent_at: formatISTForMySQL(),
+//     is_task: true  // ✅
+//   });
+
+//   const allAssigneesOpt = [...new Set(parsedOptimiseEntries
+//     .filter(e => e.assigned_to && e.assigned_to !== 'null')
+//     .map(e => Number(e.assigned_to))
+//   )];
+
+//   allAssigneesOpt.forEach(assigneeId => {
+//     io.to(`user_${assigneeId}`).emit('task_assigned', {
+//       group_id: Number(group_id),
+//       assigned_to: assigneeId,
+//       recipient_id: assigneeId
+//     });
+//   });
+// }
+
+// const io = req.app.get('io');
+
+const firstMessageId = messageIds[0]?.messageId;
+
+if (io && firstMessageId) {
+  // ✅ GROUP MESSAGE
   io.to(`group_${group_id}`).emit('new_message', {
-    id: mRes.insertId,
+    id: firstMessageId,
     group_id: Number(group_id),
     sender_id: req.user.id,
     sender_name: req.user.full_name,
     sender_role: req.user.role,
     message_type: 'task_notification',
     content: chatContent,
-    task_ref: { task_id: taskId, task_type: 'optimise', task_title: taskLabel },
+    task_ref: {
+      task_id: taskRefId,
+      task_type: 'optimise',
+      task_title: taskLabel
+    },
     sent_at: formatISTForMySQL(),
-    is_task: true  // ✅
+    is_task: true
   });
 
-  const allAssigneesOpt = [...new Set(parsedOptimiseEntries
-    .filter(e => e.assigned_to && e.assigned_to !== 'null')
-    .map(e => Number(e.assigned_to))
-  )];
-
-  allAssigneesOpt.forEach(assigneeId => {
+  // ✅ USER EVENTS
+  taskAssigneeIds.forEach(assigneeId => {
     io.to(`user_${assigneeId}`).emit('task_assigned', {
       group_id: Number(group_id),
       assigned_to: assigneeId,
