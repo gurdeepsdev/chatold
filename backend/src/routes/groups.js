@@ -1030,19 +1030,73 @@ router.post('/from-campaign-data', auth, async (req, res) => {
      );
 
      // If no OS data found, default to creating one group without OS specification
-     const platforms = osPlatforms.length > 0
-      ? osPlatforms.map(o => o.os.toLowerCase().replace(/\s+/g, '')) // Clean OS names (e.g., "iOS" -> "ios")
-      : ['default']; // Fallback for campaigns without OS data
+    //  const platforms = osPlatforms.length > 0
+     // ✅ NEW: Group CRM rows by OS
+const groupedByOS = {};
+
+for (const row of crmCampaigns) {
+  const platform = row.os?.toLowerCase().replace(/\s+/g, '') || 'default';
+
+  if (!groupedByOS[platform]) {
+    groupedByOS[platform] = {
+      rows: [],
+      geos: new Set(),
+      payouts: new Set(),
+      base: row
+    };
+  }
+
+  groupedByOS[platform].rows.push(row);
+
+  const geoArr = Array.isArray(row.geo) ? row.geo : [row.geo];
+  geoArr.forEach(g => groupedByOS[platform].geos.add(g));
+
+  groupedByOS[platform].payouts.add(row.adv_payout);
+}
+      // ? osPlatforms.map(o => o.os.toLowerCase().replace(/\s+/g, '')) // Clean OS names (e.g., "iOS" -> "ios")
+      // : ['default']; // Fallback for campaigns without OS data
 
      // Create groups for each OS and adv_d combination
-     for (const platform of platforms) {
-      for (const advdData of advdResult.length > 0 ? advdResult : [{ adv_d: 'default' }]) {
+    //  for (const platform of platforms) {
+      // for (const advdData of advdResult.length > 0 ? advdResult : [{ adv_d: 'default' }]) {
         // Build group name: {campaign_name}_{advertiser_username}_{platform}_{adv_d}
-        const groupName = platform === 'default' && advdResult.length === 0
-          ? `${crmCampaign.campaign_name}_${adv_name}`
-          : `${crmCampaign.campaign_name}_${adv_name}_${platform}_${advdData.adv_d}`;
+        // const groupName = platform === 'default' && advdResult.length === 0
+        //   ? `${crmCampaign.campaign_name}_${adv_name}`
+        //   : `${crmCampaign.campaign_name}_${adv_name}_${platform}_${advdData.adv_d}`;
+// ✅ Extract geo (IMPORTANT FIX)
 
+// ✅ Loop through each CRM row (FIX - minimal change)
+// for (const crmRow of crmCampaigns) {
+
+  // const platform = crmRow.os?.toLowerCase().replace(/\s+/g, '') || 'default';
+  // const adv_d = crmRow.adv_d || 'default';
+
+  // const geo = Array.isArray(crmRow.geo)
+  //   ? crmRow.geo.join(',')
+  //   : crmRow.geo || 'NA';
+
+  // const groupName = `${crmRow.campaign_name}_${adv_name}_${platform}_${geo}_${adv_d}`;
+// const geo = Array.isArray(crmCampaign.geo)
+//   ? crmCampaign.geo.join(',')
+//   : crmCampaign.geo || 'NA';
+
+// Build group name with geo included
+// const groupName = platform === 'default' && advdResult.length === 0
+//   ? `${crmCampaign.campaign_name}_${adv_name}_${geo}`
+//   : `${crmCampaign.campaign_name}_${adv_name}_${platform}_${geo}_${advdData.adv_d}`;
         // Check if group already exists
+
+        for (const platform in groupedByOS) {
+
+  const groupData = groupedByOS[platform];
+  const baseRow = groupData.base;
+
+  const geo = Array.from(groupData.geos).join(',');
+  const payouts = Array.from(groupData.payouts).join(',');
+
+  const adv_d = baseRow.adv_d || 'default';
+
+  const groupName = `${baseRow.campaign_name}_${adv_name}_${platform}`;
         const [existing] = await conn.query(
           'SELECT id FROM chat_groups WHERE group_name = ?',
           [groupName]
@@ -1053,11 +1107,20 @@ router.post('/from-campaign-data', auth, async (req, res) => {
         }
 
         // Prepare CRM campaign data JSON with extracted package_id
-        const crmCampaignData = {
-          ...crmCampaign,
-          extracted_package_id: package_id
-        };
-
+        // const crmCampaignData = {
+        //   ...crmCampaign,
+        //   extracted_package_id: package_id
+        
+//         const crmCampaignData = {
+//   ...crmRow,
+//   extracted_package_id: package_id
+// };
+const crmCampaignData = {
+  ...baseRow,
+  geo: Array.from(groupData.geos),
+  adv_payout: Array.from(groupData.payouts),
+  extracted_package_id: package_id
+};
         // Create group
         const [result] = await conn.query(
           `INSERT INTO chat_groups (group_name, campaign_id, package_id, sub_id, group_type, campaign_type, created_by, platform, adv_name, advertiser_id, crm_campaign_data) 
@@ -1066,7 +1129,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
             groupName,
             null, // No local campaign_id since we're using CRM data
             package_id, // Use extracted package_id
-            crmCampaign.sub_campaign_id,
+baseRow.sub_campaign_id,
             'campaign',
             campaign_type,
             req.user.id,
@@ -1214,14 +1277,18 @@ console.log("DEFAULT USERS:", defaultUsers);
           group_name: groupName,
           group_type: campaign_type, // Add missing group_type field
           platform: platform,
-          campaign_name: crmCampaign.campaign_name,
+          // campaign_name: crmCampaign.campaign_name,
           adv_name: adv_name,
-          campaign_subid: crmCampaign.sub_campaign_id
+          // campaign_subid: crmCampaign.sub_campaign_id
+//           campaign_name: crmRow.campaign_name,
+// campaign_subid: crmRow.sub_campaign_id
+campaign_name: baseRow.campaign_name,
+campaign_subid: baseRow.sub_campaign_id
         });
         
       
-    } // closes advdData loop
-    } // closes platform loop
+        // closes advdData loop
+      }// closes platform loop
 
     await conn.commit();
 

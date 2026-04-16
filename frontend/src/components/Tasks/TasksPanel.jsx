@@ -975,13 +975,13 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
 
   return(
     <>
-    <div style={{fontSize:10, background:'#000', color:'#0f0', padding:6}}>
+    {/* <div style={{fontSize:10, background:'#000', color:'#0f0', padding:6}}>
   <div>Current Group: {group?.id}</div>
   <div>Total Tasks: {tasks.length}</div>
   <div>
     Tasks Groups: {tasks.map(t => t.group_id).join(', ')}
   </div>
-</div>
+</div> */}
     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
 
       {/* filter bar */}

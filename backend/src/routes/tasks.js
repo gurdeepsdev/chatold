@@ -285,8 +285,24 @@ if (assignees.length > 0) {
       content: chatContent,
       task_ref: {task_id: taskId, task_type: 'share_link', task_title: taskLabel},
       sent_at: formatISTForMySQL(),
+      // ✅ ADD THIS FLAG
+  is_task: true
     });
   }
+
+  // After the group_${group_id} emit for share_link:
+const allAssignees = [...new Set(parsedEntries
+  .filter(e => e.assigned_to && e.assigned_to !== 'null')
+  .map(e => Number(e.assigned_to))
+)];
+
+allAssignees.forEach(assigneeId => {
+  io.to(`user_${assigneeId}`).emit('task_assigned', {
+    group_id: Number(group_id),
+    assigned_to: assigneeId,
+    recipient_id: assigneeId
+  });
+});
 
   return res.status(201).json({
     task: null, // No parent task for share_link
@@ -380,22 +396,29 @@ if (assignees.length > 0) {
 
   // Emit real-time message to group
   const io = req.app.get('io');
-  if (io) {
-    io.to(`group_${group_id}`).emit('new_message', {
-      id: mRes.insertId,
-      group_id: Number(group_id),
-      sender_id: req.user.id,
-      sender_name: req.user.full_name,
-      sender_role: req.user.role,
-      message_type: 'task_notification',
-      content: chatContent,
-      task_ref: {task_id: taskId, task_type: 'pause_pid', task_title: taskLabel},
-      sent_at: formatISTForMySQL(),
-    });
-  }
 
-  allAssignees.forEach(assigneeId => {
-  io.to(`user_${assigneeId}`).emit('new_message', {
+//   allAssignees.forEach(assigneeId => {
+//   io.to(`user_${assigneeId}`).emit('new_message', {
+//     id: mRes.insertId,
+//     group_id: Number(group_id),
+//     sender_id: req.user.id,
+//     sender_name: req.user.full_name,
+//     sender_role: req.user.role,
+//     message_type: 'task_notification',
+//     content: chatContent,
+//     recipient_id: Number(assigneeId), // ✅ IMPORTANT
+//     sent_at: formatISTForMySQL(),
+//   });
+// });
+// Replace the broken allAssignees.forEach at bottom of pause_pid block with:
+const allAssigneesPause = [...new Set(parsedPauseEntries
+  .filter(e => e.assigned_to && e.assigned_to !== 'null')
+  .map(e => Number(e.assigned_to))
+)];
+
+if (io) {
+  // group emit (already there, just add is_task flag)
+  io.to(`group_${group_id}`).emit('new_message', {
     id: mRes.insertId,
     group_id: Number(group_id),
     sender_id: req.user.id,
@@ -403,11 +426,19 @@ if (assignees.length > 0) {
     sender_role: req.user.role,
     message_type: 'task_notification',
     content: chatContent,
-    recipient_id: Number(assigneeId), // ✅ IMPORTANT
+    task_ref: {task_id: taskId, task_type: 'pause_pid', task_title: taskLabel},
     sent_at: formatISTForMySQL(),
+    is_task: true  // ✅ suppress count for non-assignees
   });
-});
 
+  allAssigneesPause.forEach(assigneeId => {
+    io.to(`user_${assigneeId}`).emit('task_assigned', {
+      group_id: Number(group_id),
+      assigned_to: assigneeId,
+      recipient_id: assigneeId
+    });
+  });
+}
   return res.status(201).json({
     task: null, // No parent task for pause_pid
     subTasks: createdTasks
@@ -611,19 +642,47 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
   );
 
   const io = req.app.get('io');
-  if (io) {
-    io.to(`group_${group_id}`).emit('new_message', {
-      id: mRes.insertId,
+  // if (io) {
+  //   io.to(`group_${group_id}`).emit('new_message', {
+  //     id: mRes.insertId,
+  //     group_id: Number(group_id),
+  //     sender_id: req.user.id,
+  //     sender_name: req.user.full_name,
+  //     sender_role: req.user.role,
+  //     message_type: 'task_notification',
+  //     content: chatContent,
+  //     task_ref: { task_id: taskId, task_type: 'optimise', task_title: taskLabel },
+  //     sent_at: formatISTForMySQL(),
+  //   });
+  // }
+  // In the optimise block, update the io emit section:
+if (io) {
+  io.to(`group_${group_id}`).emit('new_message', {
+    id: mRes.insertId,
+    group_id: Number(group_id),
+    sender_id: req.user.id,
+    sender_name: req.user.full_name,
+    sender_role: req.user.role,
+    message_type: 'task_notification',
+    content: chatContent,
+    task_ref: { task_id: taskId, task_type: 'optimise', task_title: taskLabel },
+    sent_at: formatISTForMySQL(),
+    is_task: true  // ✅
+  });
+
+  const allAssigneesOpt = [...new Set(parsedOptimiseEntries
+    .filter(e => e.assigned_to && e.assigned_to !== 'null')
+    .map(e => Number(e.assigned_to))
+  )];
+
+  allAssigneesOpt.forEach(assigneeId => {
+    io.to(`user_${assigneeId}`).emit('task_assigned', {
       group_id: Number(group_id),
-      sender_id: req.user.id,
-      sender_name: req.user.full_name,
-      sender_role: req.user.role,
-      message_type: 'task_notification',
-      content: chatContent,
-      task_ref: { task_id: taskId, task_type: 'optimise', task_title: taskLabel },
-      sent_at: formatISTForMySQL(),
+      assigned_to: assigneeId,
+      recipient_id: assigneeId
     });
-  }
+  });
+}
 
   return res.status(201).json({
     task: null,
@@ -735,37 +794,53 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
     }
 
     const io=req.app.get('io');
-    if(io){
-      io.to(`group_${group_id}`).emit('task_update',{action:'created',task:taskRow,subTasks});
-      io.to(`group_${group_id}`).emit('new_message',{
-        id:mRes.insertId,group_id:Number(group_id),
-        sender_id:req.user.id,sender_name:req.user.full_name,sender_role:req.user.role,
-        message_type:'task_notification',content:chatContent,
-        task_ref:{task_id:taskId,task_title:taskLabel,task_type},
-        sent_at:formatISTForMySQL(),
-      });
-      // notify assignees
-      allAssignees.forEach(assigneeId => {
-        if (assigneeId) {
+//     if(io){
+//       // io.to(`group_${group_id}`).emit('task_update',{action:'created',task:taskRow,subTasks});
+//       allAssignees.forEach(assigneeId => {
+//   if (assigneeId) {
+//     io.to(`user_${assigneeId}`).emit('task_update', {
+//       group_id: Number(group_id),
+//       recipient_id: Number(assigneeId)
+//     });
+//   }
+// });
+//       io.to(`group_${group_id}`).emit('new_message',{
+//         id:mRes.insertId,group_id:Number(group_id),
+//         sender_id:req.user.id,sender_name:req.user.full_name,sender_role:req.user.role,
+//         message_type:'task_notification',content:chatContent,
+//         task_ref:{task_id:taskId,task_title:taskLabel,task_type},
+//         sent_at:formatISTForMySQL(),
+//       });
+//       // notify assignees
+//       allAssignees.forEach(assigneeId => {
+//         if (assigneeId) {
       
-          io.to(`user_${assigneeId}`).emit('push_notification',{
-            type:'task',title:`📋 New task: ${taskLabel}`,
-            body:description||'You have a new task assigned',group_id: Number(group_id),
-          });
-          // Send real-time task assignment event
-          io.to(`user_${assigneeId}`).emit('task_assigned', {
-            task: taskRow,
-            subTasks: subTasks,
-            assigned_by: req.user.full_name,
-            message: `New task assigned to you by ${req.user.full_name}`,
-            group_id: Number(group_id),
-              recipient_id: Number(assigneeId) // ✅ add this
+//           io.to(`user_${assigneeId}`).emit('push_notification',{
+//             type:'task',title:`📋 New task: ${taskLabel}`,
+//             body:description||'You have a new task assigned',group_id: Number(group_id),
+//           });
+//           // Send real-time task assignment event
+//           io.to(`user_${assigneeId}`).emit('task_assigned', {
+//             task: taskRow,
+//             subTasks: subTasks,
+//             assigned_by: req.user.full_name,
+//             message: `New task assigned to you by ${req.user.full_name}`,
+//             group_id: Number(group_id),
+//               recipient_id: Number(assigneeId) // ✅ add this
 
-          });
+//           });
           
-        }
-      });
-    }
+//         }
+//       });
+//     }
+io.to(`group_${group_id}`).emit('new_message', {
+  id: mRes.insertId, group_id: Number(group_id),
+  sender_id: req.user.id, sender_name: req.user.full_name, sender_role: req.user.role,
+  message_type: 'task_notification', content: chatContent,
+  task_ref: {task_id: taskId, task_title: taskLabel, task_type},
+  sent_at: formatISTForMySQL(),
+  is_task: true  // ✅ ADD THIS
+});
 
     res.status(201).json({task:taskRow,subTasks});
   }catch(e){
