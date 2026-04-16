@@ -793,6 +793,18 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
   // FIX 1: Stable position ref — only updated when a NEW message arrives,
   // never when a message is read. This prevents re-ordering on read.
   const stablePositionRef = useRef({});
+  useEffect(() => {
+  const key = `stable_order_${user?.id}`;
+  const saved = localStorage.getItem(key);
+
+  if (saved) {
+    try {
+      stablePositionRef.current = JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to parse stable order');
+    }
+  }
+}, [user?.id]);
 
   const isFirstRender = useRef(true);
 
@@ -815,6 +827,7 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       setLoading(false);
     }
   }, [joinGroup]);
+const isInitialUnreadLoad = useRef(true);
 
   // FIX 2: loadUnreadCounts now detects count INCREASES (new message)
   // vs decreases (read). Only increases update stablePositionRef.
@@ -824,17 +837,37 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       const newUnreadCounts = data.unreadCounts || {};
 
       setUnreadCounts(prev => {
-        Object.keys(newUnreadCounts).forEach(groupId => {
-          const prevCount = prev[groupId] || 0;
-          const newCount = newUnreadCounts[groupId] || 0;
-          // Only stamp if count went UP — a new message arrived
-          if (newCount > prevCount) {
-            stablePositionRef.current[groupId] = Date.now();
-          }
-          // Reading (count goes down) does NOT update stablePositionRef
-        });
-        return newUnreadCounts;
-      });
+  Object.keys(newUnreadCounts).forEach(groupId => {
+    const prevCount = prev[groupId] || 0;
+    const newCount = newUnreadCounts[groupId] || 0;
+
+    // ❌ Skip update on FIRST load after refresh
+    if (!isInitialUnreadLoad.current && newCount > prevCount) {
+      stablePositionRef.current[groupId] = Date.now();
+    }
+  });
+
+  return newUnreadCounts;
+});
+
+// ✅ Mark initial load done
+// isInitialUnreadLoad.current = false;
+//       setUnreadCounts(prev => {
+//         Object.keys(newUnreadCounts).forEach(groupId => {
+//           const prevCount = prev[groupId] || 0;
+//           const newCount = newUnreadCounts[groupId] || 0;
+//           // Only stamp if count went UP — a new message arrived
+//           if (newCount > prevCount) {
+//             stablePositionRef.current[groupId] = Date.now();
+//           }
+//           localStorage.setItem(
+//   `stable_order_${user?.id}`,
+//   JSON.stringify(stablePositionRef.current)
+// );
+//           // Reading (count goes down) does NOT update stablePositionRef
+//         });
+//         return newUnreadCounts;
+//       });
 
       setGroupLastUnreadTime(prev => {
         const updated = { ...prev };
@@ -894,7 +927,34 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
     return pinnedGroups.includes(groupId);
   }, [pinnedGroups]);
 
-  useEffect(() => { loadGroups(); }, [loadGroups]);
+  // useEffect(() => { loadGroups(); }, [loadGroups]);
+  useEffect(() => {
+  loadGroups().then(() => {
+    setGroups(prev => [...prev]); // force re-render using stable order
+  });
+}, [loadGroups]);
+useEffect(() => {
+  loadGroups().then(() => {
+    setGroups(prev => {
+      const now = Date.now();
+
+      prev.forEach((g, index) => {
+        if (!stablePositionRef.current[g.id]) {
+          // Assign initial order ONLY ONCE
+          stablePositionRef.current[g.id] = now - index;
+        }
+      });
+
+      localStorage.setItem(
+        `stable_order_${user?.id}`,
+        JSON.stringify(stablePositionRef.current)
+      );
+
+      return [...prev];
+    });
+  });
+}, [loadGroups]);
+
 
   useEffect(() => {
     const unsub = on('new_message', (msg) => {
@@ -907,9 +967,18 @@ export default function Sidebar({ selectedGroupId, onSelectGroup }) {
       // FIX 3: Stamp stablePositionRef FIRST, before setGroups or loadGroups.
       // This ensures by the time the sort re-runs, the ref has the correct
       // timestamp and the fallback to last_message_at is never used.
+      // if (msg?.group_id) {
+      //   stablePositionRef.current[msg.group_id] = Date.now();
+      // }
       if (msg?.group_id) {
-        stablePositionRef.current[msg.group_id] = Date.now();
-      }
+  const now = Date.now();
+  stablePositionRef.current[msg.group_id] = now;
+
+  localStorage.setItem(
+    `stable_order_${user?.id}`,
+    JSON.stringify(stablePositionRef.current)
+  );
+}
 
       // Update group's last_message_at in local state (no API call needed)
       setGroups(prev => prev.map(g =>
@@ -966,9 +1035,18 @@ if (
   }
 
   // ✅ 2. FIX WRONG GROUP ISSUE
+  // if (group_id) {
+  //   stablePositionRef.current[group_id] = Date.now();
+  // }
   if (group_id) {
-    stablePositionRef.current[group_id] = Date.now();
-  }
+  const now = Date.now();
+  stablePositionRef.current[group_id] = now;
+
+  localStorage.setItem(
+    `stable_order_${user?.id}`,
+    JSON.stringify(stablePositionRef.current)
+  );
+}
 
   // ✅ 3. UPDATE GROUP LAST ACTIVITY
   setGroups(prev =>
@@ -1001,9 +1079,21 @@ const unsubTaskUpdate = on('task_update', (data) => {
       ...prev,
       [group_id]: (prev[group_id] || 0) + 1
     }));
+      localStorage.setItem(
+    `stable_order_${user?.id}`,
+    JSON.stringify(stablePositionRef.current)
+  );
   }
 });
+// if (group_id) {
+//   const now = Date.now();
+//   stablePositionRef.current[group_id] = now;
 
+//   localStorage.setItem(
+//     `stable_order_${user?.id}`,
+//     JSON.stringify(stablePositionRef.current)
+//   );
+// }
     const unsubGroupCreated = on('group_created', (data) => {
       console.log("📢 group_created event:", data);
       if (data.group && data.group.member_ids?.includes(user?.id)) {
@@ -1120,7 +1210,12 @@ const unsubTaskUpdate = on('task_update', (data) => {
     priority: 1,
     unreadCount: unreadCounts[group.id] || 0,
     lastMessageAt: new Date(group.last_message_at || 0),
-    stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
+    stableSortTime:
+    stablePositionRef.current[group.id] || 0,
+  // stablePositionRef.current[group.id] ??
+  // new Date(group.last_message_at || 0).getTime(),
+    // stableSortTime: stablePositionRef.current[group.id] ?? 0,
+    // stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
     isPinned: true
   }));
     // Threads — same logic as groups, no priority difference
@@ -1161,7 +1256,12 @@ const unsubTaskUpdate = on('task_update', (data) => {
         priority: 0,
         unreadCount: unreadCounts[group.id] || 0,
         lastMessageAt: new Date(group.last_message_at || 0),
-        stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
+        stableSortTime:
+        stablePositionRef.current[group.id] || 0,
+  // stablePositionRef.current[group.id] ??
+  // new Date(group.last_message_at || 0).getTime(),
+        // stableSortTime: stablePositionRef.current[group.id] ?? 0,
+        // stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
         isPinned: false
       }));
 
@@ -1386,6 +1486,7 @@ const unsubTaskUpdate = on('task_update', (data) => {
           }}
         />
       )}
+      
     </div>
   );
 }
