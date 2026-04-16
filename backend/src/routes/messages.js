@@ -893,34 +893,70 @@ router.get('/unread-counts', auth, async (req, res) => {
     // if (DEBUG) console.log("GROUP IDS:", groupIds);
 
     // 🚀 UPDATED QUERY
-    const query = `
-      SELECT 
-        m.group_id,
-        COUNT(*) AS unread_count
-      FROM messages m
-      WHERE m.group_id IN (${placeholders})
+    // const query = `
+    //   SELECT 
+    //     m.group_id,
+    //     COUNT(*) AS unread_count
+    //   FROM messages m
+    //   WHERE m.group_id IN (${placeholders})
 
-      -- ✅ NEW LOGIC
+    //   -- ✅ NEW LOGIC
+    //   AND (
+    //     m.message_type = 'task_notification'
+    //     OR m.recipient_id = ?
+    //     OR m.secondary_recipient_id = ?
+    //   )
+
+    //   AND m.sender_id != ?
+
+    //   AND NOT EXISTS (
+    //     SELECT 1 
+    //     FROM message_status ms
+    //     WHERE ms.message_id = m.id
+    //     AND ms.user_id = ?
+    //     AND ms.status = 'seen'
+    //   )
+
+    //   GROUP BY m.group_id
+    // `;
+
+    // const params = [...groupIds, userId, userId, userId, userId];
+    const query = `
+  SELECT 
+    m.group_id,
+    COUNT(*) AS unread_count
+  FROM messages m
+  WHERE m.group_id IN (${placeholders})
+
+  -- ✅ FIXED LOGIC
+  AND (
+    -- Normal messages (keep as-is)
+    m.message_type != 'task_notification'
+
+    -- Task notifications (only for assigned users)
+    OR (
+      m.message_type = 'task_notification'
       AND (
-        m.message_type = 'task_notification'
-        OR m.recipient_id = ?
+        m.recipient_id = ?
         OR m.secondary_recipient_id = ?
       )
+    )
+  )
 
-      AND m.sender_id != ?
+  AND m.sender_id != ?
 
-      AND NOT EXISTS (
-        SELECT 1 
-        FROM message_status ms
-        WHERE ms.message_id = m.id
-        AND ms.user_id = ?
-        AND ms.status = 'seen'
-      )
+  AND NOT EXISTS (
+    SELECT 1 
+    FROM message_status ms
+    WHERE ms.message_id = m.id
+    AND ms.user_id = ?
+    AND ms.status = 'seen'
+  )
 
-      GROUP BY m.group_id
-    `;
+  GROUP BY m.group_id
+`;
 
-    const params = [...groupIds, userId, userId, userId, userId];
+const params = [...groupIds, userId, userId, userId, userId];
 
     if (DEBUG) {
       console.log("QUERY:", query);

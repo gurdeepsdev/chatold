@@ -261,11 +261,34 @@ if (assignees.length > 0) {
   const entryCount = parsedEntries.filter(e => e.pub_id || e.pid || e.link).length;
   const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const {encrypted, iv} = encrypt(chatContent);
-  const [mRes] = await db.query(
-    `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
-     VALUES(?,?,'task_notification',?,?,?)`,
-    [group_id, req.user.id, encrypted, iv, taskId]
-  );
+
+  // const [mRes] = await db.query(
+  //   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
+  //    VALUES(?,?,'task_notification',?,?,?)`,
+  //   [group_id, req.user.id, encrypted, iv, taskId]
+  // );
+// REPLACE with (for multi-assignee blocks: share_link, pause_pid, optimise):
+
+const taskAssigneeIds = [...new Set(
+  parsedEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
+    .filter(e => e.assigned_to && e.assigned_to !== 'null')
+    .map(e => Number(e.assigned_to))
+)];
+const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
+
+
+const [mRes] = await db.query(
+  `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+   VALUES(?,?,'task_notification',?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
+);
+
+// For raise_request/initial_setup (single assignee), simpler:
+// const [mRes] = await db.query(
+//   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+//    VALUES(?,?,'task_notification',?,?,?,?)`,
+//   [group_id, req.user.id, encrypted, iv, taskId, assigned_to ? Number(assigned_to) : null]
+// );
 
   await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
@@ -383,11 +406,26 @@ if (assignees.length > 0) {
   const entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
   const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const {encrypted, iv} = encrypt(chatContent);
-  const [mRes] = await db.query(
-    `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
-     VALUES(?,?,'task_notification',?,?,?)`,
-    [group_id, req.user.id, encrypted, iv, taskId]
-  );
+
+  // const [mRes] = await db.query(
+  //   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
+  //    VALUES(?,?,'task_notification',?,?,?)`,
+  //   [group_id, req.user.id, encrypted, iv, taskId]
+  // );
+
+  // REPLACE with (for multi-assignee blocks: share_link, pause_pid, optimise):
+const taskAssigneeIds = [...new Set(
+  parsedPauseEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
+    .filter(e => e.assigned_to && e.assigned_to !== 'null')
+    .map(e => Number(e.assigned_to))
+)];
+const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
+
+const [mRes] = await db.query(
+  `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+   VALUES(?,?,'task_notification',?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
+);
 
   await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
@@ -630,11 +668,24 @@ if (assignees.length > 0) {
 const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const { encrypted, iv } = encrypt(chatContent);
 
-  const [mRes] = await db.query(
-    `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
-     VALUES(?,?,'task_notification',?,?,?)`,
-    [group_id, req.user.id, encrypted, iv, taskId]
-  );
+  // const [mRes] = await db.query(
+  //   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
+  //    VALUES(?,?,'task_notification',?,?,?)`,
+  //   [group_id, req.user.id, encrypted, iv, taskId]
+  // );
+// REPLACE with (for multi-assignee blocks: share_link, pause_pid, optimise):
+const taskAssigneeIds = [...new Set(
+  parsedOptimiseEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
+    .filter(e => e.assigned_to && e.assigned_to !== 'null')
+    .map(e => Number(e.assigned_to))
+)];
+const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
+
+const [mRes] = await db.query(
+  `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+   VALUES(?,?,'task_notification',?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
+);
 
   await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
@@ -736,11 +787,59 @@ if (io) {
 
     const chatContent=`📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
     const{encrypted,iv}=encrypt(chatContent);
-    const[mRes]=await db.query(
-      `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
-       VALUES(?,?,'task_notification',?,?,?)`,
-      [group_id,req.user.id,encrypted,iv,taskId]
-    );
+
+let recipientIdForMsg = null;
+
+// ✅ For single-entry tasks
+if (task_type === 'raise_request' || task_type === 'initial_setup') {
+  if (assigned_to && assigned_to !== 'null') {
+    recipientIdForMsg = Number(assigned_to);
+  }
+} 
+// ✅ For multi-entry tasks
+else {
+  let entries = [];
+
+  if (task_type === 'share_link') entries = parsedEntries;
+  if (task_type === 'pause_pid') entries = parsedPauseEntries;
+  if (task_type === 'optimise') entries = parsedOptimiseEntries;
+
+  const taskAssigneeIds = [...new Set(
+    entries
+      .filter(e => e.assigned_to && e.assigned_to !== 'null')
+      .map(e => Number(e.assigned_to))
+  )];
+
+  recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
+}
+const [mRes] = await db.query(
+  `INSERT INTO messages 
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+   VALUES(?,?,'task_notification',?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
+);
+
+
+
+    // const[mRes]=await db.query(
+    //   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
+    //    VALUES(?,?,'task_notification',?,?,?)`,
+    //   [group_id,req.user.id,encrypted,iv,taskId]
+    // );
+    // REPLACE with (for multi-assignee blocks: share_link, pause_pid, optimise):
+// const taskAssigneeIds = [...new Set(
+//   parsedEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
+//     .filter(e => e.assigned_to && e.assigned_to !== 'null')
+//     .map(e => Number(e.assigned_to))
+// )];
+// const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
+
+// const [mRes] = await db.query(
+//   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+//    VALUES(?,?,'task_notification',?,?,?,?)`,
+//   [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
+// );
+
 
     await db.query(
       'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
@@ -840,6 +939,18 @@ io.to(`group_${group_id}`).emit('new_message', {
   task_ref: {task_id: taskId, task_title: taskLabel, task_type},
   sent_at: formatISTForMySQL(),
   is_task: true  // ✅ ADD THIS
+});
+
+// 🔥 ADD HERE (RIGHT AFTER group emit)
+
+allAssignees.forEach(assigneeId => {
+  if (assigneeId) {
+    io.to(`user_${Number(assigneeId)}`).emit('task_assigned', {
+      group_id: Number(group_id),
+      assigned_to: Number(assigneeId),
+      recipient_id: Number(assigneeId)
+    });
+  }
 });
 
     res.status(201).json({task:taskRow,subTasks});
