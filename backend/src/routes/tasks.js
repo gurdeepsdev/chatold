@@ -274,14 +274,61 @@ const taskAssigneeIds = [...new Set(
     .filter(e => e.assigned_to && e.assigned_to !== 'null')
     .map(e => Number(e.assigned_to))
 )];
-const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
+// const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
+
+// const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
+
+// const taskAssigneeIds = [...new Set(
+//   parsedEntries   // ⚠️ change based on block
+//     .filter(e => e.assigned_to && e.assigned_to !== 'null')
+//     .map(e => Number(e.assigned_to))
+// )];
+
+const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
+
+const messageIds = [];
+
+for (const assigneeId of taskAssigneeIds) {
+  const [mRes] = await db.query(
+    `INSERT INTO messages 
+     (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+     VALUES(?,?,'task_notification',?,?,?,?)`,
+    [
+      group_id,
+      req.user.id,
+      encrypted,
+      iv,
+      taskRefId,
+      assigneeId
+    ]
+  );
+
+  messageIds.push({ messageId: mRes.insertId, recipientId: assigneeId });
+}
 
 
-const [mRes] = await db.query(
-  `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-   VALUES(?,?,'task_notification',?,?,?,?)`,
-  [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
-);
+
+// for (const msg of messageIds) {
+  // For receiver
+  // await db.query(
+  //   `INSERT INTO message_status (message_id, user_id, status)
+  //    VALUES (?, ?, 'sent')`,
+  //   [msg.messageId, msg.recipientId]
+  // );
+
+  // For sender (optional but recommended)
+//   await db.query(
+//     `INSERT INTO message_status (message_id, user_id, status)
+//      VALUES (?, ?, 'read')`,
+//     [msg.messageId, req.user.id]
+//   );
+// }
+// const [mRes] = await db.query(
+//   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+//    VALUES(?,?,'task_notification',?,?,?,?)`,
+//    [ group_id, req.user.id, encrypted, iv, taskRefId, recipientIdForMsg ]
+//   // [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
+// );
 
 // For raise_request/initial_setup (single assignee), simpler:
 // const [mRes] = await db.query(
@@ -294,38 +341,47 @@ const [mRes] = await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
     [group_id, 'task_created', JSON.stringify({task_type: 'share_link', entries: subTaskIds.length}), req.user.id]
   );
+// Replace the broken allAssignees.forEach at bottom of pause_pid block with:
 
-  // Emit real-time message to group
-  const io = req.app.get('io');
-  if (io) {
-    io.to(`group_${group_id}`).emit('new_message', {
-      id: mRes.insertId,
-      group_id: Number(group_id),
-      sender_id: req.user.id,
-      sender_name: req.user.full_name,
-      sender_role: req.user.role,
-      message_type: 'task_notification',
-      content: chatContent,
-      task_ref: {task_id: taskId, task_type: 'share_link', task_title: taskLabel},
-      sent_at: formatISTForMySQL(),
-      // ✅ ADD THIS FLAG
-  is_task: true
-    });
-  }
-
-  // After the group_${group_id} emit for share_link:
-const allAssignees = [...new Set(parsedEntries
-  .filter(e => e.assigned_to && e.assigned_to !== 'null')
-  .map(e => Number(e.assigned_to))
+const allAssignees = [...new Set(
+  parsedEntries
+    .filter(e => e.assigned_to && e.assigned_to !== 'null')
+    .map(e => Number(e.assigned_to))
 )];
 
-allAssignees.forEach(assigneeId => {
-  io.to(`user_${assigneeId}`).emit('task_assigned', {
+const io = req.app.get('io');
+
+const firstMessageId = messageIds[0]?.messageId;
+
+if (io && firstMessageId) {
+  // ✅ GROUP MESSAGE (this updates UI)
+  io.to(`group_${group_id}`).emit('new_message', {
+    id: firstMessageId,
     group_id: Number(group_id),
-    assigned_to: assigneeId,
-    recipient_id: assigneeId
+    sender_id: req.user.id,
+    sender_name: req.user.full_name,
+    sender_role: req.user.role,
+    message_type: 'task_notification',
+    content: chatContent,
+    task_ref: {
+      task_id: taskRefId,
+      task_type: 'share_link',
+      task_title: taskLabel
+    },
+    sent_at: formatISTForMySQL(),
+    is_task: true
   });
-});
+
+  // ✅ USER NOTIFICATION
+  allAssignees.forEach(assigneeId => {
+    io.to(`user_${assigneeId}`).emit('task_assigned', {
+      group_id: Number(group_id),
+      assigned_to: assigneeId,
+      recipient_id: assigneeId
+    });
+  });
+}
+
 
   return res.status(201).json({
     task: null, // No parent task for share_link
@@ -955,10 +1011,19 @@ allAssignees.forEach(assigneeId => {
 
     res.status(201).json({task:taskRow,subTasks});
   }catch(e){
+      console.error("SHARE_LINK ERROR:", e); // 👈 ADD THIS
+
     await conn.rollback();
-    res.status(500).json({error:'Failed to create task'});
+    // res.status(500).json({error:'Failed to create task'});
+      res.status(500).json({ error: e.message });
+
   }finally{conn.release();}
 });
+// catch (e) {
+//   console.error("SHARE_LINK ERROR:", e); // 👈 ADD THIS
+//   await conn.rollback();
+//   res.status(500).json({ error: e.message });
+// }
 
 /* GET single task with permission check */
 router.get('/:taskId', auth, async (req, res) => {
