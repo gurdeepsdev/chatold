@@ -1032,27 +1032,55 @@ router.post('/from-campaign-data', auth, async (req, res) => {
      // If no OS data found, default to creating one group without OS specification
     //  const platforms = osPlatforms.length > 0
      // ✅ NEW: Group CRM rows by OS
+// const groupedByOS = {};
+
+// for (const row of crmCampaigns) {
+//   const platform = row.os?.toLowerCase().replace(/\s+/g, '') || 'default';
+
+//   if (!groupedByOS[platform]) {
+//     groupedByOS[platform] = {
+//       rows: [],
+//       geos: new Set(),
+//       payouts: new Set(),
+//       base: row
+//     };
+//   }
+
+//   groupedByOS[platform].rows.push(row);
+
+//   const geoArr = Array.isArray(row.geo) ? row.geo : [row.geo];
+//   geoArr.forEach(g => groupedByOS[platform].geos.add(g));
+
+//   groupedByOS[platform].payouts.add(row.adv_payout);
+// }
+// WITH this:
 const groupedByOS = {};
 
 for (const row of crmCampaigns) {
   const platform = row.os?.toLowerCase().replace(/\s+/g, '') || 'default';
+  const adv_d = row.adv_d || 'default';
+  const groupKey = `${platform}__${adv_d}`; // composite key to avoid mixing adv_d values
 
-  if (!groupedByOS[platform]) {
-    groupedByOS[platform] = {
+  if (!groupedByOS[groupKey]) {
+    groupedByOS[groupKey] = {
       rows: [],
       geos: new Set(),
       payouts: new Set(),
-      base: row
+      base: row,
+      platform,      // store platform separately for easy access
+      adv_d          // store adv_d separately for easy access
     };
   }
 
-  groupedByOS[platform].rows.push(row);
+  groupedByOS[groupKey].rows.push(row);
 
   const geoArr = Array.isArray(row.geo) ? row.geo : [row.geo];
-  geoArr.forEach(g => groupedByOS[platform].geos.add(g));
+  geoArr.filter(Boolean).forEach(g => groupedByOS[groupKey].geos.add(g));
 
-  groupedByOS[platform].payouts.add(row.adv_payout);
+  if (row.adv_payout) groupedByOS[groupKey].payouts.add(row.adv_payout);
 }
+
+
       // ? osPlatforms.map(o => o.os.toLowerCase().replace(/\s+/g, '')) // Clean OS names (e.g., "iOS" -> "ios")
       // : ['default']; // Fallback for campaigns without OS data
 
@@ -1086,17 +1114,31 @@ for (const row of crmCampaigns) {
 //   : `${crmCampaign.campaign_name}_${adv_name}_${platform}_${geo}_${advdData.adv_d}`;
         // Check if group already exists
 
-        for (const platform in groupedByOS) {
+  //       for (const platform in groupedByOS) {
 
-  const groupData = groupedByOS[platform];
+  // const groupData = groupedByOS[platform];
+  // const baseRow = groupData.base;
+
+  // const geo = Array.from(groupData.geos).join(',');
+  // const payouts = Array.from(groupData.payouts).join(',');
+
+  // const adv_d = baseRow.adv_d || 'default';
+
+  // const groupName = `${baseRow.campaign_name}_${adv_name}_${platform}`;
+  // REPLACE:
+// WITH:
+for (const groupKey in groupedByOS) {
+
+  const groupData = groupedByOS[groupKey];
   const baseRow = groupData.base;
+  const platform = groupData.platform;
+  const adv_d = groupData.adv_d;
 
-  const geo = Array.from(groupData.geos).join(',');
-  const payouts = Array.from(groupData.payouts).join(',');
+  const geo = Array.from(groupData.geos).filter(Boolean).join(',');
+  const payouts = Array.from(groupData.payouts).filter(Boolean).join(',');
 
-  const adv_d = baseRow.adv_d || 'default';
+  const groupName = `${baseRow.campaign_name}_${adv_name}_${platform}_${adv_d}`;
 
-  const groupName = `${baseRow.campaign_name}_${adv_name}_${platform}`;
         const [existing] = await conn.query(
           'SELECT id FROM chat_groups WHERE group_name = ?',
           [groupName]
@@ -1115,10 +1157,18 @@ for (const row of crmCampaigns) {
 //   ...crmRow,
 //   extracted_package_id: package_id
 // };
+// const crmCampaignData = {
+//   ...baseRow,
+//   geo: Array.from(groupData.geos),
+//   adv_payout: Array.from(groupData.payouts),
+//   extracted_package_id: package_id
+// };
+// WITH:
 const crmCampaignData = {
   ...baseRow,
-  geo: Array.from(groupData.geos),
-  adv_payout: Array.from(groupData.payouts),
+  geo: Array.from(groupData.geos).filter(Boolean),
+  adv_payout: Array.from(groupData.payouts).filter(Boolean),
+  adv_d: adv_d,  // ensure adv_d is explicitly stored (not just from baseRow spread)
   extracted_package_id: package_id
 };
         // Create group
