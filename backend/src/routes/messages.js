@@ -921,26 +921,56 @@ router.get('/unread-counts', auth, async (req, res) => {
     // `;
 
     // const params = [...groupIds, userId, userId, userId, userId];
-    const query = `
+//     const query = `
+//   SELECT 
+//     m.group_id,
+//     COUNT(*) AS unread_count
+//   FROM messages m
+//   WHERE m.group_id IN (${placeholders})
+
+//   -- ✅ FIXED LOGIC
+//   AND (
+//     -- Normal messages (keep as-is)
+//     m.message_type != 'task_notification'
+
+//     -- Task notifications (only for assigned users)
+//     OR (
+//       m.message_type = 'task_notification'
+//       AND (
+//         m.recipient_id = ?
+//         OR m.secondary_recipient_id = ?
+//       )
+//     )
+//   )
+
+//   AND m.sender_id != ?
+
+//   AND NOT EXISTS (
+//     SELECT 1 
+//     FROM message_status ms
+//     WHERE ms.message_id = m.id
+//     AND ms.user_id = ?
+//     AND ms.status = 'seen'
+//   )
+
+//   GROUP BY m.group_id
+// `;
+
+const query = `
   SELECT 
     m.group_id,
     COUNT(*) AS unread_count
   FROM messages m
   WHERE m.group_id IN (${placeholders})
 
-  -- ✅ FIXED LOGIC
+  -- ✅ APPLY TO ALL MESSAGES
   AND (
-    -- Normal messages (keep as-is)
-    m.message_type != 'task_notification'
+    -- Broadcast (normal group messages)
+    m.recipient_id IS NULL
 
-    -- Task notifications (only for assigned users)
-    OR (
-      m.message_type = 'task_notification'
-      AND (
-        m.recipient_id = ?
-        OR m.secondary_recipient_id = ?
-      )
-    )
+    -- Direct / task messages
+    OR m.recipient_id = ?
+    OR m.secondary_recipient_id = ?
   )
 
   AND m.sender_id != ?
@@ -955,7 +985,6 @@ router.get('/unread-counts', auth, async (req, res) => {
 
   GROUP BY m.group_id
 `;
-
 const params = [...groupIds, userId, userId, userId, userId];
 
     if (DEBUG) {

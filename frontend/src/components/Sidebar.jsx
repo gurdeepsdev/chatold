@@ -1399,10 +1399,10 @@ const unsubTaskUpdate = on('task_update', (data) => {
 
   return (
     <div className="sidebar">
-      <div style={{fontSize:10, background:'#111', color:'#0f0', padding:6}}>
+      {/* <div style={{fontSize:10, background:'#111', color:'#0f0', padding:6}}>
   <div>UnreadCounts: {JSON.stringify(unreadCounts)}</div>
   <div>StableRef: {JSON.stringify(stablePositionRef.current)}</div>
-</div>
+</div> */}
       <div className="sidebar-header">
         <div className="sidebar-title">
           <span>💬</span>
