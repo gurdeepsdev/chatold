@@ -99,6 +99,7 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                   ...response.users_by_role.optimization || []
                 ];
                 setUsers(allUsers);
+                console.log(allUsers,"all users")
               } else if (response && response.members) {
                 // API returned wrong format, fall back to auth API
                 throw new Error('Wrong API response format');
@@ -284,7 +285,7 @@ export default function CreateGroupModal({ onClose, onCreated }) {
         <div className="modal-body">
           {/* Mode tabs */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-            {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser') && (
+            {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser' || user?.role === 'adv_executive') && (
               <button className={`btn ${mode === 'campaign' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setMode('campaign')} style={{ flex: 1 }}>📊 From Campaign</button>
             )}
@@ -292,7 +293,7 @@ export default function CreateGroupModal({ onClose, onCreated }) {
               <button className={`btn ${mode === 'custom' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setMode('custom')} style={{ flex: 1 }}>✏️ Custom Group</button>
             )}
-            {!['admin', 'advertiser_manager', 'advertiser'].includes(user?.role) && (
+            {!['admin', 'advertiser_manager', 'advertiser', 'adv_executive'].includes(user?.role) && (
               <div style={{ 
                 textAlign: 'center', 
                 color: 'var(--text-muted)', 

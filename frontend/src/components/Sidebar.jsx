@@ -1410,7 +1410,7 @@ const unsubTaskUpdate = on('task_update', (data) => {
           <span style={{ marginLeft: 4 }} className={`status-dot ${connected ? 'online' : 'offline'}`} />
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser') && (
+          {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser' || user?.role === 'adv_executive') && (
             <button className="btn-icon tooltip" onClick={() => setShowCreateModal(true)} title="New Group">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -1464,7 +1464,7 @@ const unsubTaskUpdate = on('task_update', (data) => {
               <div className="empty-state" style={{ padding: 40 }}>
                 <div className="empty-state-icon">🗂️</div>
                 <p>No groups yet.<br/>Create one from a campaign.</p>
-                {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser') && (
+                {(user?.role === 'admin' || user?.role === 'advertiser_manager' || user?.role === 'advertiser' || user?.role === 'adv_executive' ) && (
                   <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
                     Create Group
                   </button>

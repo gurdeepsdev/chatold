@@ -1671,10 +1671,25 @@ if (campaign.status !== 'Live') {
 
 
       // Get all users from CRM database
-      const [allUsers] = await crmPool.query(
-        `SELECT id, username, role FROM login WHERE role IN ('pub_executive', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization') ORDER BY role, username`
-      );
-
+      // const [allUsers] = await crmPool.query(
+      //   `SELECT id, username, role FROM login WHERE role IN ('pub_executive', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization') ORDER BY role, username`
+      // );
+const [allUsers] = await crmPool.query(`
+  SELECT id, username, role 
+  FROM login 
+  WHERE role IN (
+    'pub_executive', 
+    'publisher', 
+    'publisher_manager', 
+    'adv_executive', 
+    'advertiser', 
+    'advertiser_manager', 
+    'operations', 
+    'optimization'
+  )
+  AND pause != 1
+  ORDER BY role, username
+`);
 
       // Group users by role
       const usersByRole = {
