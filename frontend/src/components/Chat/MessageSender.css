@@ -12,7 +12,7 @@
 
 .message-sender {
   padding: 12px 16px;
-  background: var(--surface, #1a1a2e);
+  /* background: var(--surface, #1a1a2e); */
   border-top: 1px solid var(--border, #2a2a3e);
 }
 
@@ -272,7 +272,7 @@
   width: 100%;
   min-height: 38px;
   padding: 5px 10px;
-  background: var(--input-bg, #1e1e2e);
+  /* background: var(--input-bg, #1e1e2e); */
   border: 1px solid var(--border, #333);
   border-radius: 8px;
   cursor: pointer;
@@ -407,7 +407,7 @@
   padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid var(--border, #444);
-  background: #2a2a3a;
+  background:var(--text);
   color: #fff;
   font-size: 13px;
   outline: none;
@@ -472,13 +472,13 @@
 
 .option-name {
   font-size: 13px;
-  color: var(--text, #e0e0e0);
+  color: var(--text);
   flex: 1;
 }
 
 .option-role {
   font-size: 11px;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   background: rgba(255, 255, 255, 0.06);
   padding: 1px 6px;
   border-radius: 10px;
@@ -486,7 +486,7 @@
 
 .option-count {
   font-size: 11px;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -500,6 +500,6 @@
 .dropdown-loading {
   padding: 12px 14px;
   font-size: 13px;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   text-align: center;
 }

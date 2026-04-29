@@ -1118,6 +1118,8 @@ const MessageSender = ({
   // Send button active only when recipients + content ready
   const canSend = selectedIds.length > 0 && content.trim().length > 0 && !loading;
 const [search, setSearch] = useState("");
+
+
   return (
     <div className="message-sender">
       {/* Reply To Indicator — unchanged */}
@@ -1155,23 +1157,23 @@ const [search, setSearch] = useState("");
           </div>
 {dropdownOpen && (
   <div
-    className=""
     style={{
       position: "absolute",
-      top: "calc(100% + 4px)",
+      bottom: "calc(100% + 4px)",
+      top: "auto",
       left: 0,
       right: 0,
       zIndex: 9999,
-      background: "#1e1e2e",
-      border: "1px solid #333",
-      borderRadius: "10px",
-      boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
+      background: "var(--bg-primary)",
+      /* ✅ THEME SUPPORT */
+      // background: "var(--surface)",
+      border: "1px solid var(--border)",
+      color: "var(--text)",
 
-      /* 🔥 FORCE SCROLL */
+      borderRadius: "10px",
       maxHeight: "150px",
       overflowY: "auto",
-
-      display: "block"   // ✅ IMPORTANT (overrides flex issues)
+      display: "block"
     }}
   >
     {/* 🔍 Search Input */}
