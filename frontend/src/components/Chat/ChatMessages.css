@@ -219,7 +219,7 @@
 .reactions-bar {
   display: flex;
   gap: 6px;
-  margin-top: 50px;
+  /* margin-top: 50px; */
   flex-wrap: wrap;
 }
 

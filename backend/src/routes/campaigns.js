@@ -69,6 +69,7 @@ router.get('/campaign-data', auth, async (req, res) => {
     );
 
     if (!loginUser) {
+      console.log("userId",userId,res)
       return res.status(404).json({ error: 'User role not found' });
     }
 

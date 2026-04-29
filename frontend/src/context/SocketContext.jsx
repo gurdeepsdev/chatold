@@ -172,14 +172,31 @@ export const SocketProvider = ({ children, token }) => {
     const apiUrl = process.env.REACT_APP_API_URL;
     const socketUrl = apiUrl.replace('/api', '');
 
-    const socket = io(socketUrl, {
-      auth: { token },
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      transports: ['websocket', 'polling'],
-      forceNew: true
-    });
+const socket = io(socketUrl, {
+  auth: { token },
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  transports: ['websocket', 'polling']
+});
+
+ // ✅ ADD HERE (RIGHT AFTER SOCKET CREATION)
+  socket.on("connect", () => {
+    console.log("✅ Socket connected:", socket.id);
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.log("❌ Socket disconnected:", reason);
+  });
+
+    // const socket = io(socketUrl, {
+    //   auth: { token },
+    //   reconnectionAttempts: Infinity,
+    //   reconnectionDelay: 1000,
+    //   reconnectionDelayMax: 5000,
+    //   transports: ['websocket', 'polling'],
+    //   forceNew: true
+    // });
 
     socket.on('connect', () => {
       setConnected(true);

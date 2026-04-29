@@ -894,8 +894,9 @@ router.get('/', auth, async (req, res) => {
       LEFT JOIN campaigns c ON c.id = g.campaign_id
       LEFT JOIN users u ON u.id = g.created_by
       WHERE g.is_archived = FALSE AND (g.group_type = 'custom' OR (c.status IS NULL OR c.status = 'Live'))
-      ORDER BY last_message_at DESC, g.created_at DESC
+      ORDER BY g.created_at DESC, last_message_at DESC
     `, [req.user.id, req.user.id, req.user.id]);
+      // ORDER BY last_message_at DESC, g.created_at DESC
 
     // Fetch all group members in a single batched query instead of N+1 loop.
     // Previously: 3 debug queries + 1 query per group = (3 + N) DB calls on every sidebar load.
@@ -968,6 +969,7 @@ router.post('/from-campaign-data', auth, async (req, res) => {
     `, [campaign_subid, req.user.id]);
 
     if (!crmCampaigns.length) {
+      console.log(crmCampaigns,"data")
       return res.status(404).json({
         error: 'Campaign not found in CRM data with given sub campaign ID for this user. Only Live campaigns are allowed.',
         debug: {
@@ -1414,6 +1416,7 @@ campaign_subid: baseRow.sub_campaign_id
 
       const [campaigns] = await conn.query('SELECT * FROM campaigns WHERE id = ? ', [campaign_id]);
       if (!campaigns.length) return res.status(404).json({ error: 'Campaign not found' });
+      console.log("campaigns",campaigns)
       const campaign = campaigns[0];
 
 

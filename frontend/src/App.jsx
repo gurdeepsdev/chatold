@@ -149,6 +149,8 @@ import { SocketProvider, useSocket } from './context/SocketContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/Chat/ChatView';
+import { MessageProvider } from './context/MessageContext'; // ← ADD THIS
+
 import Login from './components/Login';
 import ThemeToggle from './components/ThemeToggle';
 import { PWAInstallButton, useNotifications } from './utils/NotificationManager';
@@ -285,7 +287,11 @@ function ChatApp() {
 export default function App() {
   return (
     <AuthProvider>
+              <MessageProvider> {/* ← WRAP WITH THIS */}
+
       <ChatApp />
+              </MessageProvider>
+
       {/* <Toaster
         position="top-right"
         toastOptions={{

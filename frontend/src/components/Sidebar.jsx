@@ -941,7 +941,8 @@ useEffect(() => {
       prev.forEach((g, index) => {
         if (!stablePositionRef.current[g.id]) {
           // Assign initial order ONLY ONCE
-          stablePositionRef.current[g.id] = now - index;
+          // stablePositionRef.current[g.id] = now - index;
+          stablePositionRef.current[g.id] = Date.now(); // newest gets highest priority
         }
       });
 
@@ -955,137 +956,90 @@ useEffect(() => {
   });
 }, [loadGroups]);
 
+//old
+//   useEffect(() => {
+//     const unsub = on('new_message', (msg) => {
+//       console.log('📩 NEW MESSAGE RECEIVED', msg);
+//       console.log('[NEW_MESSAGE CHECK]', {
+//   msg,
+//   currentUser: user?.id,
+//   condition: msg.recipient_id === user?.id
+// });
+//       // FIX 3: Stamp stablePositionRef FIRST, before setGroups or loadGroups.
+//       // This ensures by the time the sort re-runs, the ref has the correct
+//       // timestamp and the fallback to last_message_at is never used.
+//       // if (msg?.group_id) {
+//       //   stablePositionRef.current[msg.group_id] = Date.now();
+//       // }
+//       if (msg?.group_id) {
+//   const now = Date.now();
+//   stablePositionRef.current[msg.group_id] = now;
 
-  useEffect(() => {
-    const unsub = on('new_message', (msg) => {
-      console.log('📩 NEW MESSAGE RECEIVED', msg);
-      console.log('[NEW_MESSAGE CHECK]', {
-  msg,
-  currentUser: user?.id,
-  condition: msg.recipient_id === user?.id
-});
-      // FIX 3: Stamp stablePositionRef FIRST, before setGroups or loadGroups.
-      // This ensures by the time the sort re-runs, the ref has the correct
-      // timestamp and the fallback to last_message_at is never used.
-      // if (msg?.group_id) {
-      //   stablePositionRef.current[msg.group_id] = Date.now();
-      // }
-      if (msg?.group_id) {
-  const now = Date.now();
-  stablePositionRef.current[msg.group_id] = now;
+//   localStorage.setItem(
+//     `stable_order_${user?.id}`,
+//     JSON.stringify(stablePositionRef.current)
+//   );
+// }
 
-  localStorage.setItem(
-    `stable_order_${user?.id}`,
-    JSON.stringify(stablePositionRef.current)
-  );
-}
+//       // Update group's last_message_at in local state (no API call needed)
+//       setGroups(prev => prev.map(g =>
+//         g.id === msg.group_id ? { ...g, last_message_at: msg.sent_at } : g
+//       ));
 
-      // Update group's last_message_at in local state (no API call needed)
-      setGroups(prev => prev.map(g =>
-        g.id === msg.group_id ? { ...g, last_message_at: msg.sent_at } : g
-      ));
+//       // FIX 4: Removed loadGroups() call here.
+//       // loadGroups() was fetching backend data which returns ORDER BY last_message_at DESC,
+//       // which overwrote the frontend state and bypassed stablePositionRef entirely.
+//       // The local setGroups above is enough to keep last_message_at current.
 
-      // FIX 4: Removed loadGroups() call here.
-      // loadGroups() was fetching backend data which returns ORDER BY last_message_at DESC,
-      // which overwrote the frontend state and bypassed stablePositionRef entirely.
-      // The local setGroups above is enough to keep last_message_at current.
-
-      // Update unread count for recipient only
-      // if (
-      //   msg.group_id &&
-      //   msg.sender_id !== user?.id &&
-      //   (msg.recipient_id === user?.id || msg.secondary_recipient_id === user?.id)
-      // ) 
-//       if (
+//       // Update unread count for recipient only
+//       // if (
+//       //   msg.group_id &&
+//       //   msg.sender_id !== user?.id &&
+//       //   (msg.recipient_id === user?.id || msg.secondary_recipient_id === user?.id)
+//       // ) 
+// //       if (
+// //   msg.group_id &&
+// //   msg.sender_id !== user?.id &&
+// //   (
+// //     msg.recipient_id === user?.id || 
+// //     msg.secondary_recipient_id === user?.id ||
+// //     msg.message_type === 'task_notification' // ✅ fallback safety
+// //   )
+// // )
+// // AFTER:
+// if (
 //   msg.group_id &&
 //   msg.sender_id !== user?.id &&
+//   !msg.is_task && // ✅ skip all task notifications here — handled by task_assigned/task_update
 //   (
 //     msg.recipient_id === user?.id || 
-//     msg.secondary_recipient_id === user?.id ||
-//     msg.message_type === 'task_notification' // ✅ fallback safety
+//     msg.secondary_recipient_id === user?.id
 //   )
 // )
-// AFTER:
-if (
-  msg.group_id &&
-  msg.sender_id !== user?.id &&
-  !msg.is_task && // ✅ skip all task notifications here — handled by task_assigned/task_update
-  (
-    msg.recipient_id === user?.id || 
-    msg.secondary_recipient_id === user?.id
-  )
-)
-      {
-        setUnreadCounts(prev => ({
-          ...prev,
-          [msg.group_id]: (prev[msg.group_id] || 0) + 1
-        }));
-      }
-    });
+//       {
+//         setUnreadCounts(prev => ({
+//           ...prev,
+//           [msg.group_id]: (prev[msg.group_id] || 0) + 1
+//         }));
+//       }
+//     });
 
-    const unsubTaskAssigned = on('task_assigned', (data) => {
-  console.log('[SOCKET task_assigned RECEIVED]', data);
+//     const unsubTaskAssigned = on('task_assigned', (data) => {
+//   console.log('[SOCKET task_assigned RECEIVED]', data);
 
-  const { task, group_id, assigned_to } = data;
+//   const { task, group_id, assigned_to } = data;
 
-  // ✅ 1. PERSONALIZATION (IMPORTANT)
-  if (Number(assigned_to) !== Number(user?.id)) {
-    console.log('❌ Task not for this user, ignoring');
-    return;
-  }
+//   // ✅ 1. PERSONALIZATION (IMPORTANT)
+//   if (Number(assigned_to) !== Number(user?.id)) {
+//     console.log('❌ Task not for this user, ignoring');
+//     return;
+//   }
 
-  // ✅ 2. FIX WRONG GROUP ISSUE
-  // if (group_id) {
-  //   stablePositionRef.current[group_id] = Date.now();
-  // }
-  if (group_id) {
-  const now = Date.now();
-  stablePositionRef.current[group_id] = now;
-
-  localStorage.setItem(
-    `stable_order_${user?.id}`,
-    JSON.stringify(stablePositionRef.current)
-  );
-}
-
-  // ✅ 3. UPDATE GROUP LAST ACTIVITY
-  setGroups(prev =>
-    prev.map(g =>
-      g.id === group_id
-        ? { ...g, last_message_at: new Date().toISOString() }
-        : g
-    )
-  );
-
-  // ✅ 4. INCREASE UNREAD COUNT
-  setUnreadCounts(prev => ({
-    ...prev,
-    [group_id]: (prev[group_id] || 0) + 1
-  }));
-});
-//add
-const unsubTaskUpdate = on('task_update', (data) => {
-  console.log('[SOCKET task_update RECEIVED]', data);
-
-  const { group_id, updated_by } = data;
-
-  // ❌ Ignore if current user updated it
-  if (Number(updated_by) === Number(user?.id)) return;
-
-  if (group_id) {
-    stablePositionRef.current[group_id] = Date.now();
-
-    setUnreadCounts(prev => ({
-      ...prev,
-      [group_id]: (prev[group_id] || 0) + 1
-    }));
-      localStorage.setItem(
-    `stable_order_${user?.id}`,
-    JSON.stringify(stablePositionRef.current)
-  );
-  }
-});
-// if (group_id) {
+//   // ✅ 2. FIX WRONG GROUP ISSUE
+//   // if (group_id) {
+//   //   stablePositionRef.current[group_id] = Date.now();
+//   // }
+//   if (group_id) {
 //   const now = Date.now();
 //   stablePositionRef.current[group_id] = now;
 
@@ -1094,62 +1048,277 @@ const unsubTaskUpdate = on('task_update', (data) => {
 //     JSON.stringify(stablePositionRef.current)
 //   );
 // }
-    const unsubGroupCreated = on('group_created', (data) => {
-      console.log("📢 group_created event:", data);
-      if (data.group && data.group.member_ids?.includes(user?.id)) {
-        setGroups(prev => {
-          const existingIndex = prev.findIndex(g => g.id === data.group.id);
-          if (existingIndex >= 0) {
-            return prev.map((g, i) => i === existingIndex ? { ...g, ...data.group } : g);
-          }
-          return [data.group, ...prev];
-        });
-        loadGroups();
-        loadUnreadCounts();
-      }
+
+//   // ✅ 3. UPDATE GROUP LAST ACTIVITY
+//   setGroups(prev =>
+//     prev.map(g =>
+//       g.id === group_id
+//         ? { ...g, last_message_at: new Date().toISOString() }
+//         : g
+//     )
+//   );
+
+//   // ✅ 4. INCREASE UNREAD COUNT
+//   setUnreadCounts(prev => ({
+//     ...prev,
+//     [group_id]: (prev[group_id] || 0) + 1
+//   }));
+// });
+// //add
+// const unsubTaskUpdate = on('task_update', (data) => {
+//   console.log('[SOCKET task_update RECEIVED]', data);
+
+//   const { group_id, updated_by } = data;
+
+//   // ❌ Ignore if current user updated it
+//   if (Number(updated_by) === Number(user?.id)) return;
+
+//   if (group_id) {
+//     stablePositionRef.current[group_id] = Date.now();
+
+//     setUnreadCounts(prev => ({
+//       ...prev,
+//       [group_id]: (prev[group_id] || 0) + 1
+//     }));
+//       localStorage.setItem(
+//     `stable_order_${user?.id}`,
+//     JSON.stringify(stablePositionRef.current)
+//   );
+//   }
+// });
+// // if (group_id) {
+// //   const now = Date.now();
+// //   stablePositionRef.current[group_id] = now;
+
+// //   localStorage.setItem(
+// //     `stable_order_${user?.id}`,
+// //     JSON.stringify(stablePositionRef.current)
+// //   );
+// // }
+//     const unsubGroupCreated = on('group_created', (data) => {
+//       console.log("📢 group_created event:", data);
+//       if (data.group && data.group.member_ids?.includes(user?.id)) {
+//         setGroups(prev => {
+//           const existingIndex = prev.findIndex(g => g.id === data.group.id);
+//           if (existingIndex >= 0) {
+//             return prev.map((g, i) => i === existingIndex ? { ...g, ...data.group } : g);
+//           }
+//           return [data.group, ...prev];
+//         });
+//         loadGroups();
+//         loadUnreadCounts();
+//       }
+//     });
+
+//     const unsubCampaignCreated = on('campaign_created', (data) => {
+//       if (data.message) toast.success(data.message);
+//       joinGroup(data.campaign.group_id);
+//       setGroups(prev => {
+//         const exists = prev.find(g => g.id === data.campaign.group_id);
+//         if (exists) return prev;
+//         return [{
+//           id: data.campaign.group_id,
+//           group_name: data.campaign.group_name,
+//           campaign_name: data.campaign.campaign_name
+//         }, ...prev];
+//       });
+//     });
+
+//     const unsubMemberAdded = on('member_added', (data) => {
+//       if (Number(data.user_id) === user?.id) {
+//         if (data.group_id) joinGroup(data.group_id);
+//         loadGroups();
+//         toast.success(`You were added to a group by ${data.added_by_name}`);
+//       }
+//     });
+
+//     const unsubMemberRemoved = on('member_removed', (data) => {
+//       if (Number(data.user_id) === user?.id) {
+//         leaveGroup(data.group_id);
+//         setGroups(prev => prev.filter(g => g.id !== Number(data.group_id)));
+//         toast.success(`You were removed from a group by ${data.removed_by_name}`);
+//       }
+//     });
+
+//     return () => {
+//       unsub();
+//       unsubGroupCreated();
+//       unsubCampaignCreated();
+//       unsubMemberAdded();
+//       unsubMemberRemoved();
+//       unsubTaskAssigned(); //add
+//       unsubTaskUpdate(); //add
+//     };
+//   }, [on, user?.id, loadGroups, loadUnreadCounts, joinGroup, leaveGroup]);
+
+useEffect(() => {
+  const unsub = on('new_message', (msg) => {
+    console.log('📩 NEW MESSAGE RECEIVED', msg);
+
+    const isForMe =
+      msg.sender_id !== user?.id &&
+      (
+        msg.is_broadcast ||
+        msg.recipient_id === user?.id ||
+        msg.secondary_recipient_id === user?.id ||
+        (Array.isArray(msg.recipient_ids) && msg.recipient_ids.includes(user?.id))
+      );
+
+    console.log('[NEW_MESSAGE CHECK]', {
+      msg,
+      currentUser: user?.id,
+      condition: isForMe
     });
 
-    const unsubCampaignCreated = on('campaign_created', (data) => {
-      if (data.message) toast.success(data.message);
-      joinGroup(data.campaign.group_id);
+    // 🔥 Update stable position
+    if (msg?.group_id) {
+      const now = Date.now();
+      stablePositionRef.current[msg.group_id] = now;
+
+      localStorage.setItem(
+        `stable_order_${user?.id}`,
+        JSON.stringify(stablePositionRef.current)
+      );
+    }
+
+    // 🔥 Update group last message
+    setGroups(prev =>
+      prev.map(g =>
+        g.id === msg.group_id
+          ? { ...g, last_message_at: msg.sent_at }
+          : g
+      )
+    );
+
+    // 🔥 FIXED CONDITION (MAIN FIX)
+    if (
+      msg.group_id &&
+      isForMe &&
+      !msg.is_task
+    ) {
+      setUnreadCounts(prev => ({
+        ...prev,
+        [msg.group_id]: (prev[msg.group_id] || 0) + 1
+      }));
+    }
+  });
+
+  const unsubTaskAssigned = on('task_assigned', (data) => {
+    console.log('[SOCKET task_assigned RECEIVED]', data);
+
+    const { group_id, assigned_to } = data;
+
+    if (Number(assigned_to) !== Number(user?.id)) return;
+
+    if (group_id) {
+      const now = Date.now();
+      stablePositionRef.current[group_id] = now;
+
+      localStorage.setItem(
+        `stable_order_${user?.id}`,
+        JSON.stringify(stablePositionRef.current)
+      );
+    }
+
+    setGroups(prev =>
+      prev.map(g =>
+        g.id === group_id
+          ? { ...g, last_message_at: new Date().toISOString() }
+          : g
+      )
+    );
+
+    setUnreadCounts(prev => ({
+      ...prev,
+      [group_id]: (prev[group_id] || 0) + 1
+    }));
+  });
+
+  const unsubTaskUpdate = on('task_update', (data) => {
+    console.log('[SOCKET task_update RECEIVED]', data);
+
+    const { group_id, updated_by } = data;
+
+    if (Number(updated_by) === Number(user?.id)) return;
+
+    if (group_id) {
+      stablePositionRef.current[group_id] = Date.now();
+
+      setUnreadCounts(prev => ({
+        ...prev,
+        [group_id]: (prev[group_id] || 0) + 1
+      }));
+
+      localStorage.setItem(
+        `stable_order_${user?.id}`,
+        JSON.stringify(stablePositionRef.current)
+      );
+    }
+  });
+
+  const unsubGroupCreated = on('group_created', (data) => {
+    console.log("📢 group_created event:", data);
+
+    if (data.group && data.group.member_ids?.includes(user?.id)) {
       setGroups(prev => {
-        const exists = prev.find(g => g.id === data.campaign.group_id);
-        if (exists) return prev;
-        return [{
-          id: data.campaign.group_id,
-          group_name: data.campaign.group_name,
-          campaign_name: data.campaign.campaign_name
-        }, ...prev];
+        const existingIndex = prev.findIndex(g => g.id === data.group.id);
+        if (existingIndex >= 0) {
+          return prev.map((g, i) =>
+            i === existingIndex ? { ...g, ...data.group } : g
+          );
+        }
+        return [data.group, ...prev];
       });
+
+      loadGroups();
+      loadUnreadCounts();
+    }
+  });
+
+  const unsubCampaignCreated = on('campaign_created', (data) => {
+    if (data.message) toast.success(data.message);
+
+    joinGroup(data.campaign.group_id);
+
+    setGroups(prev => {
+      const exists = prev.find(g => g.id === data.campaign.group_id);
+      if (exists) return prev;
+
+      return [{
+        id: data.campaign.group_id,
+        group_name: data.campaign.group_name,
+        campaign_name: data.campaign.campaign_name
+      }, ...prev];
     });
+  });
 
-    const unsubMemberAdded = on('member_added', (data) => {
-      if (Number(data.user_id) === user?.id) {
-        if (data.group_id) joinGroup(data.group_id);
-        loadGroups();
-        toast.success(`You were added to a group by ${data.added_by_name}`);
-      }
-    });
+  const unsubMemberAdded = on('member_added', (data) => {
+    if (Number(data.user_id) === user?.id) {
+      if (data.group_id) joinGroup(data.group_id);
+      loadGroups();
+      toast.success(`You were added to a group by ${data.added_by_name}`);
+    }
+  });
 
-    const unsubMemberRemoved = on('member_removed', (data) => {
-      if (Number(data.user_id) === user?.id) {
-        leaveGroup(data.group_id);
-        setGroups(prev => prev.filter(g => g.id !== Number(data.group_id)));
-        toast.success(`You were removed from a group by ${data.removed_by_name}`);
-      }
-    });
+  const unsubMemberRemoved = on('member_removed', (data) => {
+    if (Number(data.user_id) === user?.id) {
+      leaveGroup(data.group_id);
+      setGroups(prev => prev.filter(g => g.id !== Number(data.group_id)));
+      toast.success(`You were removed from a group by ${data.removed_by_name}`);
+    }
+  });
 
-    return () => {
-      unsub();
-      unsubGroupCreated();
-      unsubCampaignCreated();
-      unsubMemberAdded();
-      unsubMemberRemoved();
-      unsubTaskAssigned(); //add
-      unsubTaskUpdate(); //add
-    };
-  }, [on, user?.id, loadGroups, loadUnreadCounts, joinGroup, leaveGroup]);
+  return () => {
+    unsub();
+    unsubGroupCreated();
+    unsubCampaignCreated();
+    unsubMemberAdded();
+    unsubMemberRemoved();
+    unsubTaskAssigned();
+    unsubTaskUpdate();
+  };
 
+}, [on, user?.id, loadGroups, loadUnreadCounts, joinGroup, leaveGroup]);
   const toggleThread = (key) => {
     setExpandedThreads(prev => ({ ...prev, [key]: !prev[key] }));
   };

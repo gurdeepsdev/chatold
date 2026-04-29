@@ -148,3 +148,9 @@ crmPool.getConnection()
 
 module.exports = pool;
 module.exports.crmPool = crmPool;
+
+ //   host: 'localhost',
+    // user: 'root',
+    // password: 'root',
+    // database: 'crm',
+    // port: 8889,

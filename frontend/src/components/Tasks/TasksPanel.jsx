@@ -271,12 +271,30 @@ export default function TasksPanel({group, taskTarget}){
   }, [group?.id]);
 
   // Entry management functions
+  // const addEntry = () => {
+  //   setForm(p => ({
+  //     ...p,
+  //     entries: [...p.entries, { pub_id:'', pid:'', link:'', assigned_to:'', note:'' }]
+  //   }));
+  // };
   const addEntry = () => {
-    setForm(p => ({
+  setForm(p => {
+    const lastEntry = p.entries[p.entries.length - 1];
+
+    const newEntry = lastEntry
+      ? {
+          ...lastEntry,
+          link: ''     // reset link
+          // note: ''       // reset note
+        }
+      : { pub_id:'', pid:'', link:'', assigned_to:'', note:'' };
+
+    return {
       ...p,
-      entries: [...p.entries, { pub_id:'', pid:'', link:'', assigned_to:'', note:'' }]
-    }));
-  };
+      entries: [...p.entries, newEntry]
+    };
+  });
+};
 
   const removeEntry = (index) => {
     setForm(p => ({
@@ -295,12 +313,30 @@ export default function TasksPanel({group, taskTarget}){
   };
 
   // Pause entry management functions
+  // const addPauseEntry = () => {
+  //   setForm(p => ({
+  //     ...p,
+  //     pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:'', pause_reason:'' }]
+  //   }));
+  // };
+  
   const addPauseEntry = () => {
-    setForm(p => ({
+  setForm(p => {
+    const lastEntry = p.pause_entries[p.pause_entries.length - 1];
+
+    const newEntry = lastEntry
+      ? {
+          ...lastEntry,
+          pause_reason: '' // reset only this (optional)
+        }
+      : { pub_id:'', pid:'', assigned_to:'', pause_reason:'' };
+
+    return {
       ...p,
-      pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:'', pause_reason:'' }]
-    }));
-  };
+      pause_entries: [...p.pause_entries, newEntry]
+    };
+  });
+};
 
   const removePauseEntry = (index) => {
     setForm(p => ({
@@ -319,12 +355,34 @@ export default function TasksPanel({group, taskTarget}){
   };
 
   // Optimise entry management functions
+  // const addOptimiseEntry = () => {
+  //   setForm(p => ({
+  //     ...p,
+  //     optimise_entries: [...p.optimise_entries, { assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }]
+  //   }));
+  // };
   const addOptimiseEntry = () => {
-    setForm(p => ({
+  setForm(p => {
+    const lastEntry = p.optimise_entries[p.optimise_entries.length - 1];
+
+    const newEntry = lastEntry
+      ? {
+          ...lastEntry,
+          attachment: null,     // reset file
+          optimise_scenario: '' // optional reset
+        }
+      : {
+          assigned_to:'', pub_id:'', pid:'',
+          fp:'', fa:'', f1:'', f2:'',
+          optimise_scenario:'', attachment:null
+        };
+
+    return {
       ...p,
-      optimise_entries: [...p.optimise_entries, { assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }]
-    }));
-  };
+      optimise_entries: [...p.optimise_entries, newEntry]
+    };
+  });
+};
 
   const removeOptimiseEntry = (index) => {
     setForm(p => ({
@@ -973,6 +1031,28 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
   .filter(t => filter === 'all' ? true : t.status === filter);
   const pendingCount=tasks.filter(t=>t.status==='pending').length;
 
+
+
+   const [openIndex, setOpenIndex] = useState(null);
+  const [tempLink, setTempLink] = useState("");
+  const wrapperRef = useRef(null);
+const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
+const openEditor = (entry, index, e) => {
+  const rect = e.target.getBoundingClientRect();
+
+  setTempLink(entry.link || "");
+  setOpenIndex(index);
+  setPopupPos({
+    top: rect.bottom + 5,
+    left: rect.left
+  });
+};
+const saveLink = () => {
+  updateEntry(openIndex, "link", tempLink); // ✅ use state
+  setOpenIndex(null);
+};
+
+  
   return(
     <>
     {/* <div style={{fontSize:10, background:'#000', color:'#0f0', padding:6}}>
@@ -1099,13 +1179,92 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                       value={entry.pid} 
                       onChange={e => updateEntry(index, 'pid', e.target.value)}
                     />
-                    <input 
+                      <div style={{ position: "relative" }}>
+      {/* Always same size input */}
+      <input
+        className="form-control"
+        style={{
+          fontSize: 11,
+          padding: 6,
+          background: "rgba(255,255,255,0.1)",
+          border: "1px solid rgba(255,255,255,0.2)",
+          cursor: "pointer"
+        }}
+        value={entry.link}
+        placeholder="Click to add link"
+        readOnly
+// onClick={() => openEditor(entry, index)}      />
+onClick={(e) => openEditor(entry, index, e)}/>
+
+      {/* Floating Editor */}
+     {openIndex === index && (
+  <div
+    ref={wrapperRef}
+    style={{
+      position: "fixed", // ✅ important
+      top: popupPos.top,
+      left: popupPos.left,
+      width: 620,
+      background: "#1f1f1f",
+      border: "1px solid #333",
+      borderRadius: 8,
+      padding: 10,
+      zIndex: 9999,
+      boxShadow: "0 8px 20px rgba(0,0,0,0.4)"
+    }}
+  >
+          <textarea
+            value={tempLink}
+            onChange={(e) => setTempLink(e.target.value)}
+            style={{
+              width: "100%",
+              height: 100,
+              resize: "none",
+              borderRadius: 6,
+              border: "1px solid #444",
+              padding: 6,
+              background: "#111",
+              color: "#fff"
+            }}
+          />
+
+          <div style={{ marginTop: 8, textAlign: "right" }}>
+            <button
+              onClick={saveLink}
+              style={{
+                marginRight: 6,
+                padding: "4px 10px",
+                background: "#1677ff",
+                color: "#fff",
+                border: "none",
+                borderRadius: 4
+              }}
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setOpenIndex(null)}
+              style={{
+                padding: "4px 10px",
+                background: "#444",
+                color: "#fff",
+                border: "none",
+                borderRadius: 4
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+                    {/* <input 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
                       placeholder="Link" 
                       value={entry.link} 
                       onChange={e => updateEntry(index, 'link', e.target.value)}
-                    />
+                    /> */}
                     <input 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
@@ -1173,6 +1332,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                   >
                     ➕ Add Entry
                   </button>
+                  
             </div>
           )}
 
@@ -1523,6 +1683,8 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
       }}
       loading={loadingDetails}
     />
+    
     </>
+    
   );
 }

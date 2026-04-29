@@ -569,12 +569,12 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
           </div>
         )}
         
-        <div className="message-content">
+        {/* <div className="message-content">
           {msg.content}
           <div className="message-time">
             {format(new Date(msg.sent_at), 'HH:mm')}
           </div>
-        </div>
+        </div> */}
 
         {/* Image */}
         {msg.message_type === 'image' && fileUrl && (
@@ -657,6 +657,9 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
   {/* Text Content */}
   <div className="text-content">
     <div className="message-text">{msg.content}</div>
+      <div className="message-time">
+            {format(new Date(msg.sent_at), 'HH:mm')}
+          </div>
     {msg.task_ref && (
       <TaskPill taskRef={msg.task_ref} onTaskClick={onTaskClick} />
     )}
