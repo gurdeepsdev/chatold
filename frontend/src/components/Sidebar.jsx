@@ -942,7 +942,9 @@ useEffect(() => {
         if (!stablePositionRef.current[g.id]) {
           // Assign initial order ONLY ONCE
           // stablePositionRef.current[g.id] = now - index;
-          stablePositionRef.current[g.id] = Date.now(); // newest gets highest priority
+          stablePositionRef.current[g.id] =
+  new Date(g.last_message_at || 0).getTime();
+          // stablePositionRef.current[g.id] = Date.now(); // newest gets highest priority
         }
       });
 
@@ -1151,6 +1153,10 @@ useEffect(() => {
 //     };
 //   }, [on, user?.id, loadGroups, loadUnreadCounts, joinGroup, leaveGroup]);
 
+
+
+
+//new
 useEffect(() => {
   const unsub = on('new_message', (msg) => {
     console.log('📩 NEW MESSAGE RECEIVED', msg);
