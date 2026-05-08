@@ -88,6 +88,9 @@ export const campaignsAPI = {
   getById: (id) => api.get(`/campaigns/${id}`),
   getCampaignData: () => api.get('/campaigns/campaign-data'),
   getPidStatus: (groupId) => api.get(`/campaigns/pid-status/group/${groupId}`),
+  getSharedPids: (groupId) => api.get(`/campaigns/shared-pids/group/${groupId}`),
+  debugFindPidMessages: () => api.get('/campaigns/debug/find-pid-messages'),
+  debugFindPidTasks: () => api.get('/campaigns/debug/find-pid-tasks'),
   updatePidStatus: (data) => api.post('/campaigns/pid-status', data),
 };
 

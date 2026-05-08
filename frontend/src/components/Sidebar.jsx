@@ -777,7 +777,7 @@ function avatarColor(name = '') {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-export default function Sidebar({ selectedGroupId, onSelectGroup }) {
+export default function Sidebar({ selectedGroupId, onSelectGroup,onUnreadCountsChange }) {
   const { user, logout } = useAuth();
   const { on, connected, joinGroup, leaveGroup } = useSocket();
   const [groups, setGroups] = useState([]);
@@ -882,6 +882,11 @@ const isInitialUnreadLoad = useRef(true);
       console.error('Failed to load unread counts:', error);
     }
   }, []);
+  useEffect(() => {
+  if (onUnreadCountsChange) {
+    onUnreadCountsChange(unreadCounts);
+  }
+}, [unreadCounts, onUnreadCountsChange]);
 
   const markGroupAsRead = useCallback(async (groupId) => {
     try {
@@ -928,24 +933,45 @@ const isInitialUnreadLoad = useRef(true);
   }, [pinnedGroups]);
 
   // useEffect(() => { loadGroups(); }, [loadGroups]);
-  useEffect(() => {
-  loadGroups().then(() => {
-    setGroups(prev => [...prev]); // force re-render using stable order
-  });
-}, [loadGroups]);
+  //old working 
+//   useEffect(() => {
+//   loadGroups().then(() => {
+//     setGroups(prev => [...prev]); // force re-render using stable order
+//   });
+// }, [loadGroups]);
+
+// useEffect(() => {
+//   loadGroups().then(() => {
+//     setGroups(prev => {
+//       prev.forEach((g) => {
+//         if (!stablePositionRef.current[g.id]) {
+//           // ✅ Use created_at so newest groups naturally rank highest
+//           stablePositionRef.current[g.id] =
+//             new Date(g.created_at || g.last_message_at || 0).getTime();
+//         }
+//       });
+
+//       localStorage.setItem(
+//         `stable_order_${user?.id}`,
+//         JSON.stringify(stablePositionRef.current)
+//       );
+
+//       return [...prev];
+//     });
+//   });
+// }, [loadGroups]);
+
+//new 
+// Replace your two loadGroups useEffects with this single one:
 useEffect(() => {
   loadGroups().then(() => {
     setGroups(prev => {
-      const now = Date.now();
+      prev.forEach((g) => {
+        const serverTime = new Date(g.last_message_at || g.created_at || 0).getTime();
+        const storedTime = stablePositionRef.current[g.id] || 0;
 
-      prev.forEach((g, index) => {
-        if (!stablePositionRef.current[g.id]) {
-          // Assign initial order ONLY ONCE
-          // stablePositionRef.current[g.id] = now - index;
-          stablePositionRef.current[g.id] =
-  new Date(g.last_message_at || 0).getTime();
-          // stablePositionRef.current[g.id] = Date.now(); // newest gets highest priority
-        }
+        // ✅ Always use whichever is NEWER — server data or stored interaction
+        stablePositionRef.current[g.id] = Math.max(serverTime, storedTime);
       });
 
       localStorage.setItem(
@@ -957,6 +983,30 @@ useEffect(() => {
     });
   });
 }, [loadGroups]);
+// useEffect(() => {
+//   loadGroups().then(() => {
+//     setGroups(prev => {
+//       const now = Date.now();
+
+//       prev.forEach((g, index) => {
+//         if (!stablePositionRef.current[g.id]) {
+//           // Assign initial order ONLY ONCE
+//           // stablePositionRef.current[g.id] = now - index;
+//           stablePositionRef.current[g.id] =
+//   new Date(g.last_message_at || 0).getTime();
+//           // stablePositionRef.current[g.id] = Date.now(); // newest gets highest priority
+//         }
+//       });
+
+//       localStorage.setItem(
+//         `stable_order_${user?.id}`,
+//         JSON.stringify(stablePositionRef.current)
+//       );
+
+//       return [...prev];
+//     });
+//   });
+// }, [loadGroups]);
 
 //old
 //   useEffect(() => {
@@ -1262,24 +1312,47 @@ useEffect(() => {
     }
   });
 
-  const unsubGroupCreated = on('group_created', (data) => {
-    console.log("📢 group_created event:", data);
+  // const unsubGroupCreated = on('group_created', (data) => {
+  //   console.log("📢 group_created event:", data);
 
-    if (data.group && data.group.member_ids?.includes(user?.id)) {
-      setGroups(prev => {
-        const existingIndex = prev.findIndex(g => g.id === data.group.id);
-        if (existingIndex >= 0) {
-          return prev.map((g, i) =>
-            i === existingIndex ? { ...g, ...data.group } : g
-          );
-        }
-        return [data.group, ...prev];
-      });
+  //   if (data.group && data.group.member_ids?.includes(user?.id)) {
+  //     setGroups(prev => {
+  //       const existingIndex = prev.findIndex(g => g.id === data.group.id);
+  //       if (existingIndex >= 0) {
+  //         return prev.map((g, i) =>
+  //           i === existingIndex ? { ...g, ...data.group } : g
+  //         );
+  //       }
+  //       return [data.group, ...prev];
+  //     });
 
-      loadGroups();
-      loadUnreadCounts();
+  //     loadGroups();
+  //     loadUnreadCounts();
+  //   }
+  // });
+const unsubGroupCreated = on('group_created', (data) => {
+  if (data.group && data.group.member_ids?.includes(user?.id)) {
+    // ✅ Stamp immediately so it sorts above older groups
+    if (data.group.id) {
+      stablePositionRef.current[data.group.id] = Date.now();
+      localStorage.setItem(
+        `stable_order_${user?.id}`,
+        JSON.stringify(stablePositionRef.current)
+      );
     }
-  });
+
+    setGroups(prev => {
+      const existingIndex = prev.findIndex(g => g.id === data.group.id);
+      if (existingIndex >= 0) {
+        return prev.map((g, i) => i === existingIndex ? { ...g, ...data.group } : g);
+      }
+      return [data.group, ...prev];
+    });
+
+    loadGroups();
+    loadUnreadCounts();
+  }
+});
 
   const unsubCampaignCreated = on('campaign_created', (data) => {
     if (data.message) toast.success(data.message);
@@ -1376,7 +1449,43 @@ useEffect(() => {
     //     isPinned: true
     //   }));
 
-    const pinnedGroupItems = pinnedGroups
+  //   const pinnedGroupItems = pinnedGroups
+  // .map(id => groups.find(g => g.id === id))
+  // .filter(Boolean)
+  // .map(group => ({
+  //   type: 'group',
+  //   item: group,
+  //   priority: 1,
+  //   unreadCount: unreadCounts[group.id] || 0,
+  //   lastMessageAt: new Date(group.last_message_at || 0),
+  //   stableSortTime:
+  //   stablePositionRef.current[group.id] || 0,
+  // // stablePositionRef.current[group.id] ??
+  // // new Date(group.last_message_at || 0).getTime(),
+  //   // stableSortTime: stablePositionRef.current[group.id] ?? 0,
+  //   // stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
+  //   isPinned: true
+  // }));
+// Pinned items
+//old working
+// const pinnedGroupItems = pinnedGroups
+//   .map(id => groups.find(g => g.id === id))
+//   .filter(Boolean)
+//   .map(group => ({
+//     type: 'group',
+//     item: group,
+//     priority: 1,
+//     unreadCount: unreadCounts[group.id] || 0,
+//     lastMessageAt: new Date(group.last_message_at || 0),
+//     stableSortTime:
+//       stablePositionRef.current[group.id] ||
+//       new Date(group.created_at || group.last_message_at || 0).getTime(),
+//     isPinned: true
+//   }));
+
+//new
+// Pinned items — same change
+const pinnedGroupItems = pinnedGroups
   .map(id => groups.find(g => g.id === id))
   .filter(Boolean)
   .map(group => ({
@@ -1385,14 +1494,11 @@ useEffect(() => {
     priority: 1,
     unreadCount: unreadCounts[group.id] || 0,
     lastMessageAt: new Date(group.last_message_at || 0),
-    stableSortTime:
-    stablePositionRef.current[group.id] || 0,
-  // stablePositionRef.current[group.id] ??
-  // new Date(group.last_message_at || 0).getTime(),
-    // stableSortTime: stablePositionRef.current[group.id] ?? 0,
-    // stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
+    stableSortTime: stablePositionRef.current[group.id] ||
+      new Date(group.last_message_at || group.created_at || 0).getTime(),
     isPinned: true
   }));
+
     // Threads — same logic as groups, no priority difference
     const threadItems = threads
       .filter(thread => (thread.groups || []).length > 1)
@@ -1423,23 +1529,51 @@ useEffect(() => {
       });
 
     // Unpinned groups not in threads
-    const unpinnedGroupItems = groups
-      .filter(g => !pinnedGroups.includes(g.id) && !threadGroupIds.has(g.id))
-      .map(group => ({
-        type: 'group',
-        item: group,
-        priority: 0,
-        unreadCount: unreadCounts[group.id] || 0,
-        lastMessageAt: new Date(group.last_message_at || 0),
-        stableSortTime:
-        stablePositionRef.current[group.id] || 0,
-  // stablePositionRef.current[group.id] ??
-  // new Date(group.last_message_at || 0).getTime(),
-        // stableSortTime: stablePositionRef.current[group.id] ?? 0,
-        // stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
-        isPinned: false
-      }));
-
+  //   const unpinnedGroupItems = groups
+  //     .filter(g => !pinnedGroups.includes(g.id) && !threadGroupIds.has(g.id))
+  //     .map(group => ({
+  //       type: 'group',
+  //       item: group,
+  //       priority: 0,
+  //       unreadCount: unreadCounts[group.id] || 0,
+  //       lastMessageAt: new Date(group.last_message_at || 0),
+  //       stableSortTime:
+  //       stablePositionRef.current[group.id] || 0,
+  // // stablePositionRef.current[group.id] ??
+  // // new Date(group.last_message_at || 0).getTime(),
+  //       // stableSortTime: stablePositionRef.current[group.id] ?? 0,
+  //       // stableSortTime: stablePositionRef.current[group.id] || new Date(group.last_message_at || 0).getTime(),
+  //       isPinned: false
+  //     }));
+// Unpinned items
+//old working 
+// const unpinnedGroupItems = groups
+//   .filter(g => !pinnedGroups.includes(g.id) && !threadGroupIds.has(g.id))
+//   .map(group => ({
+//     type: 'group',
+//     item: group,
+//     priority: 0,
+//     unreadCount: unreadCounts[group.id] || 0,
+//     lastMessageAt: new Date(group.last_message_at || 0),
+//     stableSortTime:
+//       stablePositionRef.current[group.id] ||
+//       new Date(group.created_at || group.last_message_at || 0).getTime(),
+//     isPinned: false
+//   }));
+const unpinnedGroupItems = groups
+  .filter(g => !pinnedGroups.includes(g.id) && !threadGroupIds.has(g.id))
+  .map(group => ({
+    type: 'group',
+    item: group,
+    priority: 0,
+    unreadCount: unreadCounts[group.id] || 0,
+    lastMessageAt: new Date(group.last_message_at || 0),
+    // ✅ Always has a real value after seeding above
+    stableSortTime: stablePositionRef.current[group.id] ||
+      new Date(group.last_message_at || group.created_at || 0).getTime(),
+    isPinned: false
+  }));
+//new
     allItems.push(...pinnedGroupItems, ...threadItems, ...unpinnedGroupItems);
 
     return allItems.sort((a, b) => {

@@ -12,6 +12,7 @@ const PAUSE_SCENARIOS = [
 export default function PreviewPanel({ group }) {
   const { user } = useAuth();
   const [pids, setPids] = useState([]);
+  const [sharedPids, setSharedPids] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ pub_id: '', pid: '', pub_am: '', status: 'live', pause_reason: '', scenario: '', feedback: '' });
   const [saving, setSaving] = useState(false);
@@ -22,7 +23,44 @@ export default function PreviewPanel({ group }) {
     setPids(data.pids || []);
   };
 
-  useEffect(() => { load(); }, [group?.id]);
+  const loadSharedPids = async () => {
+    if (!group) return;
+    console.log('🔍 Loading shared PIDs for group:', group.id);
+    try {
+      const data = await campaignsAPI.getSharedPids(group.id);
+      console.log('📊 Shared PIDs response:', data);
+      setSharedPids(data.sharedPids || []);
+    } catch (error) {
+      console.error('❌ Error loading shared PIDs:', error);
+    }
+  };
+
+  const debugFindPidMessages = async () => {
+    console.log('🔍 Debug: Finding all PID messages...');
+    try {
+      const data = await campaignsAPI.debugFindPidMessages();
+      console.log('🎯 All PID messages:', data);
+      alert(`Found ${data.pidMessages.length} PID messages across all groups. Check console for details.`);
+    } catch (error) {
+      console.error('❌ Error finding PID messages:', error);
+    }
+  };
+
+  const debugFindPidTasks = async () => {
+    console.log('🔍 Debug: Finding PID data in tasks...');
+    try {
+      const data = await campaignsAPI.debugFindPidTasks();
+      console.log('🎯 All PID tasks:', data);
+      alert(`Found ${data.pidTasks.length} PID tasks across all groups. Check console for details.`);
+    } catch (error) {
+      console.error('❌ Error finding PID tasks:', error);
+    }
+  };
+
+  useEffect(() => { 
+    load(); 
+    loadSharedPids();
+  }, [group?.id]);
 
   const handleSubmit = async () => {
     if (!form.pub_id || !form.pid) return toast.error('PubID and PID required');
@@ -63,9 +101,19 @@ export default function PreviewPanel({ group }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>PID PREVIEW STATUS</span>
-        <button className="btn btn-xs btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Add PID</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>PID PREVIEW STATUS</h3>
+        {/* <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-xs" onClick={debugFindPidMessages}>
+            🔍 Messages
+          </button>
+          <button className="btn btn-secondary btn-xs" onClick={debugFindPidTasks}>
+            📋 Tasks
+          </button>
+          <button className="btn btn-primary btn-xs" onClick={() => setShowAdd(true)}>
+            + Add PID
+          </button>
+        </div> */}
       </div>
 
       {/* Campaign info */}
@@ -137,8 +185,92 @@ export default function PreviewPanel({ group }) {
         </div>
       )}
 
-      {/* PID table */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+      {/* Shared PIDs section */}
+      <div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+           📊 Shared PID Links
+        </h4>
+        {(() => {
+          console.log('🎯 Rendering sharedPids:', sharedPids.length, sharedPids);
+          return sharedPids.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+              No PID links shared yet
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ 
+                width: '100%', 
+                borderCollapse: 'collapse', 
+                fontSize: 12,
+                backgroundColor: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 6
+              }}>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--background-secondary)' }}>
+                                        <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Pub_Am</th>
+
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>PubID</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>PID</th>
+
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Share Date</th>
+                                        <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Status</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Shared By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sharedPids.map(pid => (
+                    <tr key={pid.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                         <td style={{ padding: '8px 12px', fontSize: 11 }}>
+                        {pid.pub_name || (
+                          <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            Unknown
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <code style={{ color: 'var(--accent)', backgroundColor: 'var(--background-secondary)', padding: '2px 6px', borderRadius: 3, fontSize: 11 }}>
+                          {pid.pub_id}
+                        </code>
+                      </td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <code style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--background-secondary)', padding: '2px 6px', borderRadius: 3, fontSize: 11 }}>
+                          {pid.pid}
+                        </code>
+                      </td>
+
+                        <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)' }}>
+                        {formatPIDStatusIST(pid.share_date)}
+                      </td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <span className={`badge badge-${pid.raw_status}`} style={{ fontSize: 10 }}>
+                          {pid.status}
+                        </span>
+                      </td>
+                   
+                      <td style={{ padding: '8px 12px', fontSize: 11 }}>
+                        {pid.sender_name}
+                        {pid.assigned_to && (
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                            → {pid.assigned_to}
+                          </div>
+                        )}
+                      </td>
+                    
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* PID Management table */}
+      {/* <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+          📊 PID Management
+        </h4>
         {pids.length === 0 ? (
           <div className="empty-state" style={{ padding: 40 }}>
             <div style={{ fontSize: 32 }}>📊</div>
@@ -149,7 +281,7 @@ export default function PreviewPanel({ group }) {
             <table className="pid-table">
               <thead>
                 <tr>
-                  <th>PubID</th><th>PID</th><th>AM</th><th>Status</th><th>Updated</th><th></th>
+                  <th>PubID</th><th>PID</th><th>AM</th><th>Status</th><th>Share Date</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -167,7 +299,7 @@ export default function PreviewPanel({ group }) {
                       )}
                     </td>
                     <td style={{ color: 'var(--text-muted)', fontSize: 10 }}>
-                      {formatPIDStatusIST(pid.updated_at)}
+                      {formatPIDStatusIST(pid.share_date)}
                     </td>
                     <td>
                       <button
@@ -191,7 +323,7 @@ export default function PreviewPanel({ group }) {
             ))}
           </div>
         )}
-      </div>
+      </div> */}
     </div>
   );
 }

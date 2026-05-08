@@ -41,6 +41,94 @@ const getTaskAccessFilter = async (crmDb, userId) => {
   let where = `(t.assigned_to = ? OR t.assigned_by = ?)`;
   let params = [userId, userId];
 
+  // 🆕 If advertiser-side users → see operations tasks
+// if (['advertiser_manager', 'advertiser', 'adv_executive'].includes(role)) {
+
+//   const [operationsUsers] = await crmDb.query(`
+//     SELECT id FROM login WHERE role = 'operations'
+//   `);
+
+//   const opIds = operationsUsers.map(u => u.id);
+
+//   if (opIds.length > 0) {
+//     const placeholders = opIds.map(() => '?').join(',');
+
+//     where += `
+//       OR t.assigned_by IN (${placeholders})
+//     `;
+
+//     params.push(...opIds);
+//   }
+// }
+  // 🆕 OPERATIONS → expose tasks to advertiser hierarchy
+// if (role === 'operations') {
+
+//   // Get advertiser side users (same group logic via manager_subadmins)
+//   const [advUsers] = await crmDb.query(`
+//     SELECT l.id
+//     FROM login l
+//     WHERE l.role IN ('advertiser_manager', 'advertiser', 'adv_executive')
+//   `);
+
+//   const advUserIds = advUsers.map(u => u.id);
+
+//   if (advUserIds.length > 0) {
+//     const placeholders = advUserIds.map(() => '?').join(',');
+
+//     where += ` 
+//       OR t.assigned_to IN (${placeholders}) 
+//       OR t.assigned_by IN (${placeholders})
+//     `;
+
+//     params.push(...advUserIds, ...advUserIds);
+//   }
+// }
+
+// 🆕 OPERATIONS → expose tasks ONLY to advertiser-side users in SAME group
+// 🆕 OPERATIONS → expose tasks ONLY to advertiser-side users in SAME group
+if (role === 'operations') {
+    console.log('🔧 OPERATIONS ROLE - Processing...');
+
+  // Step 1: Find which groups this operations user belongs to
+  const [groupRows] = await crmDb.query(
+    `SELECT manager_id, sub_admin_id 
+     FROM manager_subadmins 
+     WHERE manager_id = ? OR sub_admin_id = ?`,
+    [userId, userId]
+  );
+  console.log('🔍 Operations user groups:', groupRows);
+
+  // Collect all peer IDs from those group rows (excluding self)
+  let groupMemberIds = [];
+  for (const row of groupRows) {
+    if (row.manager_id !== userId) groupMemberIds.push(row.manager_id);
+    if (row.sub_admin_id !== userId) groupMemberIds.push(row.sub_admin_id);
+  }
+  groupMemberIds = [...new Set(groupMemberIds)];
+
+  if (groupMemberIds.length > 0) {
+    const placeholders = groupMemberIds.map(() => '?').join(',');
+
+    // Step 2: From those peers, pick only advertiser-side roles
+    const [advUsers] = await crmDb.query(
+      `SELECT id FROM login 
+       WHERE role IN ('advertiser_manager', 'advertiser', 'adv_executive')
+       AND id IN (${placeholders})`,
+      [...groupMemberIds]
+    );
+
+    const advUserIds = advUsers.map(u => u.id);
+
+    if (advUserIds.length > 0) {
+      const advPlaceholders = advUserIds.map(() => '?').join(',');
+      
+      // 🎯 KEY FIX: Replace base condition for operations users
+      where = `t.assigned_by = ? OR t.assigned_to IN (${advPlaceholders})`;
+      params = [userId, ...advUserIds]; // Reset params array
+    }
+  }
+}
+
   // 🧑‍💼 advertiser_admin / publisher_admin
   if (role === 'advertiser_manager' || role === 'publisher_manager') {
 
@@ -63,6 +151,8 @@ const getTaskAccessFilter = async (crmDb, userId) => {
   // 🧑 advertiser / publisher
   if (role === 'advertiser' || role === 'publisher') {
 
+
+
     const [managers] = await crmDb.query(
       `SELECT manager_id FROM manager_subadmins WHERE sub_admin_id = ?`,
       [userId]
@@ -79,6 +169,94 @@ const getTaskAccessFilter = async (crmDb, userId) => {
     }
   }
 
+      // 🆕 Advertiser side users → see operations tasks ONLY in same group
+// 🆕 Campaign-based visibility using adv_d mapping
+// 🆕 Campaign-based visibility using adv_d mapping
+   // get groupId from URL
+if (['advertiser_manager', 'advertiser', 'adv_executive'].includes(role)) {
+
+  // -------------------------------
+  // STEP 1: Get adv_ids
+  // -------------------------------
+  const [advRows] = await crmDb.query(
+    `SELECT adv_id FROM advids WHERE user_id = ?`,
+    [userId]
+  );
+
+  const advIds = advRows.map(a => a.adv_id);
+  console.log("👉 ADV IDs from advids:", advIds);
+
+  if (advIds.length > 0) {
+
+    const placeholders = advIds.map(() => '?').join(',');
+
+    // -------------------------------
+    // STEP 2: Check campaign mapping
+    // -------------------------------
+    const [campaignRows] = await crmDb.query(
+      `SELECT id, adv_d, sub_campaign_id 
+       FROM crmclickorbits.campaign_data 
+       WHERE adv_d IN (${placeholders})`,
+      advIds
+    );
+
+    console.log("👉 Campaigns matched:", campaignRows);
+
+    // -------------------------------
+    // STEP 3: Check group mapping (IMPORTANT)
+    // -------------------------------
+    const [groupRows] = await crmDb.query(`
+      SELECT cg.id, cg.sub_id, cd.sub_campaign_id, cd.adv_d
+      FROM crm_chat.chat_groups cg
+      JOIN crmclickorbits.campaign_data cd 
+        ON cg.sub_id = cd.sub_campaign_id
+      JOIN crmclickorbits.advids adv
+        ON adv.adv_id = cd.adv_d
+      WHERE adv.user_id = ?
+    `, [userId]);
+
+    console.log("👉 GROUPS FROM CAMPAIGN:", groupRows);
+
+    // -------------------------------
+    // STEP 4: Check tasks in those groups
+    // -------------------------------
+    if (groupRows.length > 0) {
+      const groupIds = groupRows.map(g => g.id);
+      const groupPlaceholders = groupIds.map(() => '?').join(',');
+
+      const [taskRows] = await crmDb.query(`
+        SELECT id, group_id, assigned_by
+        FROM crm_chat.tasks
+        WHERE group_id IN (${groupPlaceholders})
+      `, groupIds);
+
+      console.log("👉 TASKS IN GROUPS:", taskRows);
+    }
+
+    // -------------------------------
+    // STEP 5: Check operations users
+    // -------------------------------
+    const [opsUsers] = await crmDb.query(
+      `SELECT id FROM login WHERE role = 'operations'`
+    );
+
+    console.log("👉 OPERATIONS USERS:", opsUsers);
+
+    // -------------------------------
+    // STEP 6: FINAL WHERE CONDITION
+    // -------------------------------
+
+
+where += `
+  OR (
+    t.assigned_by IN (SELECT id FROM users WHERE role = 'operations')
+  )
+`;
+
+    // ✅ Only push userId (REMOVE advIds push)
+    params.push(userId);
+  }
+}
   return {
     where,
     params
@@ -254,7 +432,19 @@ const getAssignedHierarchyUsers = async (crmDb, userId) => {
       }
     }
   }
-  
+  if (role === 'advertiser_manager') {
+  const [advertisers] = await crmDb.query(
+    `SELECT l.id, l.username, l.role 
+     FROM login l 
+     INNER JOIN manager_subadmins m ON l.id = m.sub_admin_id
+     WHERE m.manager_id = ?`,
+    [userId]
+  );
+
+  for (const adv of advertisers) {
+    hierarchyUsers.push(adv);
+  }
+}
   if (role === 'advertiser') {
     // Get assigned advertiser_managers (manager_id where sub_admin_id = advertiser)
     const [advertiserManagers] = await crmDb.query(
@@ -306,6 +496,8 @@ const getAllAdminUsers = async (crmDb) => {
   );
   return admins;
 };
+
+
 
 module.exports = { 
   getTaskAccessFilter, 

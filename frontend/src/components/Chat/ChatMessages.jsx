@@ -577,7 +577,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
         </div> */}
 
         {/* Image */}
-        {msg.message_type === 'image' && fileUrl && (
+        {/* {msg.message_type === 'image' && fileUrl && (
           <div className="media-content">
             <img
               src={fileUrl}
@@ -589,7 +589,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
               }}
             />
           </div>
-        )}
+        )} */}
 
         {/* Audio */}
         {msg.message_type === 'audio' && fileUrl && (

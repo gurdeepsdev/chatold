@@ -143,12 +143,19 @@ export function PWAInstallButton(){
 }
 
 /* ── Main hook ──────────────────────────────────────────────── */
-export function useNotifications(onGroupClick){
+// export function useNotifications(onGroupClick){
+export function useNotifications(onGroupClick,totalUnread){
   const {on}=useSocket();
   // ✅ FIX: return 'permission' (matches what App.jsx used to destructure as 'notifPermission')
   // We now return BOTH names so App.jsx works either way
   const [permission,setPermission]=useState(()=>Notification?.permission||'default');
-  const [unreadCount,setUnreadCount]=useState(0);
+  // const [unreadCount,setUnreadCount]=useState(0);
+//   setUnreadCount(c=>{
+//   const n=c+1;
+//   setBadge(n);
+//   return n;
+// });
+console.log("count",totalUnread)
 
   // Register SW once on mount
   useEffect(()=>{
@@ -172,11 +179,11 @@ export function useNotifications(onGroupClick){
 
   /* push_notification from socket */
   const handlePush=useCallback((data)=>{
-    setUnreadCount(c=>{
-      const n=c+1;
-      setBadge(n);
-      return n;
-    });
+    // setUnreadCount(c=>{
+    //   const n=c+1;
+    //   setBadge(n);
+    //   return n;
+    // });
     showToast(data,onGroupClick);
     showOsNotification(data.title,data.body,data.group_id);
     playSound();
@@ -184,7 +191,7 @@ export function useNotifications(onGroupClick){
 
   /* notification_count from socket */
   const handleCount=useCallback(({count})=>{
-    setUnreadCount(count);
+    // setUnreadCount(count);
     setBadge(count);
   },[]);
 
@@ -195,10 +202,18 @@ export function useNotifications(onGroupClick){
   },[on,handlePush,handleCount]);
 
   // Tab title badge
-  useEffect(()=>{
-    document.title=unreadCount>0?`(${unreadCount}) CRM Chat`:'CRM Chat';
-  },[unreadCount]);
+  // useEffect(()=>{
+  //   document.title=unreadCount>0?`(${unreadCount}) PID Chat`:'PID Chat';
+  // },[unreadCount]);
+useEffect(()=>{
+  document.title =
+          totalUnread
+ > 0
+      ? `(${totalUnread}) PID Chat`
+      : 'PID Chat';
 
+  setBadge(totalUnread);
+}, [totalUnread]);
   const requestPermission=async()=>{
     const ok=await requestNotificationPermission();
     setPermission(ok?'granted':'denied');
@@ -206,8 +221,19 @@ export function useNotifications(onGroupClick){
     return ok;
   };
 
-  const clearUnread=useCallback(()=>{setUnreadCount(0);setBadge(0);},[]);
-
+  // const clearUnread=useCallback(()=>{setUnreadCount(0);setBadge(0);},[]);
+const clearUnread=useCallback(()=>{
+  setBadge(0);
+},[]);
   // Return BOTH 'permission' and 'notifPermission' so nothing breaks
-  return{permission,notifPermission:permission,unreadCount,clearUnread,requestPermission};
+  // return{permission,notifPermission:permission,unreadCount,clearUnread,requestPermission};
+console.log("TOTAL:", totalUnread);
+
+return {
+  permission,
+  notifPermission: permission,
+  unreadCount: totalUnread,
+  clearUnread,
+  requestPermission
+};
 }

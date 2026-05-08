@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../utils/db');
 const { auth } = require('../middleware/auth');
+const { encrypt, decrypt } = require('../utils/encryption');
 
 // ── Helper: build absolute URL for files ──────────────────────
 function absoluteUrl(req, relativePath) {
@@ -179,12 +180,13 @@ WHERE
         });
       }
     });
-
     // 🔹 FINAL RESPONSE
     res.json({
+      
       advertisers: Array.from(advertisersMap.values()),
       sub_ids: Array.from(subIdMap.values())
     });
+
 
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch campaign data' });
@@ -304,12 +306,236 @@ router.get('/:id', auth, async (req, res) => {
 // ── PID status ────────────────────────────────────────────────
 router.get('/pid-status/group/:groupId', auth, async (req, res) => {
   const [pids] = await db.query(
-    `SELECT ps.*, u.full_name as updated_by_name
+    `SELECT ps.*, u.full_name as updated_by_name,
+       ps.created_at as share_date
      FROM pid_status ps LEFT JOIN users u ON u.id = ps.updated_by
      WHERE ps.group_id = ? ORDER BY ps.updated_at DESC`,
     [req.params.groupId]
   );
   res.json({ pids });
+});
+
+// ── Get PID links shared in tasks ─────────────────────────────────────
+router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
+  try {
+    console.log('🔍 Fetching shared PIDs for group:', req.params.groupId);
+    
+    const [tasks] = await db.query(
+      `SELECT 
+        t.id,
+        t.group_id,
+        t.title,
+        t.task_type,
+        t.pub_id,
+        t.pid,
+        t.link,
+        t.assigned_to,
+        t.created_at as share_date,
+        u1.full_name as created_by_name,
+        u2.full_name as assigned_to_name,
+        g.group_name
+       FROM tasks t
+       JOIN users u1 ON u1.id = t.assigned_by
+       LEFT JOIN users u2 ON u2.id = t.assigned_to
+       JOIN chat_groups g ON g.id = t.group_id
+       WHERE t.group_id = ? AND t.task_type = 'share_link' AND t.pub_id IS NOT NULL AND t.pid IS NOT NULL
+       ORDER BY t.created_at DESC`,
+      [req.params.groupId]
+    );
+    
+    console.log('📊 Found share_link tasks:', tasks.length);
+    
+    const sharedPids = [];
+    
+    for (const task of tasks) {
+      // Get data from crmclickorbits.adv_data table
+      let advData = null;
+      let pidStatus = 'live'; // Default to live
+      
+      try {
+        const crmDb = db.crmPool; // Use crmclickorbits database
+        if (!crmDb) {
+          console.warn('⚠️ CRM database not available');
+        } else {
+          const [advDataResult] = await crmDb.query(
+            'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pubid = ? LIMIT 1',
+            [task.pid, task.pub_id]
+          );
+          
+          if (advDataResult.length > 0) {
+            advData = advDataResult[0];
+            // Set status based on paused_date
+            pidStatus = advData.paused_date ? 'paused' : 'live';
+            console.log(`🎯 Found adv_data: PID=${task.pid}, PubID=${task.pub_id}, paused_date=${advData.paused_date}, pub_name=${advData.pub_name}`);
+          } else {
+            console.log(`🔍 No adv_data found for PID=${task.pid}, PubID=${task.pub_id}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching adv_data:', error);
+        // Keep default 'live' status if crm database fails
+      }
+      
+      let statusDisplay = pidStatus;
+      if (pidStatus === 'paused' && advData?.paused_date) {
+        // Format paused_date for display
+        const pausedDate = new Date(advData.paused_date);
+        statusDisplay = `paused (${pausedDate.toLocaleDateString('en-IN', { 
+          day: '2-digit', 
+          month: 'short', 
+          year: 'numeric' 
+        })})`;
+      }
+      
+      sharedPids.push({
+        id: task.id,
+        pub_id: task.pub_id,
+        pid: task.pid,
+        link: task.link,
+        share_date: task.share_date,
+        sender_name: task.created_by_name,
+        assigned_to: task.assigned_to_name,
+        status: statusDisplay,
+        raw_status: pidStatus, // Keep original status for styling
+        pub_name: advData?.pub_name || null,
+        paused_date: advData?.paused_date || null
+      });
+    }
+    
+    console.log('✅ Final shared PIDs:', sharedPids.length);
+    console.log('📋 Shared PIDs data:', JSON.stringify(sharedPids, null, 2));
+    
+    res.json({ sharedPids });
+  } catch (error) {
+    console.error('Error fetching shared PIDs:', error);
+    res.status(500).json({ error: 'Failed to fetch shared PIDs' });
+  }
+});
+
+// ── Debug: Find PID messages across all groups ─────────────────────────────
+router.get('/debug/find-pid-messages', auth, async (req, res) => {
+  try {
+    console.log('🔍 Searching for PID messages across all groups...');
+    
+    const [allMessages] = await db.query(
+      `SELECT 
+        m.id,
+        m.group_id,
+        m.encrypted_content,
+        m.iv,
+        m.sent_at,
+        u.full_name as sender_name,
+        g.group_name
+       FROM messages m
+       JOIN users u ON u.id = m.sender_id
+       JOIN chat_groups g ON g.id = m.group_id
+       WHERE m.is_deleted = FALSE
+       ORDER BY m.sent_at DESC
+       LIMIT 200`
+    );
+    
+    const pidMessages = [];
+    
+    for (const msg of allMessages) {
+      try {
+        const content = decrypt(msg.encrypted_content, msg.iv);
+        
+        if (content && (content.includes('PubID') || content.includes('PID') || content.includes('appsflyer'))) {
+          // Check if it's actually a PID link (has PubID: and PID: pattern or appsflyer link)
+          const hasActualPid = content.includes('PubID:') && content.includes('PID:') || 
+                              content.includes('appsflyer.com') ||
+                              (content.match(/PubID[:\s]*[A-Za-z0-9_-]+/i) && content.match(/PID[:\s]*[A-Za-z0-9_-]+/i));
+          
+          pidMessages.push({
+            group_id: msg.group_id,
+            group_name: msg.group_name,
+            message_id: msg.id,
+            sender_name: msg.sender_name,
+            sent_at: msg.sent_at,
+            content: content,
+            isActualPidLink: hasActualPid
+          });
+        }
+      } catch (error) {
+        // Skip decryption errors
+      }
+    }
+    
+    console.log('🎯 Found PID messages:', pidMessages.length);
+    pidMessages.forEach(msg => {
+      const marker = msg.isActualPidLink ? '🎯' : '📝';
+      console.log(`${marker} Group ${msg.group_id} (${msg.group_name}): ${msg.content.substring(0, 100)}...`);
+    });
+    
+    const actualPidLinks = pidMessages.filter(msg => msg.isActualPidLink);
+    console.log('✅ Actual PID links found:', actualPidLinks.length);
+    
+    res.json({ pidMessages });
+  } catch (error) {
+    console.error('Error finding PID messages:', error);
+    res.status(500).json({ error: 'Failed to find PID messages' });
+  }
+});
+
+// ── Debug: Find PID data in task entries ───────────────────────────────
+router.get('/debug/find-pid-tasks', auth, async (req, res) => {
+  try {
+    console.log('🔍 Searching for PID data in share_link tasks...');
+    
+    const [tasks] = await db.query(
+      `SELECT 
+        t.id,
+        t.group_id,
+        t.title,
+        t.task_type,
+        t.pub_id,
+        t.pid,
+        t.link,
+        t.assigned_to,
+        t.created_at,
+        u1.full_name as created_by_name,
+        u2.full_name as assigned_to_name,
+        g.group_name
+       FROM tasks t
+       JOIN users u1 ON u1.id = t.assigned_by
+       LEFT JOIN users u2 ON u2.id = t.assigned_to
+       JOIN chat_groups g ON g.id = t.group_id
+       WHERE t.task_type = 'share_link'
+       ORDER BY t.created_at DESC
+       LIMIT 50`
+    );
+    
+    const pidTasks = [];
+    
+    for (const task of tasks) {
+      if (task.pub_id && task.pid) {
+        pidTasks.push({
+          group_id: task.group_id,
+          group_name: task.group_name,
+          task_id: task.id,
+          task_title: task.title,
+          created_by: task.created_by_name,
+          assigned_to: task.assigned_to_name,
+          created_at: task.created_at,
+          pub_id: task.pub_id,
+          pid: task.pid,
+          link: task.link,
+          pub_am: task.pub_am
+        });
+      }
+    }
+    
+    console.log('🎯 Found PID tasks:', pidTasks.length);
+    pidTasks.forEach(task => {
+      console.log(`📋 Group ${task.group_id} (${task.group_name}): PubID=${task.pub_id}, PID=${task.pid}`);
+      console.log(`  🎯 Link: ${task.link?.substring(0, 100)}...`);
+    });
+    
+    res.json({ pidTasks });
+  } catch (error) {
+    console.error('Error finding PID tasks:', error);
+    res.status(500).json({ error: 'Failed to find PID tasks' });
+  }
 });
 
 router.post('/pid-status', auth, async (req, res) => {

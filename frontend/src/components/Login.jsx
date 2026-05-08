@@ -49,7 +49,7 @@ export default function Login() {
       <div className="login-box fade-in">
         <div className="login-logo">
           <div className="login-logo-icon">💬</div>
-          <h1>CRM Chat</h1>
+          <h1>PID Chat</h1>
           <p>Campaign Communication Hub</p>
         </div>
 
@@ -96,13 +96,14 @@ export default function Login() {
                 required
                 style={{ paddingRight: '40px' }}
               />
+              <div className="divider" style={{ margin: '20px 0 16px' }} />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 style={{
                   position: 'absolute',
                   right: '10px',
-                  top: '50%',
+                  top: '33%',
                   transform: 'translateY(-50%)',
                   background: 'none',
                   border: 'none',
@@ -138,7 +139,7 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="divider" style={{ margin: '20px 0 16px' }} />
+        {/* 
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', marginBottom: 12 }}>
           DEMO ACCOUNTS (password: password123)
         </p>
@@ -154,7 +155,7 @@ export default function Login() {
               {role}
             </button>
           ))}
-        </div>
+        </div> */}
       </div>
     </div>
   );

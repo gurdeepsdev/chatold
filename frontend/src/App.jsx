@@ -142,7 +142,7 @@
 //   );
 // }
 
-import React, { useState, useCallback } from 'react';
+import React, { useState,useEffect, useCallback } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider, useSocket } from './context/SocketContext';
@@ -227,8 +227,15 @@ function AppInner({ selectedGroup, setSelectedGroup }) {
   const handleGroupNotifClick = useCallback((groupId) => {
     // If you want to auto-select the group on notif click, do it here
   }, []);
-
-  const { notifPermission, requestPermission } = useNotifications(handleGroupNotifClick);
+const [unreadCounts, setUnreadCounts] = useState({});
+const totalUnread = Object.values(unreadCounts).reduce(
+  (sum, count) => sum + count,
+  0
+);
+console.log("count",totalUnread,unreadCounts)
+  // const { notifPermission, requestPermission } = useNotifications(handleGroupNotifClick);
+const { notifPermission, requestPermission } =
+  useNotifications(handleGroupNotifClick, totalUnread);
 
   return (
     <>
@@ -238,6 +245,8 @@ function AppInner({ selectedGroup, setSelectedGroup }) {
         <Sidebar
           selectedGroupId={selectedGroup?.id}
           onSelectGroup={setSelectedGroup}
+            onUnreadCountsChange={setUnreadCounts}
+
         />
         <ChatView group={selectedGroup} />
       </div>

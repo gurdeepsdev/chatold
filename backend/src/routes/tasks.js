@@ -26,7 +26,7 @@ router.get('/group/:groupId',auth,async(req,res)=>{
 
     // 🔹 GET FILTER FROM CRM DB
     const { where, params } = await getTaskAccessFilter(crmDb, userId);
-  const [tasks] = await db.query(`
+    const [tasks] = await db.query(`
   SELECT t.*,
     u1.full_name AS assigned_to_name,
     u2.full_name AS assigned_by_name,
@@ -38,10 +38,7 @@ router.get('/group/:groupId',auth,async(req,res)=>{
   LEFT JOIN campaigns c ON c.id=t.campaign_id
   LEFT JOIN tasks parent ON parent.id=t.parent_task_id
   WHERE t.group_id=? 
-  AND (   ${where}   
-
-  
-  )
+  AND (${where})
   ORDER BY 
     CASE t.status 
       WHEN 'pending' THEN 1 
@@ -49,12 +46,37 @@ router.get('/group/:groupId',auth,async(req,res)=>{
       ELSE 3 
     END,
     t.created_at DESC
-`, [req.params.groupId, userId, userId, ...params]);
+`, [req.params.groupId, ...params]);
+//   const [tasks] = await db.query(`
+//   SELECT t.*,
+//     u1.full_name AS assigned_to_name,
+//     u2.full_name AS assigned_by_name,
+//     c.campaign_name,
+//     parent.task_type AS parent_task_type
+//   FROM tasks t
+//   LEFT JOIN users u1 ON u1.id=t.assigned_to
+//   LEFT JOIN users u2 ON u2.id=t.assigned_by
+//   LEFT JOIN campaigns c ON c.id=t.campaign_id
+//   LEFT JOIN tasks parent ON parent.id=t.parent_task_id
+//   WHERE t.group_id=? 
+//   AND (   ${where}   
+
+  
+//   )
+//   ORDER BY 
+//     CASE t.status 
+//       WHEN 'pending' THEN 1 
+//       WHEN 'accepted' THEN 2 
+//       ELSE 3 
+//     END,
+//     t.created_at DESC
+// `, [req.params.groupId, ...params]);
+// [req.params.groupId, userId, userId, ...params]);
     
     // Get sub-tasks for each main task
     const tasksWithSubs = await Promise.all(tasks.map(async (task) => {
       if (task.parent_task_id === null) {
-       const [subTasks] = await db.query(`
+        const [subTasks] = await db.query(`
   SELECT t.*,
     u1.full_name AS assigned_to_name,
     u2.full_name AS assigned_by_name
@@ -62,12 +84,24 @@ router.get('/group/:groupId',auth,async(req,res)=>{
   LEFT JOIN users u1 ON u1.id=t.assigned_to
   LEFT JOIN users u2 ON u2.id=t.assigned_by
   WHERE t.parent_task_id=? 
+  AND (${where})
+  ORDER BY t.created_at DESC
+`, [task.id, ...params]);
+//        const [subTasks] = await db.query(`
+//   SELECT t.*,
+//     u1.full_name AS assigned_to_name,
+//     u2.full_name AS assigned_by_name
+//   FROM tasks t
+//   LEFT JOIN users u1 ON u1.id=t.assigned_to
+//   LEFT JOIN users u2 ON u2.id=t.assigned_by
+//   WHERE t.parent_task_id=? 
    
-    AND (${where})
+//     AND (${where})
 
   
-  ORDER BY t.created_at DESC
-`, [task.id, userId, userId, ...params]);
+//   ORDER BY t.created_at DESC
+// `,[task.id, ...params]);
+//  [task.id, userId, userId, ...params]);
         return{...task,subTasks};
       }
       return task;
@@ -1288,5 +1322,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     res.status(500).json({ error: 'Upload failed' });
   }
 });
+
+
 
 module.exports = router;
