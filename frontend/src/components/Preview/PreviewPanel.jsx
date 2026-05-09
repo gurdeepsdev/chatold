@@ -25,10 +25,10 @@ export default function PreviewPanel({ group }) {
 
   const loadSharedPids = async () => {
     if (!group) return;
-    console.log('🔍 Loading shared PIDs for group:', group.id);
+    // console.log('🔍 Loading shared PIDs for group:', group.id);
     try {
       const data = await campaignsAPI.getSharedPids(group.id);
-      console.log('📊 Shared PIDs response:', data);
+      // console.log('📊 Shared PIDs response:', data);
       setSharedPids(data.sharedPids || []);
     } catch (error) {
       console.error('❌ Error loading shared PIDs:', error);

@@ -318,7 +318,7 @@ router.get('/pid-status/group/:groupId', auth, async (req, res) => {
 // ── Get PID links shared in tasks ─────────────────────────────────────
 router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
   try {
-    console.log('🔍 Fetching shared PIDs for group:', req.params.groupId);
+    // console.log('🔍 Fetching shared PIDs for group:', req.params.groupId);
     
     const [tasks] = await db.query(
       `SELECT 
@@ -343,7 +343,7 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
       [req.params.groupId]
     );
     
-    console.log('📊 Found share_link tasks:', tasks.length);
+    // console.log('📊 Found share_link tasks:', tasks.length);
     
     const sharedPids = [];
     
@@ -358,10 +358,10 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
           console.warn('⚠️ CRM database not available');
         } else {
           const [advDataResult] = await crmDb.query(
-            'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pubid = ? LIMIT 1',
+            'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pub_id = ? LIMIT 1',
             [task.pid, task.pub_id]
           );
-          
+          // console.log('✅ advDataResult:', advDataResult);
           if (advDataResult.length > 0) {
             advData = advDataResult[0];
             // Set status based on paused_date
@@ -402,8 +402,8 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
       });
     }
     
-    console.log('✅ Final shared PIDs:', sharedPids.length);
-    console.log('📋 Shared PIDs data:', JSON.stringify(sharedPids, null, 2));
+    // console.log('✅ Final shared PIDs:', sharedPids.length);
+    // console.log('📋 Shared PIDs data:', JSON.stringify(sharedPids, null, 2));
     
     res.json({ sharedPids });
   } catch (error) {

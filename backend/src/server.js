@@ -34,9 +34,33 @@ const server = http.createServer(app);
 const UPLOAD_DIR = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
 require('fs').mkdirSync(UPLOAD_DIR, { recursive: true });
 
+
+const allowedOrigins = [
+  process.env.CLIENT_URL || 'https://chat.pidmetric.com',
+  'http://localhost:5173', 'https://pidmetric.com','http://localhost:3000'
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
+
+app.options('*', cors());
+
+
+
+
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com',
+     origin: allowedOrigins,
+  
+ //origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com',
     methods: ['GET','POST','PUT','PATCH','DELETE'],
     credentials: true,
   },
@@ -51,8 +75,32 @@ const io = new Server(server, {
 
 app.set('io', io);
 app.set('UPLOAD_DIR', UPLOAD_DIR);
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
 
-app.use(cors({ origin: process.env.CLIENT_URL || 'https://chat.pidmetric.com', credentials: true }));
+// const io = new Server(server, {
+//   cors: {
+//     origin: process.env.CLIENT_URL || 'http://localhost:3000',
+//     methods: ['GET','POST','PUT','PATCH','DELETE'],
+//     credentials: true,
+//   },
+//   maxHttpBufferSize: 60 * 1024 * 1024,
+//   transports: ['websocket','polling'],
+//   pingTimeout: 60000,
+//   pingInterval: 25000,
+//   allowEIO3: true,
+//   upgrade: true,
+//   rememberUpgrade: true,
+// });
+
+// app.set('io', io);
+// app.set('UPLOAD_DIR', UPLOAD_DIR);
+
+// app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:3000', credentials: true }));
+
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));

@@ -1882,25 +1882,159 @@ const [allUsers] = await crmPool.query(`
   });
 
 // Update campaign group
-router.put('/update-campaign-group-data', auth, async (req, res) => {
-  const UPDATABLE_FIELDS = new Set([
-    "Vertical",
-    "state_city",
-    "mmp_tracker",
-    "kpi",
-    "tracking_url",
-    "preview_url",
-    "da",
-    "status",
-    "geo",
-    "adv_payout",
-    "payable_event",
-    "adv_note",
-    "Target",
-    "achieve_number",
-    "category",
-  ]);
+// update-campaign-group-data
+// router.put('/update-campaign-group-data', async (req, res) => {
+//   const UPDATABLE_FIELDS = new Set([
+//     "Vertical",
+//     "state_city",
+//     "mmp_tracker",
+//     "kpi",
+//     "tracking_url",
+//     "preview_url",
+//     "da",
+//     "status",
+//     "geo",
+//     "adv_payout",
+//     "payable_event",
+//     "adv_note",
+//     "Target",
+//     "achieve_number",
+//     "category",
+//   ]);
 
+//   const { campaign_id, sub_campaign_id, updates } = req.body;
+
+//   if (!campaign_id || !Array.isArray(updates) || updates.length === 0) {
+//     return res.status(400).json({
+//       success: false,
+//       message: "campaign_id and updates array are required",
+//     });
+//   }
+
+//   const connection = await db.getConnection();
+//   await connection.beginTransaction();
+
+//   try {
+//     const updatedRowIds = [];
+
+//     for (const update of updates) {
+//       const { os_new, ...fields } = update;
+
+//       const where = `
+//         JSON_UNQUOTE(JSON_EXTRACT(crm_campaign_data, '$.id')) = ?
+//         AND JSON_UNQUOTE(JSON_EXTRACT(crm_campaign_data, '$.sub_campaign_id')) = ?
+//       `;
+
+//       const params = [
+//         String(campaign_id),
+//         String(sub_campaign_id),
+//       ];
+
+//       const [rows] = await connection.query(
+//         `SELECT id, crm_campaign_data 
+//          FROM chat_groups 
+//          WHERE ${where}`,
+//         params
+//       );
+
+//       if (rows.length === 0) {
+//         await connection.rollback();
+
+//         return res.status(404).json({
+//           success: false,
+//           message: `No record found for campaign_id=${campaign_id}, sub_campaign_id=${sub_campaign_id}`,
+//         });
+//       }
+
+//       for (const row of rows) {
+//         const json =
+//           typeof row.crm_campaign_data === "string"
+//             ? JSON.parse(row.crm_campaign_data)
+//             : row.crm_campaign_data;
+
+//         for (const [key, value] of Object.entries(fields)) {
+//           if (UPDATABLE_FIELDS.has(key)) {
+//             json[key] = value;
+//           }
+//         }
+
+//         if (os_new) {
+//           json.os = os_new;
+//         }
+
+//         json.updated_at = new Date().toISOString();
+
+//         await connection.query(
+//           `UPDATE chat_groups 
+//            SET crm_campaign_data = ? 
+//            WHERE id = ?`,
+//           [JSON.stringify(json), row.id]
+//         );
+
+//         updatedRowIds.push(row.id);
+//       }
+//     }
+
+//     await connection.commit();
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Updated successfully",
+//       updated_row_ids: updatedRowIds,
+//     });
+
+//   } catch (err) {
+//     await connection.rollback();
+
+//     console.error("❌ Error updating campaign group:", err);
+
+//     res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+
+//   } finally {
+//     connection.release();
+//   }
+// });
+
+
+
+const UPDATABLE_FIELDS = new Set([
+  "Vertical",
+  "state_city",
+  "mmp_tracker",
+  "kpi",
+  "tracking_url",
+  "preview_url",
+  "da",
+  "status",
+  "geo",
+  "adv_payout",
+  "payable_event",
+  "adv_note",
+  "Target",
+  "achieve_number",
+  "category",
+]);
+
+const extractPackageId = (url) => {
+  if (!url || url === "NA") return null;
+
+  if (url.includes("apps.apple.com")) {
+    const match = url.match(/\/id(\d+)/);
+    return match ? match[1] : null;
+  }
+
+  if (url.includes("play.google.com")) {
+    const match = url.match(/[?&]id=([^&]+)/);
+    return match ? match[1] : null;
+  }
+
+  return url.trim();
+};
+
+router.put("/update-campaign-group-data", async (req, res) => {
   const { campaign_id, sub_campaign_id, updates } = req.body;
 
   if (!campaign_id || !Array.isArray(updates) || updates.length === 0) {
@@ -1930,8 +2064,8 @@ router.put('/update-campaign-group-data', auth, async (req, res) => {
       ];
 
       const [rows] = await connection.query(
-        `SELECT id, crm_campaign_data 
-         FROM chat_groups 
+        `SELECT id, crm_campaign_data
+         FROM chat_groups
          WHERE ${where}`,
         params
       );
@@ -1951,23 +2085,35 @@ router.put('/update-campaign-group-data', auth, async (req, res) => {
             ? JSON.parse(row.crm_campaign_data)
             : row.crm_campaign_data;
 
+        // update allowed fields
         for (const [key, value] of Object.entries(fields)) {
           if (UPDATABLE_FIELDS.has(key)) {
             json[key] = value;
           }
         }
 
+        // update os
         if (os_new) {
           json.os = os_new;
         }
 
         json.updated_at = new Date().toISOString();
 
+        // extract package_id from preview_url
+        const packageId =
+          fields.preview_url !== undefined
+            ? extractPackageId(fields.preview_url)
+            : undefined;
+
+        // update db
         await connection.query(
-          `UPDATE chat_groups 
-           SET crm_campaign_data = ? 
+          `UPDATE chat_groups
+           SET crm_campaign_data = ?
+           ${packageId !== undefined ? ", package_id = ?" : ""}
            WHERE id = ?`,
-          [JSON.stringify(json), row.id]
+          packageId !== undefined
+            ? [JSON.stringify(json), packageId, row.id]
+            : [JSON.stringify(json), row.id]
         );
 
         updatedRowIds.push(row.id);
@@ -1976,7 +2122,7 @@ router.put('/update-campaign-group-data', auth, async (req, res) => {
 
     await connection.commit();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Updated successfully",
       updated_row_ids: updatedRowIds,
@@ -1987,7 +2133,7 @@ router.put('/update-campaign-group-data', auth, async (req, res) => {
 
     console.error("❌ Error updating campaign group:", err);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: err.message,
     });
