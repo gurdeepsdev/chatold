@@ -927,7 +927,7 @@ export default function ChatMessages({group,onTaskClick}){
             </div>
           </div>
         )}
-        <div ref={bottomRef}/>
+        {/* <div ref={bottomRef}/> */}
       </div>
 
       {/* ── Message Sender with Recipient Selection ── */}

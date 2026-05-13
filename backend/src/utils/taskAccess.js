@@ -129,43 +129,111 @@ if (role === 'operations') {
   }
 }
 
-  // 🧑‍💼 advertiser_admin / publisher_admin
-  if (role === 'advertiser_manager' || role === 'publisher_manager') {
-
-    const [subs] = await crmDb.query(
+  // 🧑‍💼 Advertiser Manager
+  if (role === 'advertiser_manager') {
+    // Get assigned advertisers
+    const [advertisers] = await crmDb.query(
       `SELECT sub_admin_id FROM manager_subadmins WHERE manager_id = ?`,
       [userId]
     );
-
-    const subAdminIds = subs.map(s => s.sub_admin_id);
-
-    if (subAdminIds.length > 0) {
-      const placeholders = subAdminIds.map(() => '?').join(',');
-
+    
+    const advertiserIds = advertisers.map(s => s.sub_admin_id);
+    
+    if (advertiserIds.length > 0) {
+      const placeholders = advertiserIds.map(() => '?').join(',');
+      
+      // See advertisers' tasks
       where += ` OR t.assigned_to IN (${placeholders}) OR t.assigned_by IN (${placeholders})`;
-
-      params.push(...subAdminIds, ...subAdminIds);
+      params.push(...advertiserIds, ...advertiserIds);
+      
+      // Also see Adv Executives assigned to those advertisers
+      const [advExecs] = await crmDb.query(
+        `SELECT l.id FROM login l 
+         INNER JOIN manager_subadmins m ON l.id = m.sub_admin_id
+         WHERE m.manager_id IN (${placeholders}) AND l.role = 'adv_executive'`,
+        advertiserIds
+      );
+      
+      if (advExecs.length > 0) {
+        const advExecIds = advExecs.map(ae => ae.id);
+        const advPlaceholders = advExecIds.map(() => '?').join(',');
+        
+        where += ` OR t.assigned_to IN (${advPlaceholders}) OR t.assigned_by IN (${advPlaceholders})`;
+        params.push(...advExecIds, ...advExecIds);
+      }
     }
   }
 
-  // 🧑 advertiser / publisher
-  if (role === 'advertiser' || role === 'publisher') {
-
-
-
-    const [managers] = await crmDb.query(
-      `SELECT manager_id FROM manager_subadmins WHERE sub_admin_id = ?`,
+  // 🧑‍💼 Publisher Manager
+  if (role === 'publisher_manager') {
+    // Get assigned publishers
+    const [publishers] = await crmDb.query(
+      `SELECT sub_admin_id FROM manager_subadmins WHERE manager_id = ?`,
       [userId]
     );
-
-    const managerIds = managers.map(m => m.manager_id);
-
-    if (managerIds.length > 0) {
-      const placeholders = managerIds.map(() => '?').join(',');
-
+    
+    const publisherIds = publishers.map(s => s.sub_admin_id);
+    
+    if (publisherIds.length > 0) {
+      const placeholders = publisherIds.map(() => '?').join(',');
+      
+      // See publishers' tasks
       where += ` OR t.assigned_to IN (${placeholders}) OR t.assigned_by IN (${placeholders})`;
+      params.push(...publisherIds, ...publisherIds);
+      
+      // Also see Pub Executives assigned to those publishers
+      const [pubExecs] = await crmDb.query(
+        `SELECT l.id FROM login l 
+         INNER JOIN manager_subadmins m ON l.id = m.sub_admin_id
+         WHERE m.manager_id IN (${placeholders}) AND l.role = 'pub_executive'`,
+        publisherIds
+      );
+      
+      if (pubExecs.length > 0) {
+        const pubExecIds = pubExecs.map(pe => pe.id);
+        const pubPlaceholders = pubExecIds.map(() => '?').join(',');
+        
+        where += ` OR t.assigned_to IN (${pubPlaceholders}) OR t.assigned_by IN (${pubPlaceholders})`;
+        params.push(...pubExecIds, ...pubExecIds);
+      }
+    }
+  }
 
-      params.push(...managerIds, ...managerIds);
+  // 🧑 Advertiser
+  if (role === 'advertiser') {
+    // Get assigned Adv Executives
+    const [advExecs] = await crmDb.query(
+      `SELECT l.id FROM login l 
+       INNER JOIN manager_subadmins m ON l.id = m.sub_admin_id
+       WHERE m.manager_id = ? AND l.role = 'adv_executive'`,
+      [userId]
+    );
+    
+    if (advExecs && advExecs.length > 0) {
+      const advExecIds = advExecs.map(ae => ae.id);
+      const placeholders = advExecIds.map(() => '?').join(',');
+      
+      where += ` OR t.assigned_to IN (${placeholders}) OR t.assigned_by IN (${placeholders})`;
+      params.push(...advExecIds, ...advExecIds);
+    }
+  }
+
+  // 🧑 Publisher
+  if (role === 'publisher') {
+    // Get assigned Pub Executives
+    const [pubExecs] = await crmDb.query(
+      `SELECT l.id FROM login l 
+       INNER JOIN manager_subadmins m ON l.id = m.sub_admin_id
+       WHERE m.manager_id = ? AND l.role = 'pub_executive'`,
+      [userId]
+    );
+    
+    if (pubExecs && pubExecs.length > 0) {
+      const pubExecIds = pubExecs.map(pe => pe.id);
+      const placeholders = pubExecIds.map(() => '?').join(',');
+      
+      where += ` OR t.assigned_to IN (${placeholders}) OR t.assigned_by IN (${placeholders})`;
+      params.push(...pubExecIds, ...pubExecIds);
     }
   }
 
@@ -337,7 +405,6 @@ const getAssignedHierarchyUsers = async (crmDb, userId) => {
       [userId]
     );
     
-    
     if (publishers && publishers.length > 0) {
       // Add ALL assigned publishers
       for (const publisher of publishers) {
@@ -372,27 +439,10 @@ const getAssignedHierarchyUsers = async (crmDb, userId) => {
       [userId]
     );
     
-    
     if (publisherManagers && publisherManagers.length > 0) {
-      // Add ALL assigned publisher_managers
+      // Add ALL assigned publisher_managers only
       for (const publisherManager of publisherManagers) {
         hierarchyUsers.push(publisherManager);
-        
-        // Also get any advertiser_managers above this publisher_manager
-        const [advertiserManagers] = await crmDb.query(
-          `SELECT l.id, l.username, l.role 
-           FROM login l 
-           INNER JOIN manager_subadmins m ON l.id = m.manager_id
-           WHERE m.sub_admin_id = ? AND l.role = 'advertiser_manager'`,
-          [publisherManager.id]
-        );
-        
-        // Add ALL advertiser_managers for this publisher_manager
-        for (const advertiserManager of advertiserManagers) {
-          if (!hierarchyUsers.find(u => u.id === advertiserManager.id)) {
-            hierarchyUsers.push(advertiserManager);
-          }
-        }
       }
     }
   }
@@ -407,7 +457,6 @@ const getAssignedHierarchyUsers = async (crmDb, userId) => {
        WHERE m.sub_admin_id = ? AND l.role = 'advertiser'`,
       [userId]
     );
-    
     
     if (advertisers && advertisers.length > 0) {
       // Add ALL assigned advertisers
