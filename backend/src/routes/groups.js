@@ -867,6 +867,8 @@ const db = require('../utils/db');
 const { auth } = require('../middleware/auth');
 const { encrypt } = require('../utils/encryption');
 const { formatISTForMySQL, getISTTimestamp } = require('../utils/timezone');
+const bcrypt = require("bcrypt");
+
 const {
   getUsersByRole,
   getAssignedHierarchyUsers,
@@ -2143,4 +2145,122 @@ router.put("/update-campaign-group-data", async (req, res) => {
   }
 });
   
+
+
+const PUB_ROLES = [
+  "publisher",
+  "publisher_manager",
+  "pub_executive",
+  "optimization",
+  "operations",
+];
+
+const ADV_ROLES = [
+  "advertiser",
+  "advertiser_manager",
+  "adv_executive",
+];
+
+const normalizeRole = (role) => {
+  if (Array.isArray(role)) role = role[0];
+  return (role || "").replace(/"/g, "").trim().toLowerCase();
+};
+
+const buildCrmUserId = (role, id) => {
+  if (PUB_ROLES.includes(role)) return `pub_0${id}`;
+  if (ADV_ROLES.includes(role)) return `adv_0${id}`;
+  if (role === "admin") return `admin_0${id}`;
+  return null;
+};
+
+router.put("/sync-user", async (req, res) => {
+  try {
+    const { subAdmin, password } = req.body;
+
+    if (!subAdmin || !subAdmin.id) {
+      return res.status(400).json({
+        message: "Invalid payload: subAdmin.id is required",
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({
+        message: "password is required",
+      });
+    }
+
+    const role = normalizeRole(subAdmin.role);
+    const crm_user_id = buildCrmUserId(role, subAdmin.id);
+
+    if (!crm_user_id) {
+      return res.status(400).json({
+        message: `Role '${role}' is not mapped to a CRM user ID prefix`,
+      });
+    }
+
+    const email = `${subAdmin.username}@clickorbits.com`;
+    const password_hash = await bcrypt.hash(password, 10);
+    const now = new Date();
+
+    await db.query(
+      `INSERT INTO users 
+      (
+        id,
+        username,
+        full_name,
+        email,
+        password_hash,
+        role,
+        crm_user_id,
+        is_online,
+        last_seen,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+      
+      ON DUPLICATE KEY UPDATE
+        username      = VALUES(username),
+        full_name     = VALUES(full_name),
+        email         = VALUES(email),
+        password_hash = VALUES(password_hash),
+        role          = VALUES(role),
+        crm_user_id   = VALUES(crm_user_id),
+        is_online     = 1,
+        last_seen     = VALUES(last_seen),
+        updated_at    = VALUES(updated_at)`,
+      [
+        subAdmin.id,
+        subAdmin.username,
+        subAdmin.username,
+        email,
+        password_hash,
+        role,
+        crm_user_id,
+        now,
+        now,
+        now,
+      ]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "User synced successfully",
+      data: {
+        id: subAdmin.id,
+        username: subAdmin.username,
+        email,
+        role,
+        crm_user_id,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Sync user error:", error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+});
+
   module.exports = router;
