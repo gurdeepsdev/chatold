@@ -4,6 +4,7 @@ import TasksPanel from '../Tasks/TasksPanel';
 import PreviewPanel from '../Preview/PreviewPanel';
 import SummaryPanel from './SummaryPanel';
 import CampaignDetails from './CampaignDetails';
+import { Search } from 'lucide-react';
 
 const TABS=[
   {key:'chat',    label:'Chat',       icon:'💬'},
@@ -16,12 +17,14 @@ const TABS=[
 export default function ChatView({group}){
   const [activeTab,setActiveTab]=useState('chat');
   const [rightPanel,setRightPanel]=useState('cd');
+  const [showSearch,setShowSearch]=useState(false);
   // task highlight: { taskId, openForm, taskType }
   const [taskTarget,setTaskTarget]=useState(null);
 
-  // Reset to chat tab when switching groups
+  // Reset to chat tab and close search when switching groups
   useEffect(() => {
     setActiveTab('chat');
+    setShowSearch(false);
   }, [group]);
 
   // Called when user clicks a task pill in chat
@@ -59,7 +62,15 @@ export default function ChatView({group}){
               </div>
             </div>
           </div>
-          <div className="chat-header-right">
+          <div className="chat-header-right" style={{display:'flex',alignItems:'center',gap:6}}>
+            <button
+              className={`btn btn-xs ${showSearch?'btn-primary':'btn-secondary'}`}
+              onClick={()=>setShowSearch(p=>!p)}
+              title="Search messages"
+              style={{display:'flex',alignItems:'center',gap:4}}
+            >
+              <Search size={13}/>
+            </button>
             <button className={`btn btn-xs ${rightPanel==='cd'?'btn-primary':'btn-secondary'}`}
               onClick={()=>setRightPanel(p=>p==='cd'?null:'cd')}>
               {group.group_type==='campaign'?'CD':'GD'}
@@ -86,7 +97,7 @@ export default function ChatView({group}){
 
         {/* content */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          {activeTab==='chat'&&<ChatMessages group={group} onTaskClick={handleTaskClick}/>}
+          {activeTab==='chat'&&<ChatMessages group={group} onTaskClick={handleTaskClick} showSearch={showSearch} onSearchClose={()=>setShowSearch(false)}/>}
           {activeTab==='tasks'&&<TasksPanel group={group} taskTarget={taskTarget}/>}
           {activeTab==='preview'&&<PreviewPanel group={group}/>}
           {activeTab==='followups'&&<FollowUpsPanel group={group}/>}
