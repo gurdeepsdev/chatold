@@ -471,6 +471,13 @@ function ft(d){return format(new Date(d),'HH:mm');}
 function fs(b){if(!b)return'';if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB';}
 function fi(m){if(!m)return'📄';if(m.startsWith('image/'))return'🖼️';if(m.startsWith('audio/'))return'🎵';if(m.includes('pdf'))return'📕';if(m.includes('sheet')||m.includes('excel')||m.includes('csv'))return'📊';if(m.includes('word'))return'📝';if(m.includes('zip'))return'🗜️';return'📎';}
 
+/* ── localStorage "last seen" tracker ───────────────────────── */
+// Stores the sent_at timestamp of the newest message the user has loaded
+// per group. On next open, any message newer than this (by others) is unread.
+const LAST_SEEN_KEY='chat_last_seen';
+function getLastSeen(groupId){try{return JSON.parse(localStorage.getItem(LAST_SEEN_KEY)||'{}')[groupId]||null;}catch{return null;}}
+function saveLastSeen(groupId,ts){try{const d=JSON.parse(localStorage.getItem(LAST_SEEN_KEY)||'{}');d[String(groupId)]=ts;localStorage.setItem(LAST_SEEN_KEY,JSON.stringify(d));}catch{}}
+
 /* ── Task pill ─────────────────────────────────────────────── */
 const TM={initial_setup:{i:'🚀',c:'#a855f7'},share_link:{i:'🔗',c:'#4f7dff'},pause_pid:{i:'⏸️',c:'#f59e0b'},raise_request:{i:'📋',c:'#22c55e'},optimise:{i:'⚡',c:'#06b6d4'}};
 function TaskPill({taskRef,onTaskClick}){
@@ -489,7 +496,7 @@ function TaskPill({taskRef,onTaskClick}){
 }
 
 /* ── Single bubble ─────────────────────────────────────────── */
-function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
+function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQuery}){
   const {user} = useAuth();
   const [showOptions, setShowOptions] = useState(false);
   const [localReactions, setLocalReactions] = useState(msg.reactions || []);
@@ -656,7 +663,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
 
   {/* Text Content */}
   <div className="text-content">
-    <div className="message-text">{msg.content}</div>
+    <div className="message-text">{searchQuery?highlightText(msg.content,searchQuery):msg.content}</div>
       <div className="message-time">
             {format(new Date(msg.sent_at), 'HH:mm')}
           </div>
@@ -763,8 +770,20 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage}){
   );
 }
 
+/* ── Highlight helper ──────────────────────────────────────── */
+function highlightText(text,query){
+  if(!query||!text)return text;
+  const escaped=query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const parts=text.split(new RegExp(`(${escaped})`,'gi'));
+  return parts.map((part,i)=>
+    part.toLowerCase()===query.toLowerCase()
+      ?<mark key={i} style={{background:'#ffd700',color:'#000',borderRadius:2,padding:'0 1px'}}>{part}</mark>
+      :part
+  );
+}
+
 /* ── Main ──────────────────────────────────────────────────── */
-export default function ChatMessages({group,onTaskClick}){
+export default function ChatMessages({group,onTaskClick,showSearch,onSearchClose}){
   const {user}=useAuth();
   const {on,joinGroup,markSeen,sendTyping}=useSocket();
   const [messages,setMessages]=useState([]);
@@ -774,23 +793,72 @@ export default function ChatMessages({group,onTaskClick}){
   const [replyTo,setReplyTo]=useState(null);
   const [typingUsers,setTypingUsers]=useState([]);
   const [showTaskPopup,setShowTaskPopup]=useState(false);
+  const [searchQuery,setSearchQuery]=useState('');
+  const [currentMatchIdx,setCurrentMatchIdx]=useState(0);
+  const matchRefs=useRef({});
+  const searchInputRef=useRef(null);
+  const [firstUnreadId,setFirstUnreadId]=useState(null);
   // FIX: track access revocation so we can render a friendly UI instead of
   // continuing to fire 403 API calls when the user is removed mid-session.
   const [accessRevoked,setAccessRevoked]=useState(false);
 
   const bottomRef=useRef(null);
+  const messagesAreaRef=useRef(null);
   const groupIdRef=useRef(null);
   const msRef=useRef(markSeen);
+
+  const isNearBottom=useCallback(()=>{
+    const el=messagesAreaRef.current;
+    if(!el)return true;
+    return el.scrollHeight-el.scrollTop-el.clientHeight<120;
+  },[]);
   useEffect(()=>{groupIdRef.current=group?.id?Number(group.id):null;},[group?.id]);
   useEffect(()=>{msRef.current=markSeen;},[markSeen]);
+
+  // Focus search input when search bar opens
+  useEffect(()=>{
+    if(showSearch){
+      setTimeout(()=>searchInputRef.current?.focus(),50);
+    } else {
+      setSearchQuery('');
+      setCurrentMatchIdx(0);
+    }
+  },[showSearch]);
 
   const load=useCallback(async(p=1)=>{
     if(!group)return;
     if(p===1)setLoading(true);
     try{
       const data=await messagesAPI.getMessages(group.id,p);
-      if(p===1){setMessages(data.messages||[]);setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:'instant'}),80);}
-      else{setMessages(prev=>[...(data.messages||[]),...prev]);}
+      if(p===1){
+        const msgs=data.messages||[];
+        setMessages(msgs);
+        // Find the first message newer than the last one the user saw,
+        // sent by someone else. Works across any group switch.
+        const lastSeen=getLastSeen(group.id);
+        let firstUnread=null;
+        if(lastSeen){
+          const threshold=new Date(lastSeen).getTime();
+          const firstUnreadMsg=msgs.find(msg=>
+            msg.sender_id!==user?.id &&
+            new Date(msg.sent_at).getTime()>threshold
+          );
+          firstUnread=firstUnreadMsg?.id||null;
+        }
+        setFirstUnreadId(firstUnread);
+        // Advance the "seen up to" marker to the newest message in this load.
+        if(msgs.length>0) saveLastSeen(group.id, msgs[msgs.length-1].sent_at);
+        if(firstUnread){
+          setTimeout(()=>{
+            const el=document.getElementById(`msg-${firstUnread}`);
+            el?.scrollIntoView({behavior:'instant',block:'center'});
+          },120);
+        } else {
+          setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:'instant'}),80);
+        }
+      } else {
+        setMessages(prev=>[...(data.messages||[]),...prev]);
+      }
       setHasMore(data.hasMore);setPage(p);
     }catch(e){console.error(e);}
     setLoading(false);
@@ -798,7 +866,8 @@ export default function ChatMessages({group,onTaskClick}){
 
   useEffect(()=>{
     if(!group)return;
-    setMessages([]);setPage(1);setAccessRevoked(false);load(1);joinGroup(group.id);
+    setMessages([]);setPage(1);setFirstUnreadId(null);setAccessRevoked(false);
+    load(1);joinGroup(group.id);
   },[group?.id]);// eslint-disable-line
 
   const handleDeleteMessage=useCallback((messageId)=>{
@@ -835,10 +904,14 @@ export default function ChatMessages({group,onTaskClick}){
       }
       return [...prev, msg];
     });
-    
+    // Keep "last seen" marker current so switching away + back doesn't
+    // re-show the divider for messages already visible in this session.
+    if(msg.sent_at) saveLastSeen(groupIdRef.current, msg.sent_at);
     msRef.current?.(msg.id,msg.group_id);
-    setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:'smooth'}),60);
-  },[user?.id]);
+    if(isNearBottom()){
+      setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:'smooth'}),60);
+    }
+  },[user?.id,isNearBottom]);
 
   const handleReactionUpdate=useCallback((data)=>{
     if(Number(data.group_id)!==groupIdRef.current)return;
@@ -889,6 +962,27 @@ export default function ChatMessages({group,onTaskClick}){
     return acc;
   },[]);
 
+  // Compute search matches across loaded messages
+  const searchMatches=useMemo(()=>{
+    if(!searchQuery.trim())return[];
+    const q=searchQuery.toLowerCase();
+    return grouped
+      .map((msg,i)=>({msg,i}))
+      .filter(({msg})=>msg.content&&msg.content.toLowerCase().includes(q));
+  },[grouped,searchQuery]);
+
+  // Reset match index when query changes
+  useEffect(()=>{setCurrentMatchIdx(0);},[searchQuery]);
+
+  // Scroll to current match
+  useEffect(()=>{
+    if(!searchMatches.length)return;
+    const target=searchMatches[currentMatchIdx];
+    if(target&&matchRefs.current[target.msg.id]){
+      matchRefs.current[target.msg.id].scrollIntoView({behavior:'smooth',block:'center'});
+    }
+  },[currentMatchIdx,searchMatches]);
+
   if(!group)return(<div className="empty-state" style={{flex:1}}><div className="empty-state-icon">💬</div><p>Select a group</p></div>);
 
   // FIX: render a clear UI instead of firing repeated 403 API calls when the
@@ -903,22 +997,87 @@ export default function ChatMessages({group,onTaskClick}){
     </div>
   );
 
+  const activeMatchId=searchMatches[currentMatchIdx]?.msg?.id;
+
   return(
     <>
-      <div className="messages-area">
+      {/* ── In-chat search bar ── */}
+      {showSearch&&(
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderBottom:'1px solid var(--border-color)',background:'var(--bg-secondary)',flexShrink:0}}>
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={e=>{setSearchQuery(e.target.value);}}
+            onKeyDown={e=>{
+              if(e.key==='Enter'){
+                if(searchMatches.length===0)return;
+                setCurrentMatchIdx(i=>(i+1)%searchMatches.length);
+              }
+              if(e.key==='Escape'){onSearchClose?.();}
+            }}
+            placeholder="Search messages…"
+            style={{flex:1,background:'var(--bg-primary)',border:'1px solid var(--border-color)',borderRadius:8,padding:'5px 10px',fontSize:13,color:'var(--text-primary)',outline:'none'}}
+          />
+          {searchQuery&&(
+            <span style={{fontSize:11,color:'var(--text-muted)',whiteSpace:'nowrap',minWidth:40,textAlign:'center'}}>
+              {searchMatches.length===0?'No results':`${searchMatches.length>0?currentMatchIdx+1:0}/${searchMatches.length}`}
+            </span>
+          )}
+          <button
+            disabled={searchMatches.length===0}
+            onClick={()=>setCurrentMatchIdx(i=>(i-1+searchMatches.length)%searchMatches.length)}
+            style={{background:'none',border:'1px solid var(--border-color)',borderRadius:6,padding:'3px 7px',cursor:'pointer',color:'var(--text-muted)',fontSize:12,opacity:searchMatches.length===0?0.4:1}}
+            title="Previous match"
+          >▲</button>
+          <button
+            disabled={searchMatches.length===0}
+            onClick={()=>setCurrentMatchIdx(i=>(i+1)%searchMatches.length)}
+            style={{background:'none',border:'1px solid var(--border-color)',borderRadius:6,padding:'3px 7px',cursor:'pointer',color:'var(--text-muted)',fontSize:12,opacity:searchMatches.length===0?0.4:1}}
+            title="Next match"
+          >▼</button>
+          <button
+            onClick={onSearchClose}
+            style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',fontSize:16,lineHeight:1,padding:'0 2px'}}
+            title="Close search"
+          >✕</button>
+        </div>
+      )}
+
+      <div className="messages-area" ref={messagesAreaRef}>
         {hasMore&&<div style={{textAlign:'center',paddingBottom:12}}><button className="btn btn-secondary btn-sm" onClick={()=>load(page+1)}>Load older</button></div>}
         {loading?(
           <div className="empty-state"><p>Loading…</p></div>
         ):messages.length===0?(
           <div className="empty-state"><div className="empty-state-icon">🚀</div><p>Start the conversation!</p></div>
-        ):grouped.map(msg=>(
+        ):grouped.map(msg=>{
+          const isMatch=searchQuery.trim()&&msg.content&&msg.content.toLowerCase().includes(searchQuery.toLowerCase());
+          const isCurrent=msg.id===activeMatchId;
+          const isFirstUnread=firstUnreadId&&msg.id===firstUnreadId;
+          return(
           <React.Fragment key={msg.id}>
             {msg.showDate&&<div className="date-divider">{fd(msg.sent_at)}</div>}
-            <div onDoubleClick={()=>setReplyTo(msg)}>
-              <Bubble msg={msg} isOwn={msg.sender_id===user?.id} showAvatar={msg.showAvatar} onTaskClick={onTaskClick} group={group} onDeleteMessage={handleDeleteMessage}/>
+            {isFirstUnread&&(
+              <div className="date-divider unread-divider">New Messages</div>
+            )}
+            <div
+              id={`msg-${msg.id}`}
+              ref={el=>{if(el)matchRefs.current[msg.id]=el;}}
+              onDoubleClick={()=>setReplyTo(msg)}
+              style={isCurrent?{outline:'2px solid var(--accent)',borderRadius:8,transition:'outline 0.2s'}:isMatch?{outline:'1px solid #ffd70066',borderRadius:8}:{}}
+            >
+              <Bubble
+                msg={msg}
+                isOwn={msg.sender_id===user?.id}
+                showAvatar={msg.showAvatar}
+                onTaskClick={onTaskClick}
+                group={group}
+                onDeleteMessage={handleDeleteMessage}
+                searchQuery={searchQuery}
+              />
             </div>
           </React.Fragment>
-        ))}
+        );})}
+
         {typingUsers.length>0&&(
           <div className="message-row" style={{gap:10,paddingTop:4}}>
             <div style={{width:32}}/>
@@ -927,7 +1086,7 @@ export default function ChatMessages({group,onTaskClick}){
             </div>
           </div>
         )}
-        {/* <div ref={bottomRef}/> */}
+         <div ref={bottomRef}/> 
       </div>
 
       {/* ── Message Sender with Recipient Selection ── */}
@@ -945,9 +1104,9 @@ export default function ChatMessages({group,onTaskClick}){
         <MessageSender
           groupId={group?.id}
           onMessageSent={(newMessage) => {
-            // Add message to local state from API response
             setMessages(prev => [...prev, newMessage]);
             setReplyTo(null);
+            if(newMessage?.sent_at) saveLastSeen(group?.id, newMessage.sent_at);
             bottomRef.current?.scrollIntoView({behavior:'smooth'});
           }}
           currentUser={user}

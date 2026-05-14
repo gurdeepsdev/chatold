@@ -10,26 +10,15 @@
 }
 
 .date-divider.unread-divider {
-  background: #ef4444 !important;
-  color: white !important;
-  border: none !important;
-  padding: 8px 16px !important;
-  margin: 16px 0 !important;
-  border-radius: 8px !important;
-  font-weight: 600 !important;
-  text-align: center !important;
-}
-
-/* Unread messages separator */
-.unread-divider {
   color: #ef4444;
   font-weight: 600;
+  font-size: 11px;
 }
 
-.unread-divider::before,
-.unread-divider::after {
+.date-divider.unread-divider::before,
+.date-divider.unread-divider::after {
   background: #ef4444 !important;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 /* .message-row.own {
   justify-content: flex-end;
