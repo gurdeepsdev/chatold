@@ -49,9 +49,12 @@ function formatTimelineIST(dateStr) {
   return formatDateIST(dateStr, 'MMM d, HH:mm');
 }
 
-// Format date for PID status display
+// Format date for PID status display — no manual offset, browser local time is used
 function formatPIDStatusIST(dateStr) {
-  return formatDateIST(dateStr, 'MMM d HH:mm');
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '';
+  return format(date, 'MMM d HH:mm');
 }
 
 // Get current IST time
