@@ -27,7 +27,9 @@ export const REQUEST_TYPES=['geo','budget','creative','technical','other'];
 
 export const OPTIMISE_SCENARIOS=[
   'Decrease Budget','Increase Budget','Change Targeting','Update Creative',
-  'Pause Campaign','Resume Campaign','Adjust Bidding','New Campaign Setup'
+  'Pause Campaign','Resume Campaign','Adjust Bidding','New Campaign Setup',
+  'Optimise CTI','Optimise ITE','Resume Traffic','Take live','Optimise Install Fraud',
+  'Optimise Event Fraud','Pause'
 ];
 
 export const FA_OPTIONS = ['FA1', 'FA2', 'FA3', 'FA4'];
