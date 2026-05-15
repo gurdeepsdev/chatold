@@ -319,9 +319,22 @@ router.get('/pid-status/group/:groupId', auth, async (req, res) => {
 router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
   try {
     // console.log('🔍 Fetching shared PIDs for group:', req.params.groupId);
-    
+
+    // Fetch crm_campaign_data from chat_groups to extract the campaign id for adv_data filtering
+    let crmCampaignId = null;
+    const [groupRows] = await db.query(
+      'SELECT crm_campaign_data FROM chat_groups WHERE id = ? LIMIT 1',
+      [req.params.groupId]
+    );
+    if (groupRows.length > 0 && groupRows[0].crm_campaign_data) {
+      const campaignData = typeof groupRows[0].crm_campaign_data === 'string'
+        ? JSON.parse(groupRows[0].crm_campaign_data)
+        : groupRows[0].crm_campaign_data;
+      crmCampaignId = campaignData.id ?? null;
+    }
+
     const [tasks] = await db.query(
-      `SELECT 
+      `SELECT
         t.id,
         t.group_id,
         t.title,
@@ -342,25 +355,28 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
        ORDER BY t.created_at DESC`,
       [req.params.groupId]
     );
-    
+
     // console.log('📊 Found share_link tasks:', tasks.length);
-    
+
     const sharedPids = [];
-    
+
     for (const task of tasks) {
       // Get data from crmclickorbits.adv_data table
       let advData = null;
       let pidStatus = 'live'; // Default to live
-      
+
       try {
         const crmDb = db.crmPool; // Use crmclickorbits database
         if (!crmDb) {
           console.warn('⚠️ CRM database not available');
         } else {
-          const [advDataResult] = await crmDb.query(
-            'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pub_id = ? LIMIT 1',
-            [task.pid, task.pub_id]
-          );
+          const advQuery = crmCampaignId != null
+            ? 'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pub_id = ? AND campaign_id = ? LIMIT 1'
+            : 'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pub_id = ? LIMIT 1';
+          const advParams = crmCampaignId != null
+            ? [task.pid, task.pub_id, String(crmCampaignId)]
+            : [task.pid, task.pub_id];
+          const [advDataResult] = await crmDb.query(advQuery, advParams);
           // console.log('✅ advDataResult:', advDataResult);
           if (advDataResult.length > 0) {
             advData = advDataResult[0];
