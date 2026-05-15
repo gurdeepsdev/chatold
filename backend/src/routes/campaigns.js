@@ -370,20 +370,30 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
         if (!crmDb) {
           console.warn('⚠️ CRM database not available');
         } else {
-          const advQuery = crmCampaignId != null
-            ? 'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pub_id = ? AND campaign_id = ? LIMIT 1'
-            : 'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pub_id = ? LIMIT 1';
-          const advParams = crmCampaignId != null
-            ? [task.pid, task.pub_id, String(crmCampaignId)]
-            : [task.pid, task.pub_id];
-          const [advDataResult] = await crmDb.query(advQuery, advParams);
-          // console.log('✅ advDataResult:', advDataResult);
+          let advDataResult = [];
+
+          // Try with campaign_id first (most specific match)
+          if (crmCampaignId != null) {
+            [advDataResult] = await crmDb.query(
+              'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pub_id = ? AND campaign_id = ? LIMIT 1',
+              [task.pid, task.pub_id, String(crmCampaignId)]
+            );
+          }
+
+          // Fallback: no campaign_id match — try with just pid + pub_id
+          if (advDataResult.length === 0) {
+            [advDataResult] = await crmDb.query(
+              'SELECT paused_date, pub_name FROM adv_data WHERE pid = ? AND pub_id = ? LIMIT 1',
+              [task.pid, task.pub_id]
+            );
+          }
+
           if (advDataResult.length > 0) {
             advData = advDataResult[0];
-            // Set status based on paused_date
             pidStatus = advData.paused_date ? 'paused' : 'live';
             console.log(`🎯 Found adv_data: PID=${task.pid}, PubID=${task.pub_id}, paused_date=${advData.paused_date}, pub_name=${advData.pub_name}`);
           } else {
+            pidStatus = 'not_found';
             console.log(`🔍 No adv_data found for PID=${task.pid}, PubID=${task.pub_id}`);
           }
         }
@@ -394,15 +404,16 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
       
       let statusDisplay = pidStatus;
       if (pidStatus === 'paused' && advData?.paused_date) {
-        // Format paused_date for display
         const pausedDate = new Date(advData.paused_date);
-        statusDisplay = `paused (${pausedDate.toLocaleDateString('en-IN', { 
-          day: '2-digit', 
-          month: 'short', 
-          year: 'numeric' 
+        statusDisplay = `paused (${pausedDate.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
         })})`;
+      } else if (pidStatus === 'not_found') {
+        statusDisplay = 'No Campaign ID Found';
       }
-      
+
       sharedPids.push({
         id: task.id,
         pub_id: task.pub_id,
@@ -412,8 +423,8 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
         sender_name: task.created_by_name,
         assigned_to: task.assigned_to_name,
         status: statusDisplay,
-        raw_status: pidStatus, // Keep original status for styling
-        pub_name: advData?.pub_name || null,
+        raw_status: pidStatus,
+        pub_name: pidStatus === 'not_found' ? 'No Campaign ID Found' : (advData?.pub_name || null),
         paused_date: advData?.paused_date || null
       });
     }
