@@ -36,12 +36,12 @@ export const FA_OPTIONS = ['FA1', 'FA2', 'FA3', 'FA4'];
 
 // Role-based field definitions for optimise task
 const OPTIMISE_FIELDS = {
-  admin: ['assigned_to', 'pub_id', 'pid', 'fp', 'fa', 'optimise_scenario', 'attachment'],
-  advertiser: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment'],
-  advertiser_manager: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment'],
-  publisher: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment'],
-  publisher_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment'],
-  am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment']
+  admin: ['assigned_to', 'pub_id', 'pid', 'fp', 'fa', 'optimise_scenario', 'attachment', 'note'],
+  advertiser: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment', 'note'],
+  advertiser_manager: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment', 'note'],
+  publisher: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
+  publisher_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
+  am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note']
 };
 
 const emptyForm=(userRole, type=null)=>{
@@ -56,7 +56,7 @@ const emptyForm=(userRole, type=null)=>{
     entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' , geo:''}],
     pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'',geo:'' }],
     optimise_entries: [{
-      assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null
+      assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:''
     }],  pause_reason:'', request_type:'geo', request_details:'',
     fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
   });
@@ -371,13 +371,14 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
     const newEntry = lastEntry
       ? {
           ...lastEntry,
-          attachment: null,     // reset file
-          optimise_scenario: '' // optional reset
+          attachment: null,
+          optimise_scenario: '',
+          note: ''
         }
       : {
           assigned_to:'', pub_id:'', pid:'',
           fp:'', fa:'', f1:'', f2:'',
-          optimise_scenario:'', attachment:null
+          optimise_scenario:'', attachment:null, note:''
         };
 
     return {
@@ -507,10 +508,10 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
                     );
                   case 'attachment':
                     return (
-                      <div style={{display:'flex',alignItems:'center',gap:4}}>
-                        <input 
-                          type="file" 
-                          style={{display:'none'}} 
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'stretch',gap:2}}>
+                        <input
+                          type="file"
+                          style={{display:'none'}}
                           id={`file-${entryIndex}`}
                           onChange={async e => {
                             const file = e.target.files[0];
@@ -532,25 +533,106 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
                             borderRadius:'4px',
                             padding:'4px 8px',
                             fontSize:'10px',
-                            cursor:'pointer'
+                            cursor:'pointer',
+                            width:'100%'
                           }}
                         >
                           📎 Choose
                         </button>
                         {entry.attachment && (
-                          <span style={{fontSize:9,color:'rgba(255,255,255,0.7)'}}>
-                            {entry.attachment_name || entry.attachment.split('/').pop()}
+                          <span style={{fontSize:9,color:'rgba(255,255,255,0.7)',display:'flex',alignItems:'center',gap:2}}>
+                            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>
+                              {entry.attachment_name || entry.attachment.split('/').pop()}
+                            </span>
                             <button
                               type="button"
                               onClick={() => {
                                 updateOptimiseEntry(entryIndex, 'attachment', null);
                                 updateOptimiseEntry(entryIndex, 'attachment_name', null);
                               }}
-                              style={{background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.5)',marginLeft:2}}
+                              style={{background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.5)',flexShrink:0}}
                             >
                               ✕
                             </button>
                           </span>
+                        )}
+                      </div>
+                    );
+                  case 'note':
+                    return (
+                      <div style={{ position: "relative" }}>
+                        <input
+                          className="form-control"
+                          style={{
+                            fontSize: 11,
+                            padding: 4,
+                            background: "rgba(255,255,255,0.1)",
+                            border: "1px solid rgba(255,255,255,0.2)",
+                            cursor: "pointer"
+                          }}
+                          value={entry.note || ""}
+                          placeholder="Click to add note"
+                          readOnly
+                          onClick={(e) => openOptimiseNoteEditor(entry, entryIndex, e)}
+                        />
+                        {openNoteIndex === entryIndex && (
+                          <div
+                            ref={noteWrapperRef}
+                            style={{
+                              position: "fixed",
+                              top: notePopupPos.top,
+                              left: notePopupPos.left,
+                              width: 300,
+                              background: "#1f1f1f",
+                              border: "1px solid #333",
+                              borderRadius: 8,
+                              padding: 10,
+                              zIndex: 9999,
+                              boxShadow: "0 8px 20px rgba(0,0,0,0.4)"
+                            }}
+                          >
+                            <textarea
+                              value={tempNote}
+                              onChange={(e) => setTempNote(e.target.value)}
+                              style={{
+                                width: "100%",
+                                height: 100,
+                                resize: "none",
+                                borderRadius: 6,
+                                border: "1px solid #444",
+                                padding: 6,
+                                background: "#111",
+                                color: "#fff"
+                              }}
+                            />
+                            <div style={{ marginTop: 8, textAlign: "right" }}>
+                              <button
+                                onClick={saveOptimiseNote}
+                                style={{
+                                  marginRight: 6,
+                                  padding: "4px 10px",
+                                  background: "#1677ff",
+                                  color: "#fff",
+                                  border: "none",
+                                  borderRadius: 4
+                                }}
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setOpenNoteIndex(null)}
+                                style={{
+                                  padding: "4px 10px",
+                                  background: "#444",
+                                  color: "#fff",
+                                  border: "none",
+                                  borderRadius: 4
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     );
@@ -1056,6 +1138,21 @@ const saveLink = () => {
   setOpenIndex(null);
 };
 
+  const [openNoteIndex, setOpenNoteIndex] = useState(null);
+  const [tempNote, setTempNote] = useState("");
+  const noteWrapperRef = useRef(null);
+  const [notePopupPos, setNotePopupPos] = useState({ top: 0, left: 0 });
+  const openOptimiseNoteEditor = (entry, index, e) => {
+    const rect = e.target.getBoundingClientRect();
+    setTempNote(entry.note || "");
+    setOpenNoteIndex(index);
+    setNotePopupPos({ top: rect.bottom + 5, left: rect.left });
+  };
+  const saveOptimiseNote = () => {
+    updateOptimiseEntry(openNoteIndex, "note", tempNote);
+    setOpenNoteIndex(null);
+  };
+
   
   return(
     <>
@@ -1283,28 +1380,30 @@ onClick={(e) => openEditor(entry, index, e)}/>
                       value={entry.note} 
                       onChange={e => updateEntry(index, 'note', e.target.value)}
                     />
-                    <button
-                      type="button"
-                      onClick={() => removeEntry(index)}
-                      style={{
-                        background:'rgba(239,68,68,0.2)',
-                        border:'1px solid rgba(239,68,68,0.3)',
-                        color:'#ef4444',
-                        borderRadius:'4px',
-                        padding:'4px 8px',
-                        fontSize:'12px',
-                        cursor:'pointer',
-                        transition:'all 0.15s'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background='rgba(239,68,68,0.3)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background='rgba(239,68,68,0.2)';
-                      }}
-                    >
-                      ✕
-                    </button>
+                    {index > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => removeEntry(index)}
+                        style={{
+                          background:'rgba(239,68,68,0.2)',
+                          border:'1px solid rgba(239,68,68,0.3)',
+                          color:'#ef4444',
+                          borderRadius:'4px',
+                          padding:'4px 8px',
+                          fontSize:'12px',
+                          cursor:'pointer',
+                          transition:'all 0.15s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background='rgba(239,68,68,0.3)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background='rgba(239,68,68,0.2)';
+                        }}
+                      >
+                        ✕
+                      </button>
+                    ) : <div />}
                   </div>
                 ))}
               </div>
@@ -1422,28 +1521,30 @@ onClick={(e) => openEditor(entry, index, e)}/>
                       <option value="">Select scenario…</option>
                       {PAUSE_SCENARIOS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <button
-                      type="button"
-                      onClick={() => removePauseEntry(index)}
-                      style={{
-                        background:'rgba(239,68,68,0.2)',
-                        border:'1px solid rgba(239,68,68,0.3)',
-                        color:'#ef4444',
-                        borderRadius:'4px',
-                        padding:'4px 8px',
-                        fontSize:'12px',
-                        cursor:'pointer',
-                        transition:'all 0.15s'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background='rgba(239,68,68,0.3)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background='rgba(239,68,68,0.2)';
-                      }}
-                    >
-                      ✕
-                    </button>
+                    {index > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => removePauseEntry(index)}
+                        style={{
+                          background:'rgba(239,68,68,0.2)',
+                          border:'1px solid rgba(239,68,68,0.3)',
+                          color:'#ef4444',
+                          borderRadius:'4px',
+                          padding:'4px 8px',
+                          fontSize:'12px',
+                          cursor:'pointer',
+                          transition:'all 0.15s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background='rgba(239,68,68,0.3)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background='rgba(239,68,68,0.2)';
+                        }}
+                      >
+                        ✕
+                      </button>
+                    ) : <div />}
                   </div>
                 ))}
               </div>
@@ -1534,7 +1635,8 @@ onClick={(e) => openEditor(entry, index, e)}/>
       f1: 'F1',
       f2: 'F2',
       optimise_scenario: 'Scenario',
-      attachment: 'Attachment'
+      attachment: 'Attachment',
+      note: 'Note'
     };
     return (
       <div key={field} style={{fontSize:10,fontWeight:500}}>
@@ -1585,21 +1687,23 @@ onClick={(e) => openEditor(entry, index, e)}/>
               renderEntryField(field, entry, index)
             )}
 
-            <button
-              type="button"
-              onClick={() => removeOptimiseEntry(index)}
-              style={{
-                background:'rgba(239,68,68,0.2)',
-                border:'1px solid rgba(239,68,68,0.3)',
-                color:'#ef4444',
-                borderRadius:'4px',
-                padding:'4px 8px',
-                fontSize:'12px',
-                cursor:'pointer'
-              }}
-            >
-              ✕
-            </button>
+            {index > 0 ? (
+              <button
+                type="button"
+                onClick={() => removeOptimiseEntry(index)}
+                style={{
+                  background:'rgba(239,68,68,0.2)',
+                  border:'1px solid rgba(239,68,68,0.3)',
+                  color:'#ef4444',
+                  borderRadius:'4px',
+                  padding:'4px 8px',
+                  fontSize:'12px',
+                  cursor:'pointer'
+                }}
+              >
+                ✕
+              </button>
+            ) : <div />}
           </div>
         ))}
       </div>
