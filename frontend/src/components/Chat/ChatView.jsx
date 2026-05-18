@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import ChatMessages from './ChatMessages';
 import TasksPanel from '../Tasks/TasksPanel';
 import PreviewPanel from '../Preview/PreviewPanel';
@@ -7,32 +7,47 @@ import CampaignDetails from './CampaignDetails';
 import { Search } from 'lucide-react';
 
 const TABS=[
-  {key:'chat',    label:'Chat',       icon:'💬'},
-  {key:'tasks',   label:'Tasks',      icon:'📋',badge:true},
-  {key:'preview', label:'Preview',    icon:'👁️'},
-  // {key:'followups',label:'Follow Ups',icon:'↩️'},
-  // {key:'summary', label:'Summary',    icon:'📊'},
+  {key:'chat',    label:'Chat',    icon:'💬'},
+  {key:'tasks',   label:'Tasks',   icon:'📋'},
+  {key:'preview', label:'Preview', icon:'👁️'},
 ];
+
+const PLACEHOLDER={
+  chat:    'Search messages…',
+  tasks:   'Search tasks…',
+  preview: 'Search PIDs…',
+};
 
 export default function ChatView({group}){
   const [activeTab,setActiveTab]=useState('chat');
   const [rightPanel,setRightPanel]=useState('cd');
   const [showSearch,setShowSearch]=useState(false);
-  // task highlight: { taskId, openForm, taskType }
+  const [searchQuery,setSearchQuery]=useState('');
   const [taskTarget,setTaskTarget]=useState(null);
+  const searchInputRef=useRef(null);
 
-  // Reset to chat tab and close search when switching groups
-  useEffect(() => {
+  // Reset everything when switching groups
+  useEffect(()=>{
     setActiveTab('chat');
     setShowSearch(false);
-  }, [group]);
+    setSearchQuery('');
+  },[group]);
 
-  // Called when user clicks a task pill in chat
-  // taskType tells TasksPanel which form to open (e.g. 'share_link')
+  // Focus input when search opens; clear query when it closes
+  useEffect(()=>{
+    if(showSearch) setTimeout(()=>searchInputRef.current?.focus(),50);
+    else setSearchQuery('');
+  },[showSearch]);
+
+  // Clear query when switching tabs so stale results don't bleed over
+  const handleTabChange=useCallback((key)=>{
+    setActiveTab(key);
+    setSearchQuery('');
+  },[]);
+
   const handleTaskClick=useCallback((taskId,taskType)=>{
     setActiveTab('tasks');
     setTaskTarget({taskId:Number(taskId),taskType,openForm:false,ts:Date.now()});
-    // clear after 4s so re-clicking same task still triggers
     setTimeout(()=>setTaskTarget(null),4000);
   },[]);
 
@@ -66,7 +81,7 @@ export default function ChatView({group}){
             <button
               className={`btn btn-xs ${showSearch?'btn-primary':'btn-secondary'}`}
               onClick={()=>setShowSearch(p=>!p)}
-              title="Search messages"
+              title={`Search ${activeTab}`}
               style={{display:'flex',alignItems:'center',gap:4}}
             >
               <Search size={13}/>
@@ -83,23 +98,43 @@ export default function ChatView({group}){
           {TABS.map(tab=>(
             <button key={tab.key}
               className={`shortcut-tab ${activeTab===tab.key?'active':''}`}
-              onClick={()=>setActiveTab(tab.key)}>
+              onClick={()=>handleTabChange(tab.key)}>
               <span>{tab.icon}</span>
               <span>{tab.label}</span>
-              {/* {tab.badge&&group.pending_tasks>0&&(
-                <span style={{background:'#ef4444',color:'white',borderRadius:10,padding:'1px 5px',fontSize:9,fontWeight:700,marginLeft:2}}>
-                  {group.pending_tasks}
-                </span>
-              )} */}
             </button>
           ))}
         </div>
 
+        {/* search bar — shared, lives between tabs and content */}
+        {showSearch&&(
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderBottom:'1px solid var(--border-color)',background:'var(--bg-secondary)',flexShrink:0}}>
+            <Search size={13} style={{color:'var(--text-muted)',flexShrink:0}}/>
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={e=>setSearchQuery(e.target.value)}
+              onKeyDown={e=>e.key==='Escape'&&setShowSearch(false)}
+              placeholder={PLACEHOLDER[activeTab]||'Search…'}
+              style={{flex:1,background:'none',border:'none',fontSize:13,color:'var(--text-primary)',outline:'none'}}
+            />
+            {searchQuery&&(
+              <button onClick={()=>setSearchQuery('')}
+                style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',fontSize:12,padding:'0 4px'}}>
+                Clear
+              </button>
+            )}
+            <button onClick={()=>setShowSearch(false)}
+              style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',fontSize:16,lineHeight:1}}>
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* content */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          {activeTab==='chat'&&<ChatMessages group={group} onTaskClick={handleTaskClick} showSearch={showSearch} onSearchClose={()=>setShowSearch(false)}/>}
-          {activeTab==='tasks'&&<TasksPanel group={group} taskTarget={taskTarget}/>}
-          {activeTab==='preview'&&<PreviewPanel group={group}/>}
+          {activeTab==='chat'&&<ChatMessages group={group} onTaskClick={handleTaskClick} searchQuery={searchQuery}/>}
+          {activeTab==='tasks'&&<TasksPanel group={group} taskTarget={taskTarget} searchQuery={searchQuery}/>}
+          {activeTab==='preview'&&<PreviewPanel group={group} searchQuery={searchQuery}/>}
           {activeTab==='followups'&&<FollowUpsPanel group={group}/>}
           {activeTab==='summary'&&<SummaryPanel group={group}/>}
         </div>

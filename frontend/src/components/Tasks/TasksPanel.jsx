@@ -90,7 +90,8 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
   
 
   return(
-    <div 
+    <div
+      id={`task-${task.id}`}
       style={{marginBottom:10,borderRadius:10,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderLeft:`3px solid ${type.color}`,padding:'12px 14px',cursor:'pointer',transition:'all 0.2s'}}
       // onClick={handleTaskClick}
       onMouseEnter={(e) => {
@@ -173,7 +174,7 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
   );
 }
 
-export default function TasksPanel({group, taskTarget}){
+export default function TasksPanel({group, taskTarget, searchQuery=''}){
   const {user}=useAuth();
   const {on}=useSocket();
   const [tasks,setTasks]=useState([]);
@@ -1019,18 +1020,19 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
   const filtered = tasks
   .filter(t => {
     const match = t.group_id === group?.id;
-
-    if (!match) {
-      console.warn('[FILTER REMOVED WRONG TASK]', {
-        taskId: t.id,
-        taskGroup: t.group_id,
-        currentGroup: group?.id
-      });
-    }
-
+    if (!match) console.warn('[FILTER REMOVED WRONG TASK]', { taskId: t.id, taskGroup: t.group_id, currentGroup: group?.id });
     return match;
   })
-  .filter(t => filter === 'all' ? true : t.status === filter);
+  .filter(t => filter === 'all' ? true : t.status === filter)
+  .filter(t => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return [
+      TASK_TYPES[t.task_type]?.label, t.description, t.pub_id, t.pid,
+      t.link, t.assigned_by_name, t.assigned_to_name, t.pause_reason,
+      t.optimise_scenario, t.request_type, t.request_details, t.fp, t.geo,
+    ].some(v => v && String(v).toLowerCase().includes(q));
+  });
   const pendingCount=tasks.filter(t=>t.status==='pending').length;
 
 
