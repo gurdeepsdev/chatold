@@ -783,7 +783,7 @@ function highlightText(text,query){
 }
 
 /* ── Main ──────────────────────────────────────────────────── */
-export default function ChatMessages({group,onTaskClick,showSearch,onSearchClose}){
+export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   const {user}=useAuth();
   const {on,joinGroup,markSeen,sendTyping}=useSocket();
   const [messages,setMessages]=useState([]);
@@ -793,10 +793,8 @@ export default function ChatMessages({group,onTaskClick,showSearch,onSearchClose
   const [replyTo,setReplyTo]=useState(null);
   const [typingUsers,setTypingUsers]=useState([]);
   const [showTaskPopup,setShowTaskPopup]=useState(false);
-  const [searchQuery,setSearchQuery]=useState('');
   const [currentMatchIdx,setCurrentMatchIdx]=useState(0);
   const matchRefs=useRef({});
-  const searchInputRef=useRef(null);
   const [firstUnreadId,setFirstUnreadId]=useState(null);
   // FIX: track access revocation so we can render a friendly UI instead of
   // continuing to fire 403 API calls when the user is removed mid-session.
@@ -815,15 +813,8 @@ export default function ChatMessages({group,onTaskClick,showSearch,onSearchClose
   useEffect(()=>{groupIdRef.current=group?.id?Number(group.id):null;},[group?.id]);
   useEffect(()=>{msRef.current=markSeen;},[markSeen]);
 
-  // Focus search input when search bar opens
-  useEffect(()=>{
-    if(showSearch){
-      setTimeout(()=>searchInputRef.current?.focus(),50);
-    } else {
-      setSearchQuery('');
-      setCurrentMatchIdx(0);
-    }
-  },[showSearch]);
+  // Reset match index when searchQuery changes (controlled from parent)
+  useEffect(()=>{setCurrentMatchIdx(0);},[searchQuery]);
 
   const load=useCallback(async(p=1)=>{
     if(!group)return;
@@ -971,8 +962,8 @@ export default function ChatMessages({group,onTaskClick,showSearch,onSearchClose
       .filter(({msg})=>msg.content&&msg.content.toLowerCase().includes(q));
   },[grouped,searchQuery]);
 
-  // Reset match index when query changes
-  useEffect(()=>{setCurrentMatchIdx(0);},[searchQuery]);
+  // Reset match index when query changes (handled by parent-controlled searchQuery)
+  // useEffect already set above
 
   // Scroll to current match
   useEffect(()=>{
@@ -1001,45 +992,16 @@ export default function ChatMessages({group,onTaskClick,showSearch,onSearchClose
 
   return(
     <>
-      {/* ── In-chat search bar ── */}
-      {showSearch&&(
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderBottom:'1px solid var(--border-color)',background:'var(--bg-secondary)',flexShrink:0}}>
-          <input
-            ref={searchInputRef}
-            value={searchQuery}
-            onChange={e=>{setSearchQuery(e.target.value);}}
-            onKeyDown={e=>{
-              if(e.key==='Enter'){
-                if(searchMatches.length===0)return;
-                setCurrentMatchIdx(i=>(i+1)%searchMatches.length);
-              }
-              if(e.key==='Escape'){onSearchClose?.();}
-            }}
-            placeholder="Search messages…"
-            style={{flex:1,background:'var(--bg-primary)',border:'1px solid var(--border-color)',borderRadius:8,padding:'5px 10px',fontSize:13,color:'var(--text-primary)',outline:'none'}}
-          />
-          {searchQuery&&(
-            <span style={{fontSize:11,color:'var(--text-muted)',whiteSpace:'nowrap',minWidth:40,textAlign:'center'}}>
-              {searchMatches.length===0?'No results':`${searchMatches.length>0?currentMatchIdx+1:0}/${searchMatches.length}`}
-            </span>
-          )}
-          <button
-            disabled={searchMatches.length===0}
-            onClick={()=>setCurrentMatchIdx(i=>(i-1+searchMatches.length)%searchMatches.length)}
-            style={{background:'none',border:'1px solid var(--border-color)',borderRadius:6,padding:'3px 7px',cursor:'pointer',color:'var(--text-muted)',fontSize:12,opacity:searchMatches.length===0?0.4:1}}
-            title="Previous match"
-          >▲</button>
-          <button
-            disabled={searchMatches.length===0}
-            onClick={()=>setCurrentMatchIdx(i=>(i+1)%searchMatches.length)}
-            style={{background:'none',border:'1px solid var(--border-color)',borderRadius:6,padding:'3px 7px',cursor:'pointer',color:'var(--text-muted)',fontSize:12,opacity:searchMatches.length===0?0.4:1}}
-            title="Next match"
-          >▼</button>
-          <button
-            onClick={onSearchClose}
-            style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',fontSize:16,lineHeight:1,padding:'0 2px'}}
-            title="Close search"
-          >✕</button>
+      {/* ── Match navigation strip (shown when searching messages) ── */}
+      {searchQuery.trim()&&(
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'4px 12px',borderBottom:'1px solid var(--border-color)',background:'var(--bg-secondary)',flexShrink:0,fontSize:11}}>
+          <span style={{color:'var(--text-muted)'}}>
+            {searchMatches.length===0?`No results for "${searchQuery}"`:`${currentMatchIdx+1} / ${searchMatches.length} matches`}
+          </span>
+          <button disabled={!searchMatches.length} onClick={()=>setCurrentMatchIdx(i=>(i-1+searchMatches.length)%searchMatches.length)}
+            style={{background:'none',border:'1px solid var(--border-color)',borderRadius:5,padding:'2px 7px',cursor:'pointer',color:'var(--text-muted)',opacity:searchMatches.length?1:0.4}}>▲</button>
+          <button disabled={!searchMatches.length} onClick={()=>setCurrentMatchIdx(i=>(i+1)%searchMatches.length)}
+            style={{background:'none',border:'1px solid var(--border-color)',borderRadius:5,padding:'2px 7px',cursor:'pointer',color:'var(--text-muted)',opacity:searchMatches.length?1:0.4}}>▼</button>
         </div>
       )}
 

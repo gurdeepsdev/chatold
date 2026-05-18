@@ -9,7 +9,7 @@ const PAUSE_SCENARIOS = [
   'Geo Mismatch', 'KPI Not Met', 'Technical Issue', 'Advertiser Request', 'Other'
 ];
 
-export default function PreviewPanel({ group }) {
+export default function PreviewPanel({ group, searchQuery='' }) {
   const { user } = useAuth();
   const [pids, setPids] = useState([]);
   const [sharedPids, setSharedPids] = useState([]);
@@ -116,6 +116,9 @@ export default function PreviewPanel({ group }) {
         </div> */}
       </div>
 
+      {/* Scrollable content area */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+
       {/* Campaign info */}
       {group?.campaign_name && (
         <div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
@@ -191,10 +194,13 @@ export default function PreviewPanel({ group }) {
            📊 Shared PID Links
         </h4>
         {(() => {
-          console.log('🎯 Rendering sharedPids:', sharedPids.length, sharedPids);
-          return sharedPids.length === 0 ? (
+          const q = searchQuery.trim().toLowerCase();
+          const visiblePids = q
+            ? sharedPids.filter(p => [p.pub_id, p.pid, p.pub_name, p.status].some(v => v && String(v).toLowerCase().includes(q)))
+            : sharedPids;
+          return visiblePids.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-              No PID links shared yet
+              {q ? `No PIDs match "${searchQuery}"` : 'No PID links shared yet'}
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -219,7 +225,7 @@ export default function PreviewPanel({ group }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sharedPids.map(pid => (
+                  {visiblePids.map(pid => (
                     <tr key={pid.id} style={{ borderBottom: '1px solid var(--border)' }}>
                          <td style={{ padding: '8px 12px', fontSize: 11 }}>
                         {pid.pub_name || (
@@ -265,6 +271,8 @@ export default function PreviewPanel({ group }) {
           );
         })()}
       </div>
+
+      </div>{/* end scrollable content area */}
 
       {/* PID Management table */}
       {/* <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
