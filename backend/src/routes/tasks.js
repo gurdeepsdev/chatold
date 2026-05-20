@@ -759,10 +759,11 @@ if (task_type === 'optimise') {
           f1,
           f2,
           optimise_scenario,
+          note,
           attachment_url,
           attachment_name
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           group_id,
           campaign_id || null,
@@ -777,7 +778,7 @@ if (task_type === 'optimise') {
           entry.f1 ? entry.f1 : null,
           entry.f2 ? entry.f2 : null,
           entry.optimise_scenario || null,
-
+          entry.note || null,
           // ✅ FIX: USE entry.attachment and entry.attachment_name (NOT req.file)
           entry.attachment ? `/uploads/${entry.attachment}` : null,
           entry.attachment_name || null
