@@ -266,6 +266,12 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                               <div style={{ color: 'var(--text-primary)' }}>{subTask.optimise_scenario}</div>
                             </div>
                           )}
+                          {subTask.note && (
+                            <div style={{ gridColumn: '1 / -1' }}>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Note</div>
+                              <div style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{subTask.note}</div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -431,6 +437,12 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                         <div style={{ gridColumn: '1 / -1' }}>
                           <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Scenario</div>
                           <div style={{ color: 'var(--text-primary)' }}>{task.optimise_scenario}</div>
+                        </div>
+                      )}
+                      {task.note && (
+                        <div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Note</div>
+                          <div style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{task.note}</div>
                         </div>
                       )}
                     </div>
