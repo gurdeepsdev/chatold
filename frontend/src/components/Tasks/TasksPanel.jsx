@@ -29,7 +29,7 @@ export const OPTIMISE_SCENARIOS=[
   'Decrease Budget','Increase Budget','Change Targeting','Update Creative',
   'Pause Campaign','Resume Campaign','Adjust Bidding','New Campaign Setup',
   'Optimise CTI','Optimise ITE','Resume Traffic','Take live','Optimise Install Fraud',
-  'Optimise Event Fraud','Pause'
+  'Optimise Event Fraud','Optimise CR','Pause'
 ];
 
 export const FA_OPTIONS = ['FA1', 'FA2', 'FA3', 'FA4'];
@@ -190,6 +190,10 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
 
   // File upload function for tasks (no auth required)
   const handleTaskFileUpload = async (file) => {
+    if (file.size > 150 * 1024 * 1024) {
+      toast.error(`${file.name} exceeds 150MB limit`);
+      return null;
+    }
     try {
       setUploadingFile(file.name);
       
