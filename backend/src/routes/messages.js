@@ -22,7 +22,7 @@
 // // });
 // // const upload = multer({
 // //   storage,
-// //   limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||52428800 },
+// //   limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||157286400 },
 // //   fileFilter:(req,file,cb)=>{
 // //     const ok=/jpeg|jpg|png|gif|webp|pdf|mp3|wav|ogg|webm|m4a|doc|docx|xls|xlsx|csv|txt|zip/;
 // //     ok.test(path.extname(file.originalname).slice(1).toLowerCase())?cb(null,true):cb(new Error('File type not allowed'));
@@ -625,7 +625,7 @@
 // });
 // const upload = multer({
 //   storage,
-//   limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||52428800 },
+//   limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||157286400 },
 //   fileFilter:(req,file,cb)=>{
 //     const ok=/jpeg|jpg|png|gif|webp|pdf|mp3|wav|ogg|webm|m4a|doc|docx|xls|xlsx|csv|txt|zip/;
 //     ok.test(path.extname(file.originalname).slice(1).toLowerCase())?cb(null,true):cb(new Error('File type not allowed'));
@@ -1467,7 +1467,7 @@
 // });
 // const upload = multer({
 //   storage,
-//   limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||52428800 },
+//   limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||157286400 },
 //   fileFilter:(req,file,cb)=>{
 //     const ok=/jpeg|jpg|png|gif|webp|pdf|mp3|wav|ogg|webm|m4a|doc|docx|xls|xlsx|csv|txt|zip/;
 //     ok.test(path.extname(file.originalname).slice(1).toLowerCase())?cb(null,true):cb(new Error('File type not allowed'));
@@ -2070,7 +2070,7 @@
 // });
 // const upload = multer({
 //   storage,
-//   limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||52428800 },
+//   limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||157286400 },
 //   fileFilter:(req,file,cb)=>{
 //     const ok=/jpeg|jpg|png|gif|webp|pdf|mp3|wav|ogg|webm|m4a|doc|docx|xls|xlsx|csv|txt|zip/;
 //     ok.test(path.extname(file.originalname).slice(1).toLowerCase())?cb(null,true):cb(new Error('File type not allowed'));
@@ -2913,7 +2913,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||52428800 },
+  limits:{ fileSize: parseInt(process.env.MAX_FILE_SIZE)||157286400 },
   fileFilter:(req,file,cb)=>{
     const ok=/jpeg|jpg|png|gif|webp|pdf|mp3|wav|ogg|webm|m4a|doc|docx|xls|xlsx|csv|txt|zip/;
     ok.test(path.extname(file.originalname).slice(1).toLowerCase())?cb(null,true):cb(new Error('File type not allowed'));

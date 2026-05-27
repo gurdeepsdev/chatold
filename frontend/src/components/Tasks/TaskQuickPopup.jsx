@@ -690,7 +690,15 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                           type="file" 
                           style={{display:'none'}} 
                           id={`file-${entryIndex}`}
-                          onChange={e => updateOptimiseEntry(entryIndex, 'attachment', e.target.files[0])}
+                          onChange={e => {
+                            const file = e.target.files[0];
+                            if (file && file.size > 150 * 1024 * 1024) {
+                              toast.error(`${file.name} exceeds 150MB limit`);
+                              e.target.value = '';
+                              return;
+                            }
+                            updateOptimiseEntry(entryIndex, 'attachment', file);
+                          }}
                         />
                         <button
                           type="button"

@@ -616,7 +616,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         >
 
   {/* Image */}
-  {msg.message_type === 'image' && fileUrl && (
+  {msg.message_type === 'image' && fileUrl && !msg.is_deleted && (
     <div className="media-content">
       <img
         src={fileUrl}
@@ -631,7 +631,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   )}
 
   {/* Audio */}
-  {msg.message_type === 'audio' && fileUrl && (
+  {msg.message_type === 'audio' && fileUrl && !msg.is_deleted && (
     <div className="media-content">
       <audio controls>
         <source src={fileUrl} type={msg.mime_type || 'audio/mpeg'} />
@@ -641,7 +641,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   )}
 
   {/* Video */}
-  {msg.message_type === 'video' && fileUrl && (
+  {msg.message_type === 'video' && fileUrl && !msg.is_deleted && (
     <div className="media-content">
       <video controls width="300" height="200">
         <source src={fileUrl} type={msg.mime_type || 'video/mp4'} />
@@ -651,7 +651,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   )}
 
   {/* File */}
-  {msg.message_type === 'file' && fileUrl && (
+  {msg.message_type === 'file' && fileUrl && !msg.is_deleted && (
     <div className="file-content" onClick={() => window.open(fileUrl, '_blank')}>
       <div className="file-icon">{msg.file_icon || '📄'}</div>
       <div className="file-info">
@@ -796,9 +796,10 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   const [currentMatchIdx,setCurrentMatchIdx]=useState(0);
   const matchRefs=useRef({});
   const [firstUnreadId,setFirstUnreadId]=useState(null);
-  // FIX: track access revocation so we can render a friendly UI instead of
-  // continuing to fire 403 API calls when the user is removed mid-session.
   const [accessRevoked,setAccessRevoked]=useState(false);
+  const [isDragging,setIsDragging]=useState(false);
+  const [dropBatch,setDropBatch]=useState(null);
+  const dragCounterRef=useRef(0);
 
   const bottomRef=useRef(null);
   const messagesAreaRef=useRef(null);
@@ -990,8 +991,44 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
 
   const activeMatchId=searchMatches[currentMatchIdx]?.msg?.id;
 
+  const handleDragEnter=(e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current+=1;
+    if(e.dataTransfer.items&&e.dataTransfer.items.length>0) setIsDragging(true);
+  };
+  const handleDragLeave=(e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current-=1;
+    if(dragCounterRef.current===0) setIsDragging(false);
+  };
+  const handleDragOver=(e)=>{e.preventDefault();e.stopPropagation();};
+  const handleDrop=(e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current=0;
+    const files=Array.from(e.dataTransfer.files).filter(f=>f.size>0);
+    if(files.length>0) setDropBatch({files,id:Date.now()});
+  };
+
   return(
-    <>
+    <div
+      style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {isDragging&&(
+        <div className="drop-overlay">
+          <div className="drop-overlay-content">
+            <span className="drop-icon">📎</span>
+            <span className="drop-label">Drop files to attach</span>
+          </div>
+        </div>
+      )}
       {/* ── Match navigation strip (shown when searching messages) ── */}
       {searchQuery.trim()&&(
         <div style={{display:'flex',alignItems:'center',gap:8,padding:'4px 12px',borderBottom:'1px solid var(--border-color)',background:'var(--bg-secondary)',flexShrink:0,fontSize:11}}>
@@ -1074,8 +1111,9 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
           currentUser={user}
           replyTo={replyTo}
           onReplyCancel={() => setReplyTo(null)}
+          dropBatch={dropBatch}
         />
       </div>
-    </>
+    </div>
   );
 }

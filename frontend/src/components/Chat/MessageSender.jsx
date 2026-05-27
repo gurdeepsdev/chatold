@@ -815,16 +815,17 @@ import toast from 'react-hot-toast';
 import TaskQuickPopup from '../Tasks/TaskQuickPopup';
 import './MessageSender.css';
 
-const MessageSender = ({ 
-  groupId, 
-  onMessageSent, 
+const MessageSender = ({
+  groupId,
+  onMessageSent,
   currentUser,
   replyTo = null,
-  onReplyCancel = null 
+  onReplyCancel = null,
+  dropBatch = null
 }) => {
   const { user } = useAuth();
   const { on } = useSocket();
-  
+
   const [content, setContent] = useState('');
 
   // ── NEW: multi-select replaces single recipientId ──────────
@@ -842,12 +843,12 @@ const MessageSender = ({
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   
   const [showTaskPopup, setShowTaskPopup] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const fileInputRef = useRef(null);
-  const dropdownRef  = useRef(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [search, setSearch] = useState('');
 
-  // ── recipient cache / debounce (unchanged from original) ───
+  const fileInputRef  = useRef(null);
+  const dropdownRef   = useRef(null);
+  const textareaRef   = useRef(null);
   const recipientCacheRef = useRef({});
   const reloadTimerRef    = useRef(null);
 
@@ -863,9 +864,8 @@ const MessageSender = ({
       const list = data.recipients || [];
       recipientCacheRef.current[groupId] = list;
       setRecipients(list);
-    } catch (_) {
-      // silently fail
-    } finally {
+    } catch (_) {}
+    finally {
       setLoadingRecipients(false);
     }
   }, [groupId]);
@@ -909,6 +909,13 @@ const MessageSender = ({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Consume files dropped from the parent chat area
+  useEffect(() => {
+    if (!dropBatch || !dropBatch.files || dropBatch.files.length === 0) return;
+    const validFiles = dropBatch.files.filter(validateFile);
+    if (validFiles.length > 0) setSelectedFiles(prev => [...prev, ...validFiles]);
+  }, [dropBatch]); // eslint-disable-line
 
   // ── Load assignment info when exactly ONE user selected ─────
   // (keeps the legacy CC: Manager panel working for single-user sends)
@@ -964,49 +971,116 @@ const MessageSender = ({
       ));
   };
 
-  // ── Submit ──────────────────────────────────────────────────
+  const handleContentChange = (e) => {
+    setContent(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  };
+
+  const validateFile = (file) => {
+    if (file.size > 150 * 1024 * 1024) {
+      toast.error(`${file.name} exceeds 150MB limit`);
+      return false;
+    }
+    const allowedTypes = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/ogg',
+      'video/mp4', 'video/webm', 'video/ogg',
+      'application/pdf',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/zip', 'application/x-zip-compressed',
+      'text/csv', 'application/csv',
+    ];
+    if (!allowedTypes.includes(file.type) && !file.type.startsWith('image/') && !file.type.startsWith('audio/') && !file.type.startsWith('video/')) {
+      toast.error(`${file.name}: file type not supported`);
+      return false;
+    }
+    return true;
+  };
+
+  const handleFileSelect = (e) => {
+    const newFiles = Array.from(e.target.files);
+    const validFiles = newFiles.filter(validateFile);
+    if (validFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...validFiles]);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeFile = (index) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const getFileIcon = (type) => {
+    if (type.startsWith('image/')) return '🖼️';
+    if (type.startsWith('audio/')) return '🎵';
+    if (type.startsWith('video/')) return '🎬';
+    if (type === 'application/pdf') return '📄';
+    if (type.includes('word')) return '📝';
+    if (type.includes('excel') || type.includes('spreadsheet') || type === 'text/csv' || type === 'application/csv') return '📊';
+    if (type.includes('zip')) return '🗜️';
+    return '📎';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (selectedIds.length === 0) {
       alert('Please select at least one recipient before sending a message.');
       return;
     }
-    if (typeof content === 'undefined' || !content || !content.trim()) {
-      alert('Please enter a message.');
+
+    const hasText = content && content.trim();
+    const hasFiles = selectedFiles.length > 0;
+
+    if (!hasText && !hasFiles) {
+      alert('Please enter a message or attach a file.');
       return;
     }
 
     setLoading(true);
-    
-    try {
-      const messageData = {
-        content: content.trim(),
-        // NEW: send arrays; backend inserts ONE row
-        recipient_ids: selectedIds,
-        is_broadcast:  allSelected,
-        // Legacy CC field — only relevant when exactly 1 primary recipient chosen
-        secondary_recipient_id: (selectedIds.length === 1 && secondaryRecipientId)
-          ? parseInt(secondaryRecipientId)
-          : null,
-        reply_to_id: replyTo?.id || null,
-      };
 
-      const response = await messagesAPI.sendMessage(groupId, messageData);
-      
-      // Reset form
+    try {
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('recipient_ids', JSON.stringify(selectedIds));
+        formData.append('is_broadcast', allSelected ? 'true' : 'false');
+        formData.append('recipient_id', selectedIds[0]);
+        formData.append('secondary_recipient_id', secondaryRecipientId || '');
+        formData.append('caption', file.name);
+        const resp = await messagesAPI.uploadFile(groupId, formData);
+        if (onMessageSent) onMessageSent(resp.message);
+      }
+
+      if (hasText) {
+        const messageData = {
+          content: content.trim(),
+          recipient_ids: selectedIds,
+          is_broadcast: allSelected,
+          secondary_recipient_id: (selectedIds.length === 1 && secondaryRecipientId)
+            ? parseInt(secondaryRecipientId)
+            : null,
+          reply_to_id: replyTo?.id || null,
+        };
+        const resp = await messagesAPI.sendMessage(groupId, messageData);
+        if (onMessageSent) onMessageSent(resp.message);
+      }
+
       setContent('');
       setSelectedIds([]);
+      setSelectedFiles([]);
       setSecondaryRecipientId('');
       setShowSecondaryOption(false);
       setAssignmentInfo(null);
       setDropdownOpen(false);
-      
-      if (onMessageSent) onMessageSent(response.message);
-      if (onReplyCancel)  onReplyCancel();
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      if (onReplyCancel) onReplyCancel();
 
     } catch (error) {
-      alert(error?.error || 'Failed to send message');
+      toast.error(error?.error || 'Failed to send message');
     } finally {
       setLoading(false);
     }
@@ -1016,113 +1090,10 @@ const MessageSender = ({
     if (onReplyCancel) onReplyCancel();
   };
 
-  // ── File handling (unchanged logic, updated recipient fields) ─
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const maxSize = 10 * 1024 * 1024;
-      if (file.size > maxSize) {
-        toast.error('File size must be less than 10MB');
-        return;
-      }
-
-      const allowedTypes = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-        'audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/ogg',
-        'video/mp4', 'video/webm', 'video/ogg',
-        'application/pdf', 
-        'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/zip', 'application/x-zip-compressed',
-        'text/csv', 'application/csv',
-      ];
-
-      if (
-        !allowedTypes.includes(file.type) &&
-        !file.type.startsWith('image/') &&
-        !file.type.startsWith('audio/') &&
-        !file.type.startsWith('video/')
-      ) {
-        toast.error('File type not supported');
-        return;
-      }
-
-      setSelectedFile(file);
-      handleFileUpload(file);
-    }
-    
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleFileUpload = async (file) => {
-    if (!file || selectedIds.length === 0) {
-      toast.error('Please select a recipient before uploading a file.');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    // NEW: send arrays instead of single id
-    formData.append('recipient_ids', JSON.stringify(selectedIds));
-    formData.append('is_broadcast', allSelected ? 'true' : 'false');
-    // Legacy fallback — first selected id
-    formData.append('recipient_id', selectedIds[0]);
-    formData.append('secondary_recipient_id', secondaryRecipientId || '');
-    formData.append('caption', file.name);
-
-    try {
-      setLoading(true);
-      toast.loading('Uploading file...', { id: 'file-upload' });
-      
-      const response = await messagesAPI.uploadFile(groupId, formData);
-      
-      setContent('');
-      setSelectedIds([]);
-      setSecondaryRecipientId('');
-      setSelectedFile(null);
-      setShowSecondaryOption(false);
-      setAssignmentInfo(null);
-      
-      if (onMessageSent) onMessageSent(response.message);
-      if (replyTo && onReplyCancel) onReplyCancel();
-
-      toast.success(`${file.name} uploaded successfully!`, { id: 'file-upload' });
-    } catch (error) {
-      const errorMessage = error.error || 'Failed to upload file';
-      toast.error(errorMessage, { id: 'file-upload' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Unchanged original handlers ─────────────────────────────
-  const handleTaskClick = () => {
-    setShowTaskPopup(true);
-  };
-
-  const handleTaskCreated = (task) => {
-    setShowTaskPopup(false);
-    toast.success('Task created successfully!');
-  };
-
-  const handleVoiceRecord = () => {
-    if (isRecording) {
-      setIsRecording(false);
-      toast.success('Voice recording stopped!');
-    } else {
-      setIsRecording(true);
-      toast.success('Voice recording started...');
-    }
-  };
-
-  // Send button active only when recipients + content ready
-  const canSend = selectedIds.length > 0 && content.trim().length > 0 && !loading;
-const [search, setSearch] = useState("");
-
+  const canSend = selectedIds.length > 0 && (content.trim().length > 0 || selectedFiles.length > 0) && !loading;
 
   return (
     <div className="message-sender">
-      {/* Reply To Indicator — unchanged */}
       {replyTo && (
         <div className="reply-to-indicator">
           <div className="reply-info">
@@ -1155,80 +1126,80 @@ const [search, setSearch] = useState("");
             </div>
             <span className="chevron">{dropdownOpen ? '▲' : '▼'}</span>
           </div>
-{dropdownOpen && (
-  <div
-    style={{
-      position: "absolute",
-      bottom: "calc(100% + 4px)",
-      top: "auto",
-      left: 0,
-      right: 0,
-      zIndex: 9999,
-      background: "var(--bg-primary)",
+          {dropdownOpen && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: "calc(100% + 4px)",
+                top: "auto",
+                left: 0,
+                right: 0,
+                zIndex: 9999,
+                background: "var(--bg-primary)",
       /* ✅ THEME SUPPORT */
       // background: "var(--surface)",
-      border: "1px solid var(--border)",
-      color: "var(--text)",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
 
-      borderRadius: "10px",
-      maxHeight: "150px",
-      overflowY: "auto",
-      display: "block"
-    }}
-  >
+                borderRadius: "10px",
+                maxHeight: "150px",
+                overflowY: "auto",
+                display: "block"
+              }}
+            >
     {/* 🔍 Search Input */}
-    <div className="dropdown-search">
-      <input
-        type="text"
-        placeholder="Search users..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>
+              <div className="dropdown-search">
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
 
     {/* @all option */}
-    <label className={`recipient-option all-option${allSelected ? ' selected' : ''}`}>
-      <input
-        type="checkbox"
-        checked={allSelected}
-        onChange={toggleAll}
-        onClick={e => e.stopPropagation()}
-      />
-      <span className="option-name">@all — Everyone</span>
-      <span className="option-count">{recipients.length} members</span>
-    </label>
+              <label className={`recipient-option all-option${allSelected ? ' selected' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  onClick={e => e.stopPropagation()}
+                />
+                <span className="option-name">@all — Everyone</span>
+                <span className="option-count">{recipients.length} members</span>
+              </label>
 
-    <div className="dropdown-divider" />
+              <div className="dropdown-divider" />
 
     {/* 👇 SCROLL AREA */}
     {/* <div className="dropdown-scroll"> */}
-      {loadingRecipients ? (
-        <div className="dropdown-loading">Loading recipients…</div>
-      ) : (
-        recipients
+              {loadingRecipients ? (
+                <div className="dropdown-loading">Loading recipients…</div>
+              ) : (
+                recipients
           .filter(r =>
             r.full_name.toLowerCase().includes(search.toLowerCase())
           )
-          .map(r => (
-            <label
-              key={r.user_id}
-              className={`recipient-option${selectedIds.includes(r.user_id) ? ' selected' : ''}`}
-            >
-              <input
-                type="checkbox"
-                checked={selectedIds.includes(r.user_id)}
-                onChange={() => toggleUser(r.user_id)}
-                onClick={e => e.stopPropagation()}
-              />
-              <span className="option-name">{r.full_name}</span>
-              {r.role && <span className="option-role">{r.role}</span>}
-            </label>
-          ))
-      )}
+                  .map(r => (
+                    <label
+                      key={r.user_id}
+                      className={`recipient-option${selectedIds.includes(r.user_id) ? ' selected' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(r.user_id)}
+                        onChange={() => toggleUser(r.user_id)}
+                        onClick={e => e.stopPropagation()}
+                      />
+                      <span className="option-name">{r.full_name}</span>
+                      {r.role && <span className="option-role">{r.role}</span>}
+                    </label>
+                  ))
+              )}
     {/* </div> */}
-  </div>
-)}
+            </div>
+          )}
           {/* {dropdownOpen && (
             <div className="recipient-dropdown-list">
               <label className={`recipient-option all-option${allSelected ? ' selected' : ''}`}>
@@ -1287,16 +1258,43 @@ const [search, setSearch] = useState("");
           </div>
         )}
 
-        {/* ── Message input row (unchanged) ── */}
+        {/* File preview area */}
+        {selectedFiles.length > 0 && (
+          <div className="file-preview-area">
+            {selectedFiles.map((file, index) => (
+              <div key={index} className="file-preview-item">
+                {file.type.startsWith('image/') ? (
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={file.name}
+                    className="file-preview-thumb"
+                  />
+                ) : (
+                  <div className="file-preview-icon">
+                    {getFileIcon(file.type)}
+                  </div>
+                )}
+                <span className="file-preview-name">{file.name}</span>
+                <button
+                  type="button"
+                  className="file-preview-remove"
+                  onClick={() => removeFile(index)}
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Message input row */}
         <div className="input-row">
           <div className="input-container">
             <textarea
+              ref={textareaRef}
               className="message-input"
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={handleContentChange}
               placeholder="Type a message..."
               rows={1}
-              required
               onKeyPress={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -1304,7 +1302,7 @@ const [search, setSearch] = useState("");
                 }
               }}
             />
-            
+
             {/* Action Buttons — unchanged */}
             <div className="action-buttons">
               <button
@@ -1323,10 +1321,11 @@ const [search, setSearch] = useState("");
                 ✅
               </button> */}
             </div>
-            
+
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               style={{ display: 'none' }}
               onChange={handleFileSelect}
               accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt,.csv,.ppt,.pptx"
@@ -1351,7 +1350,7 @@ const [search, setSearch] = useState("");
           </button>
         </div>
       </form>
-      
+
       {/* Task Popup — unchanged */}
       {showTaskPopup && (
         <TaskQuickPopup
