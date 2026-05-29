@@ -18,13 +18,15 @@ const PLACEHOLDER={
   preview: 'Search PIDs…',
 };
 
-export default function ChatView({group}){
+export default function ChatView({group, onBack}){
   const [activeTab,setActiveTab]=useState('chat');
   const [rightPanel,setRightPanel]=useState('cd');
+  const [showDetailsSheet,setShowDetailsSheet]=useState(false);
   const [showSearch,setShowSearch]=useState(false);
   const [searchQuery,setSearchQuery]=useState('');
   const [taskTarget,setTaskTarget]=useState(null);
   const searchInputRef=useRef(null);
+  const isMobile=!!onBack;
 
   // Reset everything when switching groups
   useEffect(()=>{
@@ -65,7 +67,19 @@ export default function ChatView({group}){
         {/* header */}
         <div className="chat-header">
           <div className="chat-header-left">
-            <div style={{width:36,height:36,borderRadius:'var(--radius-md)',background:'var(--accent-dim)',color:'var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,border:'1px solid var(--accent-border)'}}>
+            {onBack&&(
+              <button
+                className="btn-icon"
+                onClick={onBack}
+                style={{marginRight:2,padding:'6px 8px'}}
+                title="Back to groups"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6"/>
+                </svg>
+              </button>
+            )}
+            <div style={{width:36,height:36,borderRadius:'var(--radius-md)',background:'var(--accent-dim)',color:'var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,border:'1px solid var(--accent-border)',flexShrink:0}}>
               {group.group_type==='campaign'?'📊':'💬'}
             </div>
             <div>
@@ -86,8 +100,8 @@ export default function ChatView({group}){
             >
               <Search size={13}/>
             </button>
-            <button className={`btn btn-xs ${rightPanel==='cd'?'btn-primary':'btn-secondary'}`}
-              onClick={()=>setRightPanel(p=>p==='cd'?null:'cd')}>
+            <button className={`btn btn-xs ${(isMobile?showDetailsSheet:rightPanel==='cd')?'btn-primary':'btn-secondary'}`}
+              onClick={()=>isMobile?setShowDetailsSheet(p=>!p):setRightPanel(p=>p==='cd'?null:'cd')}>
               {group.group_type==='campaign'?'CD':'GD'}
             </button>
           </div>
@@ -140,11 +154,42 @@ export default function ChatView({group}){
         </div>
       </div>
 
-      {rightPanel==='cd'&&(
+      {rightPanel==='cd'&&!isMobile&&(
         <div className="right-panel">
           <div className="panel-header">{group.group_type==='campaign'?'Campaign Details':'Group Details'}</div>
           <div className="panel-content"><CampaignDetails group={group}/></div>
         </div>
+      )}
+
+      {/* Mobile bottom sheet for campaign/group details */}
+      {isMobile&&showDetailsSheet&&(
+        <>
+          <div
+            onClick={()=>setShowDetailsSheet(false)}
+            style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:40}}
+          />
+          <div style={{
+            position:'fixed',bottom:0,left:0,right:0,
+            background:'var(--bg-secondary)',
+            borderRadius:'16px 16px 0 0',
+            zIndex:41,
+            maxHeight:'78vh',
+            display:'flex',flexDirection:'column',
+            boxShadow:'0 -4px 30px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+              <span style={{fontSize:14,fontWeight:600}}>
+                {group.group_type==='campaign'?'Campaign Details':'Group Details'}
+              </span>
+              <button className="btn-icon" onClick={()=>setShowDetailsSheet(false)} style={{padding:6}}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div style={{overflowY:'auto',flex:1}}>
+              <CampaignDetails group={group}/>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
