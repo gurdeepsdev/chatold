@@ -793,6 +793,97 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .right-panel { display: none; }
 }
 
+/* ── Mobile (phones ≤ 640px) ── */
+@media (max-width: 640px) {
+  :root {
+    --sidebar-width: 100vw;
+    --header-height: 52px;
+    --chat-sidebar-width: 0px;
+  }
+
+  body {
+    /* Use dynamic viewport height so the browser chrome doesn't clip content */
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-layout {
+    height: 100dvh;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Sidebar: full screen, slides in/out */
+  .sidebar {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    z-index: 20;
+    transform: translateX(0);
+    transition: transform 0.25s ease;
+  }
+
+  /* When a chat is open, slide sidebar off to the left */
+  .app-layout[data-view="chat"] .sidebar {
+    transform: translateX(-100%);
+    pointer-events: none;
+  }
+
+  /* Chat area fills the screen */
+  .app-layout > div:not(.sidebar) {
+    width: 100%;
+    flex: 1;
+  }
+
+  /* Hide right details panel entirely on mobile */
+  .right-panel { display: none !important; }
+
+  /* Wider message bubbles on mobile */
+  .message-content { max-width: 82%; }
+
+  /* Tighter input padding */
+  .input-area { padding: 8px 12px 10px; }
+
+  /* Tighter tab bar */
+  .shortcut-tabs { padding: 6px 10px; gap: 4px; }
+  .shortcut-tab { padding: 5px 10px; font-size: 11px; }
+
+  /* Slightly bigger touch targets for message actions */
+  .btn-icon { padding: 10px; }
+
+  /* Login box full-width with some margin */
+  .login-box { padding: 28px 20px; }
+
+  /* Hide theme toggle on mobile — not enough space without overlapping UI */
+  .theme-toggle-btn { display: none !important; }
+
+  /* Prevent layout shift when virtual keyboard opens */
+  .main-area, .app-layout > div:not(.sidebar) {
+    min-height: 0;
+  }
+
+  /* Ensure messages area is scrollable above the keyboard */
+  .messages-area {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Modals stay centered but go full-width on mobile */
+  .modal-overlay { padding: 16px 10px; }
+  .modal { max-width: 100%; max-height: 88vh; }
+
+  /* Hide chat subtitle in header to prevent crowding */
+  .chat-subtitle { display: none; }
+
+  /* Make task/preview form grids single-column */
+  .mobile-grid-1 { grid-template-columns: 1fr !important; }
+
+  /* Ensure tables scroll horizontally */
+  .pid-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Larger tap targets for task action buttons */
+  .task-meta .btn { min-height: 36px; padding: 6px 12px; }
+}
+
 /* ── Notification toast animation ──────────────────────────── */
 @keyframes notif-slide {
   from { opacity: 0; transform: translateX(24px) scale(0.96); }

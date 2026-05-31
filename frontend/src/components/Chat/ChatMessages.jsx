@@ -674,7 +674,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
 
 </div>
         {/* Reactions */}
-        {localReactions.length > 0 && (
+        {!msg.is_deleted && localReactions.length > 0 && (
           <div className="reactions-bar">
             {localReactions.map((reaction, index) => (
               <div
@@ -690,7 +690,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         )}
 
         {/* Emoji Picker on Hover - Larger trigger area */}
-        <div 
+        {!msg.is_deleted && <div
           className="emoji-picker-trigger"
           onMouseEnter={() => setShowEmojiPicker(true)}
           onMouseLeave={() => setShowEmojiPicker(false)}
@@ -721,10 +721,10 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
 >
   ⋮
 </div>
-        </div>
+        </div>}
 
         {/* Message Options */}
-        {showOptions && (
+        {!msg.is_deleted && showOptions && (
           <div className=""
               onClick={(e) => e.stopPropagation()} // prevent closing
 >

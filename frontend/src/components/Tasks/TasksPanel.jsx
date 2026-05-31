@@ -1129,13 +1129,13 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
 const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
 const openEditor = (entry, index, e) => {
   const rect = e.target.getBoundingClientRect();
-
   setTempLink(entry.link || "");
   setOpenIndex(index);
-  setPopupPos({
-    top: rect.bottom + 5,
-    left: rect.left
-  });
+  const popupW = Math.min(300, window.innerWidth - 16), popupH = 160, margin = 8;
+  const left = Math.min(rect.left, window.innerWidth - popupW - margin);
+  const spaceBelow = window.innerHeight - rect.bottom - margin;
+  const top = spaceBelow >= popupH ? rect.bottom + 5 : rect.top - popupH - 5;
+  setPopupPos({ top: Math.max(margin, top), left: Math.max(margin, left) });
 };
 const saveLink = () => {
   updateEntry(openIndex, "link", tempLink); // ✅ use state
@@ -1150,7 +1150,11 @@ const saveLink = () => {
     const rect = e.target.getBoundingClientRect();
     setTempNote(entry.note || "");
     setOpenNoteIndex(index);
-    setNotePopupPos({ top: rect.bottom + 5, left: rect.left });
+    const popupW = 300, popupH = 160, margin = 8;
+    const left = Math.min(rect.left, window.innerWidth - popupW - margin);
+    const spaceBelow = window.innerHeight - rect.bottom - margin;
+    const top = spaceBelow >= popupH ? rect.bottom + 5 : rect.top - popupH - 5;
+    setNotePopupPos({ top: Math.max(margin, top), left: Math.max(margin, left) });
   };
   const saveOptimiseNote = () => {
     updateOptimiseEntry(openNoteIndex, "note", tempNote);
@@ -1223,23 +1227,22 @@ const saveLink = () => {
             <div style={{padding:'8px 10px',background:'rgba(79,125,255,0.1)',borderRadius:6,
               border:'1px solid rgba(79,125,255,0.2)',marginBottom:10}}>
               <div style={{fontSize:10,fontWeight:600,marginBottom:6}}>🔗 Link Details</div>
-              
-              {/* Table Header */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.2fr 1.2fr auto',gap:4,marginBottom:6,fontSize:10,fontWeight:500}}>
+              {/* Unified scroll: header + entries scroll together */}
+              <div style={{overflowX:'auto',overflowY:'auto',maxHeight:220,WebkitOverflowScrolling:'touch'}}>
+              {/* Table Header — sticky so it stays visible when scrolling vertically */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.2fr 1.2fr auto',gap:4,marginBottom:4,fontSize:10,fontWeight:600,minWidth:480,position:'sticky',top:0,background:'rgba(79,125,255,0.18)',zIndex:1,padding:'4px 2px',borderRadius:4}}>
                 <div>Assign To</div>
                 <div>PubID</div>
                 <div>PID</div>
-                <div>Tracking Link</div>
+                <div>Link</div>
                 <div>GEO</div>
-
                 <div>Note</div>
                 <div></div>
               </div>
-              
-              {/* Table Entries */}
-              <div style={{maxHeight:'200px',overflowY:'auto'}}>
+
+              {/* Entries — no separate Y scroll, parent handles it */}
                 {form.entries.map((entry, index) => (
-                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.2fr 1.2fr auto',gap:4,marginBottom:6}}>
+                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.2fr 1.2fr auto',gap:4,marginBottom:6,minWidth:480}}>
                     {/* <select 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
@@ -1306,10 +1309,10 @@ onClick={(e) => openEditor(entry, index, e)}/>
   <div
     ref={wrapperRef}
     style={{
-      position: "fixed", // ✅ important
+      position: "fixed",
       top: popupPos.top,
       left: popupPos.left,
-      width: 620,
+      width: Math.min(300, window.innerWidth - 16),
       background: "#1f1f1f",
       border: "1px solid #333",
       borderRadius: 8,
@@ -1410,10 +1413,9 @@ onClick={(e) => openEditor(entry, index, e)}/>
                     ) : <div />}
                   </div>
                 ))}
-              </div>
-                  
-                  {/* Add Entry Button */}
-                  <button
+
+              {/* Add Entry Button */}
+              <button
                     type="button"
                     onClick={addEntry}
                     style={{
@@ -1439,7 +1441,7 @@ onClick={(e) => openEditor(entry, index, e)}/>
                   >
                     ➕ Add Entry
                   </button>
-                  
+              </div>{/* end overflowX scroll wrapper */}
             </div>
           )}
 
@@ -1449,21 +1451,20 @@ onClick={(e) => openEditor(entry, index, e)}/>
               border:'1px solid rgba(245,158,11,0.2)',marginBottom:10}}>
               <div style={{fontSize:10,fontWeight:600,marginBottom:6}}>⏸️ Pause Details</div>
               
-              {/* Table Header */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,fontWeight:500}}>
+              {/* Unified scroll: header + entries scroll together */}
+              <div style={{overflowX:'auto',overflowY:'auto',maxHeight:220,WebkitOverflowScrolling:'touch'}}>
+              {/* Table Header — sticky */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:4,fontSize:10,fontWeight:600,minWidth:440,position:'sticky',top:0,background:'rgba(245,158,11,0.18)',zIndex:1,padding:'4px 2px',borderRadius:4}}>
                 <div>Assign To</div>
                 <div>PubID</div>
                 <div>PID</div>
-                                <div>GEO</div>
-
+                <div>GEO</div>
                 <div>Pause Scenario</div>
                 <div></div>
               </div>
-              
-              {/* Table Entries */}
-              <div style={{maxHeight:'200px',overflowY:'auto'}}>
+
                 {form.pause_entries.map((entry, index) => (
-                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
+                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,minWidth:440}}>
                     {/* <select 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
@@ -1551,8 +1552,7 @@ onClick={(e) => openEditor(entry, index, e)}/>
                     ) : <div />}
                   </div>
                 ))}
-              </div>
-              
+
               {/* Add Entry Button */}
               <button
                 type="button"
@@ -1580,6 +1580,7 @@ onClick={(e) => openEditor(entry, index, e)}/>
               >
                 ➕ Add Entry
               </button>
+              </div>{/* end overflowX scroll wrapper */}
             </div>
           )}
 
@@ -1665,27 +1666,33 @@ onClick={(e) => openEditor(entry, index, e)}/>
         ⚡ Optimise
       </div>
 
-      {/* Header */}
-      <div style={{
-        display:'grid',
-        gridTemplateColumns:`repeat(${userFields.length}, 1fr) auto`,
-        gap:4,
-        marginBottom:6
-        
-      }}>
-        {userFields.map(renderHeader)}
-        <div></div>
-      </div>
+      <div style={{overflowX:'auto',overflowY:'auto',maxHeight:220,WebkitOverflowScrolling:'touch'}}>
+        {/* Header */}
+        <div style={{
+          display:'grid',
+          gridTemplateColumns:`repeat(${userFields.length}, 1fr) auto`,
+          gap:4,
+          marginBottom:4,
+          minWidth:480,
+          position:'sticky',
+          top:0,
+          background:'rgba(6,182,212,0.18)',
+          zIndex:1,
+          padding:'4px 2px',
+          borderRadius:4
+        }}>
+          {userFields.map(renderHeader)}
+          <div></div>
+        </div>
 
-      {/* Rows */}
-      <div style={{maxHeight:'200px',overflowY:'auto'}}>
+        {/* Rows */}
         {form.optimise_entries.map((entry, index) => (
           <div key={index} style={{
             display:'grid',
             gridTemplateColumns:`repeat(${userFields.length}, 1fr) auto`,
             gap:4,
-            marginBottom:6
-            
+            marginBottom:6,
+            minWidth:480
           }}>
             {userFields.map(field =>
               renderEntryField(field, entry, index)

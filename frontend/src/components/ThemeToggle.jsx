@@ -6,25 +6,10 @@ export default function ThemeToggle() {
 
   return (
     <button
+      className="theme-toggle-btn"
       onClick={toggleTheme}
       style={{
-        position: 'fixed',
-        top: '20px',
-        right: '60px',
-        width: '50px',
-        height: '50px',
-        borderRadius: '50%',
-        border: '1px solid var(--border)',
-        background: 'var(--bg-secondary)',
-        color: 'var(--text-primary)',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '20px',
-        transition: 'all 0.3s ease',
-        zIndex: 1000,
-        boxShadow: 'var(--shadow-md)'
+        display: 'none',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'scale(1.1)';

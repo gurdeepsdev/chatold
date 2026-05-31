@@ -203,6 +203,13 @@ function NotifPermissionBanner({ permission, onRequest, onDismiss }) {
 // ── Inner app — rendered INSIDE SocketProvider so useSocket() works ────────
 function AppInner({ selectedGroup, setSelectedGroup }) {
   const { on, leaveGroup } = useSocket();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 640);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   // FIX: Handle member_removed at the App level so we can clear the selected
   // group when the current user is removed from the group they have open.
@@ -241,14 +248,16 @@ const { notifPermission, requestPermission } =
     <>
       <ThemeToggle />
 
-      <div className="app-layout">
+      <div className="app-layout" data-view={selectedGroup && isMobile ? 'chat' : 'sidebar'}>
         <Sidebar
           selectedGroupId={selectedGroup?.id}
           onSelectGroup={setSelectedGroup}
-            onUnreadCountsChange={setUnreadCounts}
-
+          onUnreadCountsChange={setUnreadCounts}
         />
-        <ChatView group={selectedGroup} />
+        <ChatView
+          group={selectedGroup}
+          onBack={isMobile ? () => setSelectedGroup(null) : undefined}
+        />
       </div>
 
       <NotifPermissionBanner permission={notifPermission} onRequest={requestPermission} />
