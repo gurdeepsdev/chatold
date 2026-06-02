@@ -8,7 +8,7 @@ import { useSocket } from '../../context/SocketContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TaskDetailsModal from './TaskDetailsModal';
-import { groupsAPI, authAPI, tasksAPI, getFileUrl } from '../../utils/api';
+import { groupsAPI, authAPI, tasksAPI, getFileUrl, getFileDownloadUrl } from '../../utils/api';
 
 export const TASK_TYPES={
   initial_setup:{label:'Initial Setup',icon:'🚀',color:'#a855f7'},
@@ -129,7 +129,7 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
               {task.f2&&<div><span style={{color:'var(--text-muted)'}}>F2: </span>{task.f2}</div>}
               {task.optimise_scenario&&<div><span style={{color:'var(--text-muted)'}}>Scenario: </span><span style={{color:'#06b6d4'}}>{task.optimise_scenario}</span></div>}
               {task.attachment_url&&(
-                <a href={getFileUrl(task.attachment_url)} download={task.attachment_name} target="_blank" rel="noreferrer"
+                <a href={getFileDownloadUrl(task.attachment_url, task.attachment_name)} download={task.attachment_name} target="_blank" rel="noreferrer"
                   style={{display:'inline-flex',alignItems:'center',gap:4,color:'var(--accent)',fontSize:11,marginTop:4,textDecoration:'none',background:'var(--bg-primary)',padding:'3px 8px',borderRadius:6,border:'1px solid var(--border)'}}>
                   📎 {task.attachment_name||'Attachment'} ⬇
                 </a>

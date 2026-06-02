@@ -204,12 +204,35 @@ function NotifPermissionBanner({ permission, onRequest, onDismiss }) {
 function AppInner({ selectedGroup, setSelectedGroup }) {
   const { on, leaveGroup } = useSocket();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
+  const chatStateRef = React.useRef(false);
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth <= 640);
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    if (selectedGroup && !chatStateRef.current) {
+      history.pushState({ chatOpen: true }, '');
+      chatStateRef.current = true;
+    }
+    if (!selectedGroup) {
+      chatStateRef.current = false;
+    }
+  }, [selectedGroup, isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const handlePopState = () => {
+      if (selectedGroup) {
+        setSelectedGroup(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isMobile, selectedGroup, setSelectedGroup]);
 
   // FIX: Handle member_removed at the App level so we can clear the selected
   // group when the current user is removed from the group they have open.

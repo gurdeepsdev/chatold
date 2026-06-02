@@ -811,6 +811,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     height: 100dvh;
     position: relative;
     overflow: hidden;
+    padding-top: env(safe-area-inset-top);
   }
 
   /* Sidebar: full screen, slides in/out */
