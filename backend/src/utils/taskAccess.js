@@ -481,19 +481,7 @@ const getAssignedHierarchyUsers = async (crmDb, userId) => {
       }
     }
   }
-  if (role === 'advertiser_manager') {
-  const [advertisers] = await crmDb.query(
-    `SELECT l.id, l.username, l.role 
-     FROM login l 
-     INNER JOIN manager_subadmins m ON l.id = m.sub_admin_id
-     WHERE m.manager_id = ?`,
-    [userId]
-  );
-
-  for (const adv of advertisers) {
-    hierarchyUsers.push(adv);
-  }
-}
+  // advertiser_manager is the top of the advertiser hierarchy — nothing above to add
   if (role === 'advertiser') {
     // Get assigned advertiser_managers (manager_id where sub_admin_id = advertiser)
     const [advertiserManagers] = await crmDb.query(
