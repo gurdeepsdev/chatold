@@ -40,7 +40,7 @@ export function getFileDownloadUrl(filePath, originalName) {
   if (!filePath) return '';
   const storedFilename = filePath.split('/').pop();
   const nameParam = encodeURIComponent(originalName || storedFilename);
-  return `${API_BASE}/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
+  return `${API_BASE}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
 }
 
 export const authAPI = {
