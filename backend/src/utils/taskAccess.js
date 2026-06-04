@@ -378,129 +378,30 @@ const getVisibleActions = (userRole) => {
 
 // Get assigned hierarchy users for a selected user
 const getAssignedHierarchyUsers = async (crmDb, userId) => {
-  
-  const [user] = await crmDb.query(
-    `SELECT id, username, role FROM login WHERE id = ?`,
-    [userId]
-  );
-  
-  
-  if (!user || user.length === 0) {
-    return [];
-  }
-  
-  const userData = user[0];
-  const role = userData.role;
-  console.log(`👉 User role: ${role}`);
-  let hierarchyUsers = [];
-  
-  // 📌 Publisher Flow
-  if (role === 'pub_executive') {
-    // Get assigned publishers (manager_id where sub_admin_id = pub_executive)
-    const [publishers] = await crmDb.query(
-      `SELECT l.id, l.username, l.role 
-       FROM login l 
+  const visited = new Set([userId]);
+  const hierarchyUsers = [];
+  const queue = [userId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+
+    const [managers] = await crmDb.query(
+      `SELECT l.id, l.username, l.role
+       FROM login l
        INNER JOIN manager_subadmins m ON l.id = m.manager_id
-       WHERE m.sub_admin_id = ? AND l.role = 'publisher'`,
-      [userId]
+       WHERE m.sub_admin_id = ?`,
+      [currentId]
     );
-    
-    if (publishers && publishers.length > 0) {
-      // Add ALL assigned publishers
-      for (const publisher of publishers) {
-        hierarchyUsers.push(publisher);
-        
-        // Get each publisher's publisher_managers (manager_id where sub_admin_id = publisher)
-        const [publisherManagers] = await crmDb.query(
-          `SELECT l.id, l.username, l.role 
-           FROM login l 
-           INNER JOIN manager_subadmins m ON l.id = m.manager_id
-           WHERE m.sub_admin_id = ? AND l.role = 'publisher_manager'`,
-          [publisher.id]
-        );
-        
-        // Add ALL publisher_managers for this publisher
-        for (const publisherManager of publisherManagers) {
-          if (!hierarchyUsers.find(u => u.id === publisherManager.id)) {
-            hierarchyUsers.push(publisherManager);
-          }
-        }
+
+    for (const manager of managers) {
+      if (!visited.has(manager.id)) {
+        visited.add(manager.id);
+        hierarchyUsers.push(manager);
+        queue.push(manager.id);
       }
     }
   }
-  
-  if (role === 'publisher') {
-    // Get assigned publisher_managers (manager_id where sub_admin_id = publisher)
-    const [publisherManagers] = await crmDb.query(
-      `SELECT l.id, l.username, l.role 
-       FROM login l 
-       INNER JOIN manager_subadmins m ON l.id = m.manager_id
-       WHERE m.sub_admin_id = ? AND l.role = 'publisher_manager'`,
-      [userId]
-    );
-    
-    if (publisherManagers && publisherManagers.length > 0) {
-      // Add ALL assigned publisher_managers only
-      for (const publisherManager of publisherManagers) {
-        hierarchyUsers.push(publisherManager);
-      }
-    }
-  }
-  
-  // 📌 Advertiser Flow
-  if (role === 'adv_executive') {
-    // Get assigned advertisers (manager_id where sub_admin_id = adv_executive)
-    const [advertisers] = await crmDb.query(
-      `SELECT l.id, l.username, l.role 
-       FROM login l 
-       INNER JOIN manager_subadmins m ON l.id = m.manager_id
-       WHERE m.sub_admin_id = ? AND l.role = 'advertiser'`,
-      [userId]
-    );
-    
-    if (advertisers && advertisers.length > 0) {
-      // Add ALL assigned advertisers
-      for (const advertiser of advertisers) {
-        hierarchyUsers.push(advertiser);
-        
-        // Get each advertiser's advertiser_managers (manager_id where sub_admin_id = advertiser)
-        const [advertiserManagers] = await crmDb.query(
-          `SELECT l.id, l.username, l.role 
-           FROM login l 
-           INNER JOIN manager_subadmins m ON l.id = m.manager_id
-           WHERE m.sub_admin_id = ? AND l.role = 'advertiser_manager'`,
-          [advertiser.id]
-        );
-        
-        // Add ALL advertiser_managers for this advertiser
-        for (const advertiserManager of advertiserManagers) {
-          if (!hierarchyUsers.find(u => u.id === advertiserManager.id)) {
-            hierarchyUsers.push(advertiserManager);
-          }
-        }
-      }
-    }
-  }
-  // advertiser_manager is the top of the advertiser hierarchy — nothing above to add
-  if (role === 'advertiser') {
-    // Get assigned advertiser_managers (manager_id where sub_admin_id = advertiser)
-    const [advertiserManagers] = await crmDb.query(
-      `SELECT l.id, l.username, l.role 
-       FROM login l 
-       INNER JOIN manager_subadmins m ON l.id = m.manager_id
-       WHERE m.sub_admin_id = ? AND l.role = 'advertiser_manager'`,
-      [userId]
-    );
-    
-    
-    if (advertiserManagers && advertiserManagers.length > 0) {
-      // Add ALL assigned advertiser_managers
-      for (const advertiserManager of advertiserManagers) {
-        hierarchyUsers.push(advertiserManager);
-      }
-    }
-  }
-  
+
   return hierarchyUsers;
 };
 
