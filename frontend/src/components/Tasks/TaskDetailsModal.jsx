@@ -8,46 +8,26 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
   const [response, setResponse] = useState('');
   const [responding, setResponding] = useState(false);
 
-  // File download utility function
-  const getFileDownloadUrl = (attachmentUrl) => {
+  // Build URL for the dedicated download endpoint which sets the correct
+  // Content-Disposition filename (preserves original upload name).
+  const getFileDownloadUrl = (attachmentUrl, attachmentName) => {
     if (!attachmentUrl) return '#';
-    
-    
-    // If it's already a full URL, return as-is
-    if (attachmentUrl.startsWith('http')) {
-      return attachmentUrl;
-    }
-    
-    // If it's already a relative path starting with /uploads/, use direct URL
-    if (attachmentUrl.startsWith('/uploads/')) {
-      const fullUrl = `${process.env.REACT_APP_API_URL}${attachmentUrl}`;
-      return fullUrl;
-    }
-    
-    // For backward compatibility with old format (just filename)
-    const fileName = attachmentUrl.split('/').pop();
-    const encodedFileName = encodeURIComponent(fileName);
-    const fullUrl = `${process.env.REACT_APP_API_URL}/uploads/${encodedFileName}`;
-   
-    return fullUrl;
+    const storedFilename = attachmentUrl.split('/').pop();
+    const nameParam = encodeURIComponent(attachmentName || storedFilename);
+    return `${process.env.REACT_APP_API_URL}/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
   };
 
-  // Simple file download function - direct URL like chat
   const handleFileDownload = async (attachmentUrl, attachmentName) => {
     try {
-      const downloadUrl = getFileDownloadUrl(attachmentUrl);
+      const downloadUrl = getFileDownloadUrl(attachmentUrl, attachmentName);
       if (downloadUrl === '#') return;
 
-      
-      // Create download link for direct URL (like chat system)
       const link = document.createElement('a');
       link.href = downloadUrl;
       link.download = attachmentName || 'attachment';
-      link.target = '_blank';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
     } catch (error) {
       console.error('Download error:', error);
       alert('Failed to download file. Please try again.');

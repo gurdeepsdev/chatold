@@ -652,7 +652,17 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
 
   {/* File */}
   {msg.message_type === 'file' && fileUrl && !msg.is_deleted && (
-    <div className="file-content" onClick={() => window.open(fileUrl, '_blank')}>
+    <div className="file-content" onClick={() => {
+      const storedFilename = (msg.file_url || '').split('/').pop();
+      const nameParam = encodeURIComponent(msg.file_name || storedFilename);
+      const downloadUrl = `${process.env.REACT_APP_API_URL}/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = msg.file_name || 'file';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }}>
       <div className="file-icon">{msg.file_icon || '📄'}</div>
       <div className="file-info">
         <div className="file-name">{msg.file_name}</div>

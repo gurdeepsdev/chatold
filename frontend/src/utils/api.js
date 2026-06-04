@@ -33,6 +33,16 @@ export function getFileUrl(filePath) {
   return `${API_BASE}${filePath}`;
 }
 
+// Build a download URL that preserves the original filename via Content-Disposition.
+// filePath: stored path e.g. "/uploads/1748234556-abc1234.pdf"
+// originalName: the name the user uploaded, e.g. "MyDocument.pdf"
+export function getFileDownloadUrl(filePath, originalName) {
+  if (!filePath) return '';
+  const storedFilename = filePath.split('/').pop();
+  const nameParam = encodeURIComponent(originalName || storedFilename);
+  return `${API_BASE}/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
+}
+
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   me: () => api.get('/auth/me'),

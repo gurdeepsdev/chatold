@@ -1141,7 +1141,7 @@ for (const groupKey in groupedByOS) {
   const geo = Array.from(groupData.geos).filter(Boolean).join(',');
   const payouts = Array.from(groupData.payouts).filter(Boolean).join(',');
 
-  const groupName = `${baseRow.campaign_name}_${adv_name}_${platform}_${adv_d}`;
+  let groupName = `${baseRow.campaign_name}_${adv_name}_${platform}_${adv_d}`;
 
         const [existing] = await conn.query(
           'SELECT id FROM chat_groups WHERE group_name = ?',
@@ -1149,7 +1149,16 @@ for (const groupKey in groupedByOS) {
         );
 
         if (existing.length) {
-          continue; // Skip if group already exists
+          groupName = `${baseRow.campaign_name}_${adv_name}_${baseRow.id}_${platform}_${adv_d}`;
+
+          const [existing2] = await conn.query(
+            'SELECT id FROM chat_groups WHERE group_name = ?',
+            [groupName]
+          );
+
+          if (existing2.length) {
+            continue; 
+          }
         }
 
         // Prepare CRM campaign data JSON with extracted package_id
