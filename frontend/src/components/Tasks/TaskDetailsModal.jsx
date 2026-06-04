@@ -14,7 +14,7 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
     if (!attachmentUrl) return '#';
     const storedFilename = attachmentUrl.split('/').pop();
     const nameParam = encodeURIComponent(attachmentName || storedFilename);
-    return `${process.env.REACT_APP_API_URL}/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
+    return `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
   };
 
   const handleFileDownload = async (attachmentUrl, attachmentName) => {

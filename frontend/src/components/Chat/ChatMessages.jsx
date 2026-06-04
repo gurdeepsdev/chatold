@@ -655,7 +655,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
     <div className="file-content" onClick={() => {
       const storedFilename = (msg.file_url || '').split('/').pop();
       const nameParam = encodeURIComponent(msg.file_name || storedFilename);
-      const downloadUrl = `${process.env.REACT_APP_API_URL}/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
+      const downloadUrl = `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
       const link = document.createElement('a');
       link.href = downloadUrl;
       link.download = msg.file_name || 'file';

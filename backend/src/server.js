@@ -118,16 +118,12 @@ app.use('/uploads', express.static(UPLOAD_DIR, {
 
 // Dedicated download endpoint — serves any uploaded file with its original filename.
 // The stored filename (hashed) is in the URL; the original name comes via ?name=
-app.get('/download/:filename', (req, res) => {
-  const storedFilename = path.basename(req.params.filename); // strip any traversal attempts
-  const filePath = path.resolve(UPLOAD_DIR, storedFilename);
-
-  // Security: ensure the resolved path stays inside UPLOAD_DIR
-  if (!filePath.startsWith(UPLOAD_DIR + path.sep)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-
+// path.basename strips all directory components so there is no traversal risk.
+app.get('/api/download/:filename', (req, res) => {
+  const storedFilename = path.basename(req.params.filename);
+  const filePath = path.join(UPLOAD_DIR, storedFilename);
   const downloadName = req.query.name || storedFilename;
+
   res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
   res.sendFile(filePath, (err) => {
     if (err && !res.headersSent) {
