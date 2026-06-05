@@ -39,8 +39,10 @@ const OPTIMISE_FIELDS = {
   admin: ['assigned_to', 'pub_id', 'pid', 'fp', 'fa', 'optimise_scenario', 'attachment', 'note'],
   advertiser: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment', 'note'],
   advertiser_manager: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment', 'note'],
+  adv_executive: ['assigned_to', 'pub_id', 'pid', 'fa', 'optimise_scenario', 'attachment', 'note'],
   publisher: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   publisher_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
+  pub_executive: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note']
 };
 
