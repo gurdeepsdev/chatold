@@ -624,7 +624,15 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         loading="lazy"
         onClick={(e) => {
           e.stopPropagation();
-          window.open(fileUrl, '_blank');
+          const storedFilename = (msg.file_url || '').split('/').pop();
+          const nameParam = encodeURIComponent(msg.file_name || storedFilename);
+          const downloadUrl = `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = msg.file_name || storedFilename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
         }}
       />
     </div>
