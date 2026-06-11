@@ -15,9 +15,9 @@ const REQUEST_TYPES = ['geo','payout','link','budget'];
 
 const empty = (type='share_link') => ({
   task_type:type, description:'', assigned_to:'',
-  entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'',geo:'' }],
-  pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'', geo:'' }],
-  optimise_entries: [{ assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }],
+  entries: [{ pub_id:'', pid:'', link:'', assigned_to:[], note:'', geo:'' }],
+  pause_entries: [{ pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'' }],
+  optimise_entries: [{ assigned_to:[], pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:'' }],
   pause_reason:'', request_type:'geo', request_details:'',
   f1:'', f2:'', f3:'', f4:'', optimise_scenario:'', attachment:null,
 });
@@ -44,17 +44,43 @@ const F_OPTIONS = ['F1', 'F2', 'F3', 'F4'];
  */
 export default function TaskQuickPopup({ group, onClose, initialType }) {
   const { user } = useAuth();
-  const [users,    setUsers]    = useState([]);
-  const [form,     setForm]     = useState(empty(initialType || 'share_link'));
-  const [creating, setCreating] = useState(false);
+  const [users,           setUsers]           = useState([]);
+  const [form,            setForm]            = useState(empty(initialType || 'share_link'));
+  const [creating,        setCreating]        = useState(false);
+  const [openAssigneeKey, setOpenAssigneeKey] = useState(null);
+  const [dropdownPos,     setDropdownPos]     = useState({top:0, left:0, width:0});
   const fileRef = useRef(null);
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    if (!openAssigneeKey) return;
+    const close = () => setOpenAssigneeKey(null);
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [openAssigneeKey]);
+
+  const openAssignee = (e, key) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+    setOpenAssigneeKey(prev => prev === key ? null : key);
+  };
+
+  const toggleAssignee = (ids, userId) => {
+    const num = Number(userId);
+    return ids.includes(num) ? ids.filter(id => id !== num) : [...ids, num];
+  };
+
+  const assigneeLabel = (ids) => {
+    if (!ids || ids.length === 0) return 'Unassigned';
+    if (ids.length === 1) return users.find(u => u.id === ids[0])?.full_name || 'User';
+    return `${ids.length} users`;
+  };
 
   // Entry management functions
   const addEntry = () => {
     setForm(p => ({
       ...p,
-      entries: [...p.entries, { pub_id:'', pid:'', link:'', assigned_to:'', note:'' }]
+      entries: [...p.entries, { pub_id:'', pid:'', link:'', assigned_to:[], note:'', geo:'' }]
     }));
   };
 
@@ -78,7 +104,7 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
   const addPauseEntry = () => {
     setForm(p => ({
       ...p,
-      pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:'', pause_reason:'' }]
+      pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:[], pause_reason:'' }]
     }));
   };
 
@@ -102,7 +128,7 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
   const addOptimiseEntry = () => {
     setForm(p => ({
       ...p,
-      optimise_entries: [...p.optimise_entries, { assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }]
+      optimise_entries: [...p.optimise_entries, { assigned_to:[], pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:'' }]
     }));
   };
 
@@ -130,7 +156,7 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
     if (form.task_type === 'optimise' && (!form.optimise_entries || form.optimise_entries.length === 0)) {
       setForm(p => ({
         ...p,
-        optimise_entries: [{ assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null }]
+        optimise_entries: [{ assigned_to:[], pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:'' }]
       }));
     }
   }, [form.task_type, form.optimise_entries]);
@@ -320,15 +346,24 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             <div style={{maxHeight:'200px',overflowY:'auto'}}>
               {form.entries.map((entry, index) => (
                 <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.5fr 1fr 1.2fr 1.2fr auto',gap:4,marginBottom:6}}>
-                  <select 
-                    className="form-control" 
-                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
-                    value={entry.assigned_to} 
-                    onChange={e => updateEntry(index, 'assigned_to', e.target.value)}
-                  >
-                    <option value="">Unassigned</option>
-                    {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                  </select>
+                  <div style={{position:'relative'}}>
+                    <button type="button"
+                      onClick={e=>openAssignee(e,`sl-${index}`)}
+                      style={{width:'100%',fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {assigneeLabel(entry.assigned_to)}
+                    </button>
+                    {openAssigneeKey===`sl-${index}`&&(
+                      <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'rgba(20,20,30,0.98)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto'}}>
+                        {users.map(u=>(
+                          <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'#fff'}}>
+                            <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
+                              onChange={()=>updateEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
+                            {u.full_name}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <input 
                     className="form-control" 
                     style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
@@ -440,15 +475,24 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             <div style={{maxHeight:'200px',overflowY:'auto'}}>
               {form.pause_entries.map((entry, index) => (
                 <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
-                  <select 
-                    className="form-control" 
-                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
-                    value={entry.assigned_to} 
-                    onChange={e => updatePauseEntry(index, 'assigned_to', e.target.value)}
-                  >
-                    <option value="">Unassigned</option>
-                    {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                  </select>
+                  <div style={{position:'relative'}}>
+                    <button type="button"
+                      onClick={e=>openAssignee(e,`pp-${index}`)}
+                      style={{width:'100%',fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {assigneeLabel(entry.assigned_to)}
+                    </button>
+                    {openAssigneeKey===`pp-${index}`&&(
+                      <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'rgba(20,20,30,0.98)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto'}}>
+                        {users.map(u=>(
+                          <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'#fff'}}>
+                            <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
+                              onChange={()=>updatePauseEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
+                            {u.full_name}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <input 
                     className="form-control" 
                     style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 
@@ -595,15 +639,24 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                 switch(field) {
                   case 'assigned_to':
                     return (
-                      <select 
-                        className="form-control" 
-                        style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
-                        value={entry.assigned_to} 
-                        onChange={e => updateOptimiseEntry(entryIndex, 'assigned_to', e.target.value)}
-                      >
-                        <option value="">Unassigned</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                      </select>
+                      <div key={field} style={{position:'relative'}}>
+                        <button type="button"
+                          onClick={e=>openAssignee(e,`opt-${entryIndex}`)}
+                          style={{width:'100%',fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {assigneeLabel(entry.assigned_to)}
+                        </button>
+                        {openAssigneeKey===`opt-${entryIndex}`&&(
+                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'rgba(20,20,30,0.98)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto'}}>
+                            {users.map(u=>(
+                              <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'#fff'}}>
+                                <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
+                                  onChange={()=>updateOptimiseEntry(entryIndex,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
+                                {u.full_name}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     );
                   case 'pub_id':
                     return (

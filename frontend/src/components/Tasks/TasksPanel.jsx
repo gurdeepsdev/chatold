@@ -55,10 +55,10 @@ const emptyForm=(userRole, type=null)=>{
   
   return({
     task_type:type, description:'',
-    entries: [{ pub_id:'', pid:'', link:'', assigned_to:'', note:'' , geo:''}],
-    pause_entries: [{ pub_id:'', pid:'', assigned_to:'', pause_reason:'',geo:'' }],
+    entries: [{ pub_id:'', pid:'', link:'', assigned_to:[], note:'' , geo:''}],
+    pause_entries: [{ pub_id:'', pid:'', assigned_to:[], pause_reason:'',geo:'' }],
     optimise_entries: [{
-      assigned_to:'', pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:''
+      assigned_to:[], pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:''
     }],  pause_reason:'', request_type:'geo', request_details:'',
     fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
   });
@@ -119,11 +119,13 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
             <span style={{marginLeft:'auto'}}>{format(new Date(task.created_at),'MMM d, HH:mm')}</span>
           </div>
           {/* extra fields */}
-          {(task.pub_id||task.pid||task.link||task.pause_reason||task.fp||task.optimise_scenario)&&(
+          {(task.pub_id||task.pid||task.link||task.geo||task.note||task.pause_reason||task.fp||task.optimise_scenario)&&(
             <div style={{background:'var(--bg-active)',borderRadius:8,padding:'8px 10px',marginBottom:8,fontSize:12}}>
               {task.pub_id&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>PubID: </span><code style={{color:'var(--accent)'}}>{task.pub_id}</code></div>}
               {task.pid&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>PID: </span><code style={{color:'var(--accent)'}}>{task.pid}</code></div>}
               {task.link&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>Link: </span><a href={task.link} target="_blank" rel="noreferrer" style={{color:'var(--accent)',wordBreak:'break-all'}}>{task.link}</a></div>}
+              {task.task_type==='share_link'&&task.geo&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>GEO: </span><span style={{color:'var(--accent)',fontWeight:600}}>{task.geo}</span></div>}
+              {task.task_type==='share_link'&&task.note&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>Note: </span><span style={{color:'var(--text-primary)'}}>{task.note}</span></div>}
               {task.pause_reason&&<div style={{color:'#f59e0b'}}>⚠️ {task.pause_reason}</div>}
               {task.request_type&&<div><span style={{color:'var(--text-muted)'}}>Request: </span><strong style={{textTransform:'uppercase'}}>{task.request_type}</strong> – {task.request_details}</div>}
               {task.fp&&<div><span style={{color:'var(--text-muted)'}}>FP: </span>{task.fp}</div>}
@@ -182,6 +184,15 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
   const [tasks,setTasks]=useState([]);
   const [filter,setFilter]=useState('all');
   const [showCreate,setShowCreate]=useState(false);
+  const [openAssigneeKey,setOpenAssigneeKey]=useState(null);
+  const [dropdownPos,    setDropdownPos]    =useState({top:0,left:0,width:0});
+
+  useEffect(() => {
+    if (!openAssigneeKey) return;
+    const close = () => setOpenAssigneeKey(null);
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [openAssigneeKey]);
   // const [refreshKey, setRefreshKey] = useState(0); // Add refresh key for forcing re-renders
   const [loadingTasks, setLoadingTasks] = useState(false); // Add loading state for tasks
   const [users,setUsers]=useState([]);
@@ -226,6 +237,21 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
   const [loadingDetails, setLoadingDetails] = useState(false);
   const fileRef=useRef(null);
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  const openAssignee = (e, key) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+    setOpenAssigneeKey(prev => prev === key ? null : key);
+  };
+  const toggleAssignee = (ids, userId) => {
+    const num = Number(userId);
+    return ids.includes(num) ? ids.filter(id => id !== num) : [...ids, num];
+  };
+  const assigneeLabel = (ids) => {
+    if (!ids || ids.length === 0) return 'Unassigned';
+    if (ids.length === 1) return users.find(u => u.id === ids[0])?.full_name || 'User';
+    return `${ids.length} users`;
+  };
 
   // Add CSS animation for spinner
   React.useEffect(() => {
@@ -296,7 +322,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
           link: ''     // reset link
           // note: ''       // reset note
         }
-      : { pub_id:'', pid:'', link:'', assigned_to:'', note:'' };
+      : { pub_id:'', pid:'', link:'', assigned_to:[], note:'' };
 
     return {
       ...p,
@@ -338,7 +364,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
           ...lastEntry,
           pause_reason: '' // reset only this (optional)
         }
-      : { pub_id:'', pid:'', assigned_to:'', pause_reason:'' };
+      : { pub_id:'', pid:'', assigned_to:[], pause_reason:'' };
 
     return {
       ...p,
@@ -382,7 +408,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
           note: ''
         }
       : {
-          assigned_to:'', pub_id:'', pid:'',
+          assigned_to:[], pub_id:'', pid:'',
           fp:'', fa:'', f1:'', f2:'',
           optimise_scenario:'', attachment:null, note:''
         };
@@ -423,20 +449,24 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
                       //   {/* <option value="">Unassigned</option> */}
                       //   {getFilteredMembersForTaskType('optimise').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
                       // </select>
-                      <select 
-  className="form-control" 
-  style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}}
-  value={entry.assigned_to || ""} 
-  onChange={e => updateOptimiseEntry(entryIndex, 'assigned_to', e.target.value)}
-  required
->
-  <option value="">Select User *</option>
-  {getFilteredMembersForTaskType('optimise').map(member => (
-    <option key={member.id} value={member.id}>
-      {member.full_name}
-    </option>
-  ))}
-</select>
+                      <div key="assigned_to" style={{position:'relative'}}>
+                        <button type="button"
+                          onClick={e=>openAssignee(e,`opt-${entryIndex}`)}
+                          style={{width:'100%',fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:(entry.assigned_to||[]).length===0?'1px solid #ef4444':'1px solid rgba(255,255,255,0.2)',color:'#fff',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {assigneeLabel(entry.assigned_to)}
+                        </button>
+                        {openAssigneeKey===`opt-${entryIndex}`&&(
+                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'rgba(20,20,30,0.98)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto'}}>
+                            {getFilteredMembersForTaskType('optimise').map(u=>(
+                              <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'#fff'}}>
+                                <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
+                                  onChange={()=>updateOptimiseEntry(entryIndex,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
+                                {u.full_name}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     );
                   case 'pub_id':
                     return (
@@ -963,7 +993,7 @@ setTasks(prev => {
         return toast.error('Please fill in at least one entry (PubID, PID, or Link)');
       }
        // 🔥 NEW VALIDATION (IMPORTANT)
-  const invalidAssign = form.entries.some(entry => !entry.assigned_to);
+  const invalidAssign = form.entries.some(entry => !entry.assigned_to || entry.assigned_to.length === 0);
 
   if (invalidAssign) {
     return toast.error('Please select "Assign To" for all entries');
@@ -978,7 +1008,7 @@ setTasks(prev => {
         return toast.error('Please fill in at least one entry (PubID, PID, or Pause Reason)');
       }
        // 🔥 NEW VALIDATION (IMPORTANT)
-const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
+const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to || entry.assigned_to.length === 0);
   if (invalidAssign) {
     return toast.error('Please select "Assign To" for all entries');
   }
@@ -1003,7 +1033,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
         return toast.error('Please fill in at least one entry (PubID, PID, FP, FA, F1, F2, or Scenario)');
       }
       // 🔥 NEW VALIDATION (IMPORTANT)
-      const invalidAssign = form.optimise_entries.some(entry => !entry.assigned_to);
+      const invalidAssign = form.optimise_entries.some(entry => !entry.assigned_to || entry.assigned_to.length === 0);
       if (invalidAssign) {
         return toast.error('Please select "Assign To" for all entries');
       }
@@ -1254,27 +1284,24 @@ const saveLink = () => {
                       <option value="">Unassigned</option>
                       {getFilteredMembersForTaskType('share_link').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
                     </select> */}
-                    <select 
-  className="form-control" 
-  style={{
-    fontSize:11,
-    padding:4,
-    background:'rgba(255,255,255,0.1)',
-    border: !entry.assigned_to 
-      ? '1px solid #ef4444' 
-      : '1px solid rgba(255,255,255,0.2)',
-  }}
-  value={entry.assigned_to || ""} 
-  onChange={e => updateEntry(index, 'assigned_to', e.target.value)}
-  required
->
-  <option value="">Select User *</option>
-  {getFilteredMembersForTaskType('share_link').map(member => (
-    <option key={member.id} value={member.id}>
-      {member.full_name}
-    </option>
-  ))}
-</select>
+                    <div style={{position:'relative'}}>
+                      <button type="button"
+                        onClick={e=>openAssignee(e,`sl-${index}`)}
+                        style={{width:'100%',fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:(entry.assigned_to||[]).length===0?'1px solid #ef4444':'1px solid rgba(255,255,255,0.2)',color:'#fff',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {assigneeLabel(entry.assigned_to)}
+                      </button>
+                      {openAssigneeKey===`sl-${index}`&&(
+                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'rgba(20,20,30,0.98)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto'}}>
+                          {getFilteredMembersForTaskType('share_link').map(u=>(
+                            <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'#fff'}}>
+                              <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
+                                onChange={()=>updateEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
+                              {u.full_name}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <input 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
@@ -1476,27 +1503,24 @@ onClick={(e) => openEditor(entry, index, e)}/>
                       <option value="">Unassigned</option>
                       {getFilteredMembersForTaskType('pause_pid').map(member => <option key={member.id} value={member.id}>{member.full_name}</option>)}
                     </select> */}
-                    <select 
-  className="form-control" 
-  style={{
-    fontSize:11,
-    padding:4,
-    background:'rgba(255,255,255,0.1)',
-    border: !entry.assigned_to 
-      ? '1px solid #ef4444' 
-      : '1px solid rgba(255,255,255,0.2)',
-  }}
-  value={entry.assigned_to || ""} 
-  onChange={e => updatePauseEntry(index, 'assigned_to', e.target.value)}
-  required
->
-  <option value="">Select User *</option>
-  {getFilteredMembersForTaskType('pause_pid').map(member => (
-    <option key={member.id} value={member.id}>
-      {member.full_name}
-    </option>
-  ))}
-</select>
+                    <div style={{position:'relative'}}>
+                      <button type="button"
+                        onClick={e=>openAssignee(e,`pp-${index}`)}
+                        style={{width:'100%',fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:(entry.assigned_to||[]).length===0?'1px solid #ef4444':'1px solid rgba(255,255,255,0.2)',color:'#fff',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {assigneeLabel(entry.assigned_to)}
+                      </button>
+                      {openAssigneeKey===`pp-${index}`&&(
+                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'rgba(20,20,30,0.98)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto'}}>
+                          {getFilteredMembersForTaskType('pause_pid').map(u=>(
+                            <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'#fff'}}>
+                              <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
+                                onChange={()=>updatePauseEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
+                              {u.full_name}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <input 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 

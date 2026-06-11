@@ -496,7 +496,7 @@ function TaskPill({taskRef,onTaskClick}){
 }
 
 /* ── Single bubble ─────────────────────────────────────────── */
-function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQuery}){
+function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQuery,onReplyClick}){
   const {user} = useAuth();
   const [showOptions, setShowOptions] = useState(false);
   const [localReactions, setLocalReactions] = useState(msg.reactions || []);
@@ -568,7 +568,11 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         )}
         
         {msg.reply_content&&(
-          <div className="reply-bubble">
+          <div
+            className="reply-bubble"
+            style={{cursor:'pointer'}}
+            onClick={()=>onReplyClick&&msg.reply_to_id&&onReplyClick(msg.reply_to_id)}
+          >
             <div className="reply-content">
               <span className="reply-label">Replying to {msg.reply_sender_name}</span>
               <span className="reply-text">{msg.reply_content}</span>
@@ -681,7 +685,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
 
   {/* Text Content */}
   <div className="text-content">
-    <div className="message-text">{searchQuery?highlightText(msg.content,searchQuery):msg.content}</div>
+    <div className="message-text">{renderContent(msg.content,searchQuery)}</div>
       <div className="message-time">
             {format(new Date(msg.sent_at), 'HH:mm')}
           </div>
@@ -798,6 +802,34 @@ function highlightText(text,query){
       ?<mark key={i} style={{background:'#ffd700',color:'#000',borderRadius:2,padding:'0 1px'}}>{part}</mark>
       :part
   );
+}
+
+const URL_REGEX = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+
+function renderContent(text, searchQuery) {
+  if (!text) return text;
+  const segments = [];
+  let last = 0, match;
+  URL_REGEX.lastIndex = 0;
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    if (match.index > last) segments.push({ type: 'text', value: text.slice(last, match.index) });
+    segments.push({ type: 'url', value: match[0] });
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) segments.push({ type: 'text', value: text.slice(last) });
+
+  return segments.map((seg, i) => {
+    if (seg.type === 'url') {
+      const href = seg.value.startsWith('www.') ? `https://${seg.value}` : seg.value;
+      return (
+        <a key={i} href={href} target="_blank" rel="noopener noreferrer"
+          style={{color:'#60a5fa',wordBreak:'break-all',textDecoration:'underline'}}>
+          {seg.value}
+        </a>
+      );
+    }
+    return searchQuery ? highlightText(seg.value, searchQuery) : seg.value;
+  });
 }
 
 /* ── Main ──────────────────────────────────────────────────── */
@@ -993,6 +1025,16 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     }
   },[currentMatchIdx,searchMatches]);
 
+  const scrollToMessage = useCallback((messageId) => {
+    const el = matchRefs.current[messageId];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.style.transition = 'outline 0.2s';
+    el.style.outline = '2px solid var(--accent)';
+    el.style.borderRadius = '8px';
+    setTimeout(() => { el.style.outline = ''; }, 1500);
+  }, []);
+
   if(!group)return(<div className="empty-state" style={{flex:1}}><div className="empty-state-icon">💬</div><p>Select a group</p></div>);
 
   // FIX: render a clear UI instead of firing repeated 403 API calls when the
@@ -1090,6 +1132,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
                 group={group}
                 onDeleteMessage={handleDeleteMessage}
                 searchQuery={searchQuery}
+                onReplyClick={scrollToMessage}
               />
             </div>
           </React.Fragment>

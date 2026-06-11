@@ -9,6 +9,15 @@ const { encrypt, decrypt } = require('../utils/encryption');
 const { getTaskAccessFilter } = require('../utils/taskAccess');
 const { formatISTForMySQL, getISTTimestamp } = require('../utils/timezone');
 
+// Normalise assigned_to (string | number | array) → array of numeric IDs, or [null] if empty
+const toAssigneeList = (val) => {
+  const ids = (Array.isArray(val) ? val : (val ? [val] : []))
+    .filter(id => id && id !== 'null' && id !== '')
+    .map(Number)
+    .filter(id => !isNaN(id));
+  return ids.length ? ids : [null];
+};
+
 // Multer for task attachments — same UPLOAD_DIR as messages
 const storage = multer.diskStorage({
   destination:(req,file,cb)=>cb(null,req.app.get('UPLOAD_DIR')||path.resolve('uploads')),
@@ -230,39 +239,40 @@ if (task_type === 'share_link') {
 
   for (const entry of parsedEntries) {
     if (entry.pub_id || entry.pid || entry.link) {
-      const [subR] = await conn.query(
-        `INSERT INTO tasks (
-          group_id,
-          campaign_id,
-          task_type,
-          assigned_to,
-          assigned_by,
-          pub_id,
-          pid,
-          link,
-          note,
-          geo,
-          attachment_url,
-          attachment_name
-        )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [
-          group_id,
-          campaign_id || null,
-          task_type,
-          entry.assigned_to || null,
-          req.user.id,
-          entry.pub_id || null,
-          entry.pid || null,
-          entry.link || null,
-          entry.note || null,
-          entry.geo || null,
-          attachment_url,
-          attachment_name
-        ]
-      );
-
-      subTaskIds.push(subR.insertId);
+      for (const assigneeId of toAssigneeList(entry.assigned_to)) {
+        const [subR] = await conn.query(
+          `INSERT INTO tasks (
+            group_id,
+            campaign_id,
+            task_type,
+            assigned_to,
+            assigned_by,
+            pub_id,
+            pid,
+            link,
+            note,
+            geo,
+            attachment_url,
+            attachment_name
+          )
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            group_id,
+            campaign_id || null,
+            task_type,
+            assigneeId,
+            req.user.id,
+            entry.pub_id || null,
+            entry.pid || null,
+            entry.link || null,
+            entry.note || null,
+            entry.geo || null,
+            attachment_url,
+            attachment_name
+          ]
+        );
+        subTaskIds.push(subR.insertId);
+      }
     }
   }
 
@@ -274,9 +284,8 @@ if (task_type === 'share_link') {
     subTaskIds
   );
 
-    const assignees = [...new Set(parsedEntries
-  .filter(e => e.assigned_to && e.assigned_to !== 'null')
-  .map(e => e.assigned_to)
+    const assignees = [...new Set(
+  parsedEntries.flatMap(e => toAssigneeList(e.assigned_to)).filter(Boolean)
 )];
  let assigneeText = '';
 
@@ -304,41 +313,20 @@ if (assignees.length > 0) {
 // REPLACE with (for multi-assignee blocks: share_link, pause_pid, optimise):
 
 const taskAssigneeIds = [...new Set(
-  parsedEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
+  parsedEntries
     .filter(e => e.assigned_to && e.assigned_to !== 'null')
     .map(e => Number(e.assigned_to))
 )];
-// const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
-
-// const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
-
-// const taskAssigneeIds = [...new Set(
-//   parsedEntries   // ⚠️ change based on block
-//     .filter(e => e.assigned_to && e.assigned_to !== 'null')
-//     .map(e => Number(e.assigned_to))
-// )];
 
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
 
-const messageIds = [];
-
-for (const assigneeId of taskAssigneeIds) {
-  const [mRes] = await db.query(
-    `INSERT INTO messages 
-     (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-     VALUES(?,?,'task_notification',?,?,?,?)`,
-    [
-      group_id,
-      req.user.id,
-      encrypted,
-      iv,
-      taskRefId,
-      assigneeId
-    ]
-  );
-
-  messageIds.push({ messageId: mRes.insertId, recipientId: assigneeId });
-}
+const [mRes] = await db.query(
+  `INSERT INTO messages
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+   VALUES(?,?,'task_notification',?,?,?,NULL)`,
+  [group_id, req.user.id, encrypted, iv, taskRefId]
+);
+const messageIds = [{ messageId: mRes.insertId }];
 
 
 
@@ -429,40 +417,40 @@ if (task_type === 'pause_pid') {
 
   for (const entry of parsedPauseEntries) {
     if (entry.pub_id || entry.pid || entry.pause_reason) {
-      const [subR] = await db.query(
-        `INSERT INTO tasks (
-          group_id,
-          campaign_id,
-          task_type,
-          assigned_to,
-          assigned_by,
-          pub_id,
-          pid,
-          link,
-          geo,
-          pause_reason,
-          attachment_url,
-          attachment_name
-        )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [
-          group_id,
-          campaign_id || null,
-          task_type,
-          entry.assigned_to || null,
-          req.user.id,
-          entry.pub_id || null,
-          entry.pid || null,
-          null,
-                    entry.geo || null,
-
-          entry.pause_reason || null,
-          attachment_url,
-          attachment_name
-        ]
-      );
-
-      subTaskIds.push(subR.insertId);
+      for (const assigneeId of toAssigneeList(entry.assigned_to)) {
+        const [subR] = await db.query(
+          `INSERT INTO tasks (
+            group_id,
+            campaign_id,
+            task_type,
+            assigned_to,
+            assigned_by,
+            pub_id,
+            pid,
+            link,
+            geo,
+            pause_reason,
+            attachment_url,
+            attachment_name
+          )
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            group_id,
+            campaign_id || null,
+            task_type,
+            assigneeId,
+            req.user.id,
+            entry.pub_id || null,
+            entry.pid || null,
+            null,
+            entry.geo || null,
+            entry.pause_reason || null,
+            attachment_url,
+            attachment_name
+          ]
+        );
+        subTaskIds.push(subR.insertId);
+      }
     }
   }
 
@@ -474,9 +462,8 @@ if (task_type === 'pause_pid') {
     subTaskIds
   );
 
-  const assignees = [...new Set(parsedPauseEntries
-  .filter(e => e.assigned_to && e.assigned_to !== 'null')
-  .map(e => e.assigned_to)
+  const assignees = [...new Set(
+  parsedPauseEntries.flatMap(e => toAssigneeList(e.assigned_to)).filter(Boolean)
 )];
 
 
@@ -520,26 +507,13 @@ const taskAssigneeIds = [...new Set(
 
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
 
-const messageIds = [];
-
-for (const assigneeId of taskAssigneeIds) {
-  const [mRes] = await db.query(
-    `INSERT INTO messages 
-     (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-     VALUES(?,?,'task_notification',?,?,?,?)`,
-    [
-      group_id,
-      req.user.id,
-      encrypted,
-      iv,
-      taskRefId,
-      assigneeId
-    ]
-  );
-
-  messageIds.push({ messageId: mRes.insertId, recipientId: assigneeId });
-}
-const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
+const [mRes] = await db.query(
+  `INSERT INTO messages
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+   VALUES(?,?,'task_notification',?,?,?,NULL)`,
+  [group_id, req.user.id, encrypted, iv, taskRefId]
+);
+const messageIds = [{ messageId: mRes.insertId }];
 
 // const [mRes] = await db.query(
 //   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
@@ -733,59 +707,52 @@ if (task_type === 'optimise') {
   let subTaskIds = [];
 
   for (const entry of parsedOptimiseEntries) {
-
     if (
-      entry.pub_id || 
-      entry.pid || 
-      entry.fp || 
-      entry.fa || 
-      entry.f1 || 
-      entry.f2 || 
-      entry.optimise_scenario
+      entry.pub_id || entry.pid || entry.fp ||
+      entry.fa || entry.f1 || entry.f2 || entry.optimise_scenario
     ) {
-   
-      const [subR] = await db.query(
-        `INSERT INTO tasks (
-          group_id,
-          campaign_id,
-          task_type,
-          assigned_to,
-          assigned_by,
-          pub_id,
-          pid,
-          link,
-          fp,
-          fa,
-          f1,
-          f2,
-          optimise_scenario,
-          note,
-          attachment_url,
-          attachment_name
-        )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [
-          group_id,
-          campaign_id || null,
-          task_type,
-          entry.assigned_to || null,
-          req.user.id,
-          entry.pub_id || null,
-          entry.pid || null,
-          null,
-          entry.fp ? entry.fp : null,
-          entry.fa ? entry.fa : null,
-          entry.f1 ? entry.f1 : null,
-          entry.f2 ? entry.f2 : null,
-          entry.optimise_scenario || null,
-          entry.note || null,
-          // ✅ FIX: USE entry.attachment and entry.attachment_name (NOT req.file)
-          entry.attachment ? `/uploads/${entry.attachment}` : null,
-          entry.attachment_name || null
-        ]
-      );
-
-      subTaskIds.push(subR.insertId);
+      for (const assigneeId of toAssigneeList(entry.assigned_to)) {
+        const [subR] = await db.query(
+          `INSERT INTO tasks (
+            group_id,
+            campaign_id,
+            task_type,
+            assigned_to,
+            assigned_by,
+            pub_id,
+            pid,
+            link,
+            fp,
+            fa,
+            f1,
+            f2,
+            optimise_scenario,
+            note,
+            attachment_url,
+            attachment_name
+          )
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            group_id,
+            campaign_id || null,
+            task_type,
+            assigneeId,
+            req.user.id,
+            entry.pub_id || null,
+            entry.pid || null,
+            null,
+            entry.fp || null,
+            entry.fa || null,
+            entry.f1 || null,
+            entry.f2 || null,
+            entry.optimise_scenario || null,
+            entry.note || null,
+            entry.attachment ? `/uploads/${entry.attachment}` : null,
+            entry.attachment_name || null
+          ]
+        );
+        subTaskIds.push(subR.insertId);
+      }
     }
   }
 
@@ -802,9 +769,8 @@ if (task_type === 'optimise') {
     e => e.pub_id || e.pid || e.fp || e.fa || e.f1 || e.f2 || e.optimise_scenario
   ).length;
 
-const assignees = [...new Set(parsedOptimiseEntries
-  .filter(e => e.assigned_to && e.assigned_to !== 'null')
-  .map(e => e.assigned_to)
+const assignees = [...new Set(
+  parsedOptimiseEntries.flatMap(e => toAssigneeList(e.assigned_to)).filter(Boolean)
 )];
  let assigneeText = '';
 
@@ -841,26 +807,13 @@ const taskAssigneeIds = [...new Set(
 
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
 
-const messageIds = [];
-
-for (const assigneeId of taskAssigneeIds) {
-  const [mRes] = await db.query(
-    `INSERT INTO messages 
-     (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-     VALUES(?,?,'task_notification',?,?,?,?)`,
-    [
-      group_id,
-      req.user.id,
-      encrypted,
-      iv,
-      taskRefId,
-      assigneeId
-    ]
-  );
-
-  messageIds.push({ messageId: mRes.insertId, recipientId: assigneeId });
-}
-const recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
+const [mRes] = await db.query(
+  `INSERT INTO messages
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
+   VALUES(?,?,'task_notification',?,?,?,NULL)`,
+  [group_id, req.user.id, encrypted, iv, taskRefId]
+);
+const messageIds = [{ messageId: mRes.insertId }];
 
 // const [mRes] = await db.query(
 //   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
