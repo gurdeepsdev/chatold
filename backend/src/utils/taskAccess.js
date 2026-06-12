@@ -185,7 +185,7 @@ if (role === 'operations') {
       const [pubExecs] = await crmDb.query(
         `SELECT l.id FROM login l 
          INNER JOIN manager_subadmins m ON l.id = m.sub_admin_id
-         WHERE m.manager_id IN (${placeholders}) AND l.role = 'pub_executive'`,
+         WHERE m.manager_id IN (${placeholders}) AND l.role IN ('pub_executive', 'optimization')`,
         publisherIds
       );
       
@@ -224,7 +224,7 @@ if (role === 'operations') {
     const [pubExecs] = await crmDb.query(
       `SELECT l.id FROM login l 
        INNER JOIN manager_subadmins m ON l.id = m.sub_admin_id
-       WHERE m.manager_id = ? AND l.role = 'pub_executive'`,
+       WHERE m.manager_id = ? AND l.role IN ('pub_executive', 'optimization')`,
       [userId]
     );
     
@@ -351,7 +351,7 @@ const canViewAction = (userRole, action) => {
     'pause_pid': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin'],
     
     // Raise Request  
-    'raise_request': ['pub_executive', 'publisher', 'publisher_manager', 'admin'],
+    'raise_request': ['pub_executive', 'optimization', 'publisher', 'publisher_manager', 'admin'],
     
     // Optimize (visible to all)
     'optimize': ['pub_executive', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin']

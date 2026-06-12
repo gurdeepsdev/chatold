@@ -111,12 +111,13 @@ export default function CreateGroupModal({ onClose, onCreated }) {
               const allUsers = authResponse.users || [];
               setUsers(allUsers);
             }
-          } else if (user?.role === 'pub_executive' || user?.role === 'publisher') {
-            // Publisher side: pub_executive, publisher
+          } else if (user?.role === 'pub_executive' || user?.role === 'optimization' || user?.role === 'publisher') {
+            // Publisher side: pub_executive, optimization, publisher
             try {
               const response = await groupsAPI.getUsersByRoles();
               const publisherUsers = [
                 ...response.users_by_role.publisher_side.pub_executive,
+                ...(response.users_by_role.optimization || []),
                 ...response.users_by_role.publisher_side.publisher
               ];
               setUsers(publisherUsers);
@@ -130,13 +131,14 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                   adv_executive: [],
                   advertiser: [],
                   advertiser_manager: []
-                }
+                },
+                optimization: response.users_by_role.optimization || []
               });
             } catch (groupsError) {
               const authResponse = await authAPI.getUsers();
               const allUsers = authResponse.users || [];
-              const publisherUsers = allUsers.filter(u => 
-                u.role === 'pub_executive' || u.role === 'publisher'
+              const publisherUsers = allUsers.filter(u =>
+                u.role === 'pub_executive' || u.role === 'optimization' || u.role === 'publisher'
               );
               setUsers(publisherUsers);
             }

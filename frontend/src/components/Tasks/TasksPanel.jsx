@@ -43,6 +43,7 @@ const OPTIMISE_FIELDS = {
   publisher: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   publisher_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   pub_executive: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
+  optimization: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note']
 };
 
@@ -277,7 +278,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
       case 'pause_pid':
         // Show only publisher and publisher_manager (excluding current user)
         return members.filter(member => 
-          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive') &&
+          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive' || member.role === 'optimization') &&
           member.id !== user?.id
         );
       

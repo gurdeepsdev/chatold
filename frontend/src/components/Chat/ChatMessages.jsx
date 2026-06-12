@@ -471,6 +471,13 @@ function ft(d){return format(new Date(d),'HH:mm');}
 function fs(b){if(!b)return'';if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB';}
 function fi(m){if(!m)return'📄';if(m.startsWith('image/'))return'🖼️';if(m.startsWith('audio/'))return'🎵';if(m.includes('pdf'))return'📕';if(m.includes('sheet')||m.includes('excel')||m.includes('csv'))return'📊';if(m.includes('word'))return'📝';if(m.includes('zip'))return'🗜️';return'📎';}
 
+function parseMsgContent(content) {
+  if (!content) return { prefix: null, text: content };
+  const match = content.match(/^(📤[^:]+):\s*([\s\S]*)$/);
+  if (!match) return { prefix: null, text: content };
+  return { prefix: match[1].trim(), text: match[2] };
+}
+
 /* ── localStorage "last seen" tracker ───────────────────────── */
 // Stores the sent_at timestamp of the newest message the user has loaded
 // per group. On next open, any message newer than this (by others) is unread.
@@ -511,7 +518,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   }, [msg.reactions]);
   
   const handleCopy = () => {
-    const textToCopy = msg.content;
+    const textToCopy = parseMsgContent(msg.content).text;
     navigator.clipboard.writeText(textToCopy).then(() => {
       toast.success('Message copied to clipboard!');
     }).catch(() => {
@@ -685,7 +692,19 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
 
   {/* Text Content */}
   <div className="text-content">
-    <div className="message-text">{renderContent(msg.content,searchQuery)}</div>
+    {(() => {
+      const { prefix, text } = parseMsgContent(msg.content);
+      return (
+        <>
+          {prefix && (
+            <div style={{fontSize:11,fontWeight:600,opacity:0.6,marginBottom:3,letterSpacing:'0.02em'}}>
+              {prefix}
+            </div>
+          )}
+          <div className="message-text">{renderContent(text, searchQuery)}</div>
+        </>
+      );
+    })()}
       <div className="message-time">
             {format(new Date(msg.sent_at), 'HH:mm')}
           </div>

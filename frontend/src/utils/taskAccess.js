@@ -5,13 +5,13 @@ export const canViewAction = (userRole, action) => {
   const visibilityRules = {
     // Share Link & Pause PID
     'share_link': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'admin'],
-    'pause_pid': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'admin'],
+    'pause_pid': ['adv_executive', 'optimization', 'advertiser', 'advertiser_manager', 'operations', 'admin'],
     
     // Raise Request  
-    'raise_request': ['pub_executive', 'publisher', 'publisher_manager', 'admin'],
-    
+    'raise_request': ['pub_executive', 'optimization', 'publisher', 'publisher_manager', 'admin'],
+
     // Optimize (visible to all) - using British spelling to match TASK_TYPES
-    'optimise': ['pub_executive', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'admin']
+    'optimise': ['pub_executive', 'optimization', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'admin']
   };
   
   const allowedRoles = visibilityRules[action] || [];
