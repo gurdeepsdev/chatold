@@ -322,9 +322,9 @@ const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
 
 const [mRes] = await db.query(
   `INSERT INTO messages
-   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-   VALUES(?,?,'task_notification',?,?,?,NULL)`,
-  [group_id, req.user.id, encrypted, iv, taskRefId]
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids)
+   VALUES(?,?,'task_notification',?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskRefId, taskAssigneeIds.length > 0 ? JSON.stringify(taskAssigneeIds) : null]
 );
 const messageIds = [{ messageId: mRes.insertId }];
 
@@ -509,9 +509,9 @@ const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
 
 const [mRes] = await db.query(
   `INSERT INTO messages
-   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-   VALUES(?,?,'task_notification',?,?,?,NULL)`,
-  [group_id, req.user.id, encrypted, iv, taskRefId]
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids)
+   VALUES(?,?,'task_notification',?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskRefId, taskAssigneeIds.length > 0 ? JSON.stringify(taskAssigneeIds) : null]
 );
 const messageIds = [{ messageId: mRes.insertId }];
 
@@ -809,9 +809,9 @@ const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
 
 const [mRes] = await db.query(
   `INSERT INTO messages
-   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-   VALUES(?,?,'task_notification',?,?,?,NULL)`,
-  [group_id, req.user.id, encrypted, iv, taskRefId]
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids)
+   VALUES(?,?,'task_notification',?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskRefId, taskAssigneeIds.length > 0 ? JSON.stringify(taskAssigneeIds) : null]
 );
 const messageIds = [{ messageId: mRes.insertId }];
 

@@ -3045,7 +3045,7 @@ router.get('/unread-counts', auth, async (req, res) => {
       WHERE m.group_id IN (${placeholders})
 
       AND (
-        m.recipient_id IS NULL
+        (m.recipient_id IS NULL AND m.message_type != 'task_notification')
         OR m.recipient_id = ?
         OR m.secondary_recipient_id = ?
         OR (m.recipient_ids IS NOT NULL AND JSON_CONTAINS(m.recipient_ids, CAST(? AS JSON)))
