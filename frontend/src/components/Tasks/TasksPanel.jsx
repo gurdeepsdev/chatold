@@ -43,6 +43,7 @@ const OPTIMISE_FIELDS = {
   publisher: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   publisher_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   pub_executive: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
+  optimization: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note']
 };
 
@@ -277,7 +278,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
       case 'pause_pid':
         // Show only publisher and publisher_manager (excluding current user)
         return members.filter(member => 
-          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive') &&
+          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive' || member.role === 'optimization') &&
           member.id !== user?.id
         );
       
@@ -452,13 +453,13 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
                       <div key="assigned_to" style={{position:'relative'}}>
                         <button type="button"
                           onClick={e=>openAssignee(e,`opt-${entryIndex}`)}
-                          style={{width:'100%',fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:(entry.assigned_to||[]).length===0?'1px solid #ef4444':'1px solid rgba(255,255,255,0.2)',color:'#fff',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          style={{width:'100%',fontSize:11,padding:4,background:'var(--bg-hover)',border:(entry.assigned_to||[]).length===0?'1px solid #ef4444':'1px solid var(--border)',color:'var(--text-primary)',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                           {assigneeLabel(entry.assigned_to)}
                         </button>
                         {openAssigneeKey===`opt-${entryIndex}`&&(
-                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'rgba(20,20,30,0.98)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto'}}>
+                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto',boxShadow:'0 4px 16px rgba(0,0,0,0.15)'}}>
                             {getFilteredMembersForTaskType('optimise').map(u=>(
-                              <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'#fff'}}>
+                              <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'var(--text-primary)'}}>
                                 <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
                                   onChange={()=>updateOptimiseEntry(entryIndex,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
                                 {u.full_name}
@@ -1287,13 +1288,13 @@ const saveLink = () => {
                     <div style={{position:'relative'}}>
                       <button type="button"
                         onClick={e=>openAssignee(e,`sl-${index}`)}
-                        style={{width:'100%',fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:(entry.assigned_to||[]).length===0?'1px solid #ef4444':'1px solid rgba(255,255,255,0.2)',color:'#fff',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        style={{width:'100%',fontSize:11,padding:4,background:'var(--bg-hover)',border:(entry.assigned_to||[]).length===0?'1px solid #ef4444':'1px solid var(--border)',color:'var(--text-primary)',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                         {assigneeLabel(entry.assigned_to)}
                       </button>
                       {openAssigneeKey===`sl-${index}`&&(
-                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'rgba(20,20,30,0.98)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto'}}>
+                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto',boxShadow:'0 4px 16px rgba(0,0,0,0.15)'}}>
                           {getFilteredMembersForTaskType('share_link').map(u=>(
-                            <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'#fff'}}>
+                            <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'var(--text-primary)'}}>
                               <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
                                 onChange={()=>updateEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
                               {u.full_name}
@@ -1506,13 +1507,13 @@ onClick={(e) => openEditor(entry, index, e)}/>
                     <div style={{position:'relative'}}>
                       <button type="button"
                         onClick={e=>openAssignee(e,`pp-${index}`)}
-                        style={{width:'100%',fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:(entry.assigned_to||[]).length===0?'1px solid #ef4444':'1px solid rgba(255,255,255,0.2)',color:'#fff',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        style={{width:'100%',fontSize:11,padding:4,background:'var(--bg-hover)',border:(entry.assigned_to||[]).length===0?'1px solid #ef4444':'1px solid var(--border)',color:'var(--text-primary)',borderRadius:4,cursor:'pointer',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                         {assigneeLabel(entry.assigned_to)}
                       </button>
                       {openAssigneeKey===`pp-${index}`&&(
-                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'rgba(20,20,30,0.98)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto'}}>
+                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto',boxShadow:'0 4px 16px rgba(0,0,0,0.15)'}}>
                           {getFilteredMembersForTaskType('pause_pid').map(u=>(
-                            <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'#fff'}}>
+                            <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'var(--text-primary)'}}>
                               <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
                                 onChange={()=>updatePauseEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
                               {u.full_name}

@@ -124,8 +124,8 @@ const getUserAssignmentInfo = async (crmDb, db, userId, targetUserId) => {
       assignments.forEach(a => managerIds.add(a.manager_id));
     }
     
-    // Add target user's managers if they are pub_executive or adv_executive
-    if (targetUserRole === 'pub_executive' || targetUserRole === 'adv_executive') {
+    // Add target user's managers if they are pub_executive, optimization, or adv_executive
+    if (targetUserRole === 'pub_executive' || targetUserRole === 'optimization' || targetUserRole === 'adv_executive') {
       console.log(`CC Debug: Target user ${targetUserId} has role ${targetUserRole} - adding hierarchy`);
       
       const [targetUserAssignments] = await crmDb.query(
