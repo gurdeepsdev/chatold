@@ -503,7 +503,7 @@ function TaskPill({taskRef,onTaskClick}){
 }
 
 /* ── Single bubble ─────────────────────────────────────────── */
-function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQuery,onReplyClick}){
+function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQuery,onReplyClick,onImageClick}){
   const {user} = useAuth();
   const [showOptions, setShowOptions] = useState(false);
   const [localReactions, setLocalReactions] = useState(msg.reactions || []);
@@ -633,17 +633,13 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         src={fileUrl}
         alt="Shared image"
         loading="lazy"
+        style={{cursor:'zoom-in'}}
         onClick={(e) => {
           e.stopPropagation();
           const storedFilename = (msg.file_url || '').split('/').pop();
           const nameParam = encodeURIComponent(msg.file_name || storedFilename);
           const downloadUrl = `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
-          const link = document.createElement('a');
-          link.href = downloadUrl;
-          link.download = msg.file_name || storedFilename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
+          onImageClick?.({ url: fileUrl, name: msg.file_name || storedFilename, downloadUrl });
         }}
       />
     </div>
@@ -868,6 +864,13 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   const [accessRevoked,setAccessRevoked]=useState(false);
   const [isDragging,setIsDragging]=useState(false);
   const [dropBatch,setDropBatch]=useState(null);
+  const [previewImage,setPreviewImage]=useState(null); // {url, name, downloadUrl}
+  useEffect(()=>{
+    if(!previewImage)return;
+    const onKey=(e)=>{if(e.key==='Escape')setPreviewImage(null);};
+    document.addEventListener('keydown',onKey);
+    return()=>document.removeEventListener('keydown',onKey);
+  },[previewImage]);
   const dragCounterRef=useRef(0);
 
   const bottomRef=useRef(null);
@@ -1100,6 +1103,49 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      {/* ── Image preview lightbox ── */}
+      {previewImage && (
+        <div
+          onClick={()=>setPreviewImage(null)}
+          className="image-preview-overlay"
+        >
+          <img
+            src={previewImage.url}
+            alt={previewImage.name}
+            onClick={e=>e.stopPropagation()}
+            style={{
+              maxWidth:'90vw',maxHeight:'80vh',
+              borderRadius:8,objectFit:'contain',
+              boxShadow:'0 8px 40px rgba(0,0,0,0.7)',
+            }}
+          />
+          <div style={{display:'flex',gap:12}} onClick={e=>e.stopPropagation()}>
+            <a
+              href={previewImage.downloadUrl}
+              download={previewImage.name}
+              style={{
+                padding:'8px 20px',borderRadius:8,
+                background:'#4f7dff',color:'#fff',
+                fontWeight:600,fontSize:13,textDecoration:'none',
+                display:'flex',alignItems:'center',gap:6,
+              }}
+            >
+              ⬇ Download
+            </a>
+            <button
+              onClick={()=>setPreviewImage(null)}
+              style={{
+                padding:'8px 20px',borderRadius:8,
+                background:'var(--bg-secondary)',color:'var(--text-primary)',
+                fontWeight:600,fontSize:13,border:'1px solid var(--border)',
+                cursor:'pointer',
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
       {isDragging&&(
         <div className="drop-overlay">
           <div className="drop-overlay-content">
@@ -1152,6 +1198,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
                 onDeleteMessage={handleDeleteMessage}
                 searchQuery={searchQuery}
                 onReplyClick={scrollToMessage}
+                onImageClick={setPreviewImage}
               />
             </div>
           </React.Fragment>
