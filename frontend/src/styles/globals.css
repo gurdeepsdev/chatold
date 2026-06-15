@@ -923,6 +923,22 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 .file-message:hover { background: var(--bg-hover); border-color: var(--accent-border); }
 
+/* ── Image preview lightbox ── */
+.image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+}
+[data-theme="light"] .image-preview-overlay {
+  background: rgba(0, 0, 0, 0.6);
+}
+
 /* ── Notification drop animation ── */
 @keyframes notif-drop {
   from { opacity:0; transform:translateY(-16px) scale(.94); }
