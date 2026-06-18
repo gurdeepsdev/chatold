@@ -792,6 +792,67 @@ export default function Sidebar({ selectedGroupId, onSelectGroup,onUnreadCountsC
   const [unreadCounts, setUnreadCounts] = useState({});
   const [groupLastUnreadTime, setGroupLastUnreadTime] = useState({});
 
+  // Draft indicator: track which groups have a saved chat draft
+  const [draftGroupIds, setDraftGroupIds] = useState(() => new Set());
+
+  // Seed from localStorage whenever user?.id becomes available (e.g. after auth resolves)
+  useEffect(() => {
+    if (!user?.id) return;
+    const prefix = `chat_draft_${user.id}_`;
+    setDraftGroupIds(new Set(
+      Object.keys(localStorage)
+        .filter(k => k.startsWith(prefix))
+        .map(k => parseInt(k.replace(prefix, '')))
+        .filter(id => !isNaN(id))
+    ));
+  }, [user?.id]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const gId = Number(e.detail?.groupId);
+      if (!gId || !user?.id) return;
+      const hasDraft = !!localStorage.getItem(`chat_draft_${user.id}_${gId}`);
+      setDraftGroupIds(prev => {
+        const next = new Set(prev);
+        if (hasDraft) next.add(gId);
+        else next.delete(gId);
+        return next;
+      });
+    };
+    window.addEventListener('chat-draft-changed', handler);
+    return () => window.removeEventListener('chat-draft-changed', handler);
+  }, [user?.id]);
+
+  // Task draft indicator
+  const [taskDraftGroupIds, setTaskDraftGroupIds] = useState(() => new Set());
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const prefix = `task_draft_${user.id}_`;
+    setTaskDraftGroupIds(new Set(
+      Object.keys(localStorage)
+        .filter(k => k.startsWith(prefix))
+        .map(k => parseInt(k.replace(prefix, '')))
+        .filter(id => !isNaN(id))
+    ));
+  }, [user?.id]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const gId = Number(e.detail?.groupId);
+      if (!gId || !user?.id) return;
+      const hasDraft = !!localStorage.getItem(`task_draft_${user.id}_${gId}`);
+      setTaskDraftGroupIds(prev => {
+        const next = new Set(prev);
+        if (hasDraft) next.add(gId);
+        else next.delete(gId);
+        return next;
+      });
+    };
+    window.addEventListener('task-draft-changed', handler);
+    return () => window.removeEventListener('task-draft-changed', handler);
+  }, [user?.id]);
+
   // FIX 1: Stable position ref — only updated when a NEW message arrives,
   // never when a message is read. This prevents re-ordering on read.
   const stablePositionRef = useRef({});
@@ -1675,6 +1736,12 @@ const unpinnedGroupItems = groups
       <div className="group-info">
         <div className="group-name">{group.group_name}</div>
         <div className="group-meta">
+          {draftGroupIds.has(group.id) && selectedGroupId !== group.id && (
+            <span style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 11, marginRight: 4 }}>✏️ Draft</span>
+          )}
+          {taskDraftGroupIds.has(group.id) && selectedGroupId !== group.id && (
+            <span style={{ color: '#f59e0b', fontWeight: 600, fontSize: 11, marginRight: 4 }}>📋 Task</span>
+          )}
           {group.campaign_status && (
             <span className={`badge badge-${group.campaign_status === 'active' ? 'live' : 'paused'}`} style={{ marginRight: 4 }}>
               {group.campaign_status}

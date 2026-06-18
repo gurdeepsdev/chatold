@@ -510,6 +510,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [onDeleteMessageState, setOnDeleteMessageState] = useState(null);
+  const [reactionPopup, setReactionPopup] = useState(null);
   const messageRef = useRef(null);
   
   // Sync local reactions with message reactions when they change
@@ -517,10 +518,13 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
     setLocalReactions(msg.reactions || []);
   }, [msg.reactions]);
   
+  const [copied, setCopied] = useState(false);
+
   const handleCopy = () => {
     const textToCopy = parseMsgContent(msg.content).text;
     navigator.clipboard.writeText(textToCopy).then(() => {
-      toast.success('Message copied to clipboard!');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
       toast.error('Failed to copy message');
     });
@@ -547,7 +551,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         setLocalReactions(prev => prev.filter(r => !(r.user_id === user?.id && r.emoji === emoji)));
       } else {
         await messagesAPI.addReaction(group.id, msg.id, emoji);
-        setLocalReactions(prev => [...prev.filter(r => !(r.user_id === user?.id)), { user_id: user?.id, emoji }]);
+        setLocalReactions(prev => [...prev.filter(r => !(r.user_id === user?.id && r.emoji === emoji)), { user_id: user?.id, emoji, user_name: user?.full_name || 'You' }]);
       }
     } catch (error) {
       toast.error('Failed to add reaction');
@@ -713,16 +717,51 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         {/* Reactions */}
         {!msg.is_deleted && localReactions.length > 0 && (
           <div className="reactions-bar">
-            {localReactions.map((reaction, index) => (
-              <div
-                key={index}
-                className={`reaction-item ${reaction.user_id === user?.id ? 'own-reaction' : ''}`}
-                onClick={() => handleReaction(reaction.emoji)}
-              >
-                <span className="reaction-emoji">{reaction.emoji}</span>
-                <span className="reaction-count">{reaction.count || 1}</span>
+            {Object.entries(
+              localReactions.reduce((acc, r) => {
+                if (!acc[r.emoji]) acc[r.emoji] = [];
+                acc[r.emoji].push(r);
+                return acc;
+              }, {})
+            ).map(([emoji, reactors]) => {
+              const isOwn = reactors.some(r => r.user_id === user?.id);
+              return (
+                <div
+                  key={emoji}
+                  className={`reaction-item ${isOwn ? 'own-reaction' : ''}`}
+                  onClick={() => handleReaction(emoji)}
+                  onMouseEnter={e => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setReactionPopup({ names: reactors.map(r => r.user_name || 'User'), rect });
+                  }}
+                  onMouseLeave={() => setReactionPopup(null)}
+                >
+                  <span className="reaction-emoji">{emoji}</span>
+                  <span className="reaction-count">{reactors.length}</span>
+                </div>
+              );
+            })}
+            {reactionPopup && (
+              <div style={{
+                position: 'fixed',
+                bottom: window.innerHeight - reactionPopup.rect.top + 6,
+                left: reactionPopup.rect.left + reactionPopup.rect.width / 2,
+                transform: 'translateX(-50%)',
+                zIndex: 9999,
+                background: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 8,
+                padding: '5px 10px',
+                fontSize: 12,
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+                pointerEvents: 'none',
+              }}>
+                {reactionPopup.names.join(', ')}
               </div>
-            ))}
+            )}
           </div>
         )}
 
@@ -766,8 +805,8 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
               onClick={(e) => e.stopPropagation()} // prevent closing
 >
             <button className="option-btn" onClick={(e) => { e.stopPropagation(); handleCopy(); }}>
-              <span className="option-icon">📋</span>
-              <span className="option-text">Copy</span>
+              <span className="option-icon">{copied ? '✅' : '📋'}</span>
+              <span className="option-text">{copied ? 'Copied!' : 'Copy'}</span>
             </button>
             {/* <button className="option-btn" onClick={(e) => { e.stopPropagation(); setShowForwardModal(true); }}>
               <span className="option-icon">↗️</span>

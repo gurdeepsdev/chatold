@@ -133,7 +133,7 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
     await conn.beginTransaction();
     const b=req.body;
     const{group_id,campaign_id,task_type,description,assigned_to,
-          pub_id,pid,link,pause_reason,request_type,request_details,
+          pub_id,pid,link,pause_reason,request_type,request_details,cap_management,
           fp,f1,f2,optimise_scenario,due_date,entries,pause_entries,optimise_entries}=b;
 
     // Only group_id and task_type are required - NO TITLE VALIDATION
@@ -201,6 +201,7 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
           assigned_by,
           request_type,
           request_details,
+          cap_management,
           pub_id,
           pid,
           fp,
@@ -210,7 +211,7 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
           attachment_url,
           attachment_name
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           group_id,
           campaign_id || null,
@@ -220,6 +221,7 @@ router.post('/',auth,upload.single('attachment'),async(req,res)=>{
           req.user.id,
           request_type || null,
           request_details || null,
+          cap_management || null,
           pub_id || null,
           pid || null,
           fp || null,
@@ -430,10 +432,11 @@ if (task_type === 'pause_pid') {
             link,
             geo,
             pause_reason,
+            note,
             attachment_url,
             attachment_name
           )
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             group_id,
             campaign_id || null,
@@ -445,6 +448,7 @@ if (task_type === 'pause_pid') {
             null,
             entry.geo || null,
             entry.pause_reason || null,
+            entry.note || null,
             attachment_url,
             attachment_name
           ]

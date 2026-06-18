@@ -10,7 +10,8 @@ ALTER TABLE tasks
   ADD COLUMN IF NOT EXISTS f2              VARCHAR(100) NULL,
   ADD COLUMN IF NOT EXISTS optimise_scenario VARCHAR(200) NULL,
   ADD COLUMN IF NOT EXISTS attachment_url  VARCHAR(500) NULL,
-  ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255) NULL;
+  ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255) NULL,
+  ADD COLUMN IF NOT EXISTS cap_management  VARCHAR(100) NULL;
 
 -- tasks: add 'optimise' to task_type enum
 ALTER TABLE tasks MODIFY COLUMN task_type ENUM(

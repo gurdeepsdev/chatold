@@ -20,7 +20,7 @@ export const TASK_TYPES={
 
 export const PAUSE_SCENARIOS=[
   'Low Quality Traffic','Fraud Detected','Budget Exhausted',
-  'Geo Mismatch','KPI Not Met','Technical Issue','Advertiser Request','Other'
+  'Geo Mismatch','KPI Not Met','Technical Issue','Advertiser Request','Other', 'Not Live'
 ];
 
 export const REQUEST_TYPES=['geo','budget','creative','technical','other'];
@@ -47,6 +47,28 @@ const OPTIMISE_FIELDS = {
   am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note']
 };
 
+const taskDraftKey = (userId, groupId) => `task_draft_${userId}_${groupId}`;
+
+const serializeForm = (form) => {
+  const clean = { ...form };
+  if (clean.attachment instanceof File) clean.attachment = null;
+  clean.optimise_entries = (clean.optimise_entries || []).map(e => {
+    const ec = { ...e };
+    if (ec.attachment instanceof File) ec.attachment = null;
+    return ec;
+  });
+  return clean;
+};
+
+const isDirtyForm = (form) => {
+  if (form.description?.trim()) return true;
+  if (form.request_details?.trim()) return true;
+  if ((form.entries || []).some(e => e.pub_id || e.pid || e.link || e.assigned_to?.length)) return true;
+  if ((form.pause_entries || []).some(e => e.pub_id || e.pid || e.pause_reason || e.assigned_to?.length)) return true;
+  if ((form.optimise_entries || []).some(e => e.pub_id || e.pid || e.fp || e.fa || e.optimise_scenario || e.assigned_to?.length)) return true;
+  return false;
+};
+
 const emptyForm=(userRole, type=null)=>{
   // If no type specified, use the first available task type for the user's role
   if (!type) {
@@ -57,10 +79,10 @@ const emptyForm=(userRole, type=null)=>{
   return({
     task_type:type, description:'',
     entries: [{ pub_id:'', pid:'', link:'', assigned_to:[], note:'' , geo:''}],
-    pause_entries: [{ pub_id:'', pid:'', assigned_to:[], pause_reason:'',geo:'' }],
+    pause_entries: [{ pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'', note:'' }],
     optimise_entries: [{
       assigned_to:[], pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:''
-    }],  pause_reason:'', request_type:'geo', request_details:'',
+    }],  pause_reason:'', request_type:'geo', request_details:'', cap_management:'',
     fp:'', f1:'', f2:'', optimise_scenario:'', attachment:null,
   });
 };
@@ -124,11 +146,12 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
             <div style={{background:'var(--bg-active)',borderRadius:8,padding:'8px 10px',marginBottom:8,fontSize:12}}>
               {task.pub_id&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>PubID: </span><code style={{color:'var(--accent)'}}>{task.pub_id}</code></div>}
               {task.pid&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>PID: </span><code style={{color:'var(--accent)'}}>{task.pid}</code></div>}
-              {task.link&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>Link: </span><a href={task.link} target="_blank" rel="noreferrer" style={{color:'var(--accent)',wordBreak:'break-all'}}>{task.link}</a></div>}
               {task.task_type==='share_link'&&task.geo&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>GEO: </span><span style={{color:'var(--accent)',fontWeight:600}}>{task.geo}</span></div>}
-              {task.task_type==='share_link'&&task.note&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>Note: </span><span style={{color:'var(--text-primary)'}}>{task.note}</span></div>}
+              {(task.task_type==='share_link'||task.task_type==='pause_pid')&&task.note&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>Note: </span><span style={{color:'var(--text-primary)'}}>{task.note}</span></div>}
+              {task.link&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>Link: </span><a href={task.link} target="_blank" rel="noreferrer" style={{color:'var(--accent)',wordBreak:'break-all'}}>{task.link}</a></div>}
               {task.pause_reason&&<div style={{color:'#f59e0b'}}>⚠️ {task.pause_reason}</div>}
-              {task.request_type&&<div><span style={{color:'var(--text-muted)'}}>Request: </span><strong style={{textTransform:'uppercase'}}>{task.request_type}</strong> – {task.request_details}</div>}
+              {task.request_type&&<div><span style={{color:'var(--text-muted)'}}>Request: </span><strong style={{textTransform:'uppercase'}}>{task.request_type}</strong>{task.request_details ? ` – ${task.request_details}` : ''}</div>}
+              {task.cap_management&&<div><span style={{color:'var(--text-muted)'}}>Cap Management: </span>{task.cap_management}</div>}
               {task.fp&&<div><span style={{color:'var(--text-muted)'}}>FP: </span>{task.fp}</div>}
               {task.f1&&<div><span style={{color:'var(--text-muted)'}}>F1: </span>{task.f1}</div>}
               {task.f2&&<div><span style={{color:'var(--text-muted)'}}>F2: </span>{task.f2}</div>}
@@ -184,7 +207,10 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
   const {on}=useSocket();
   const [tasks,setTasks]=useState([]);
   const [filter,setFilter]=useState('all');
-  const [showCreate,setShowCreate]=useState(false);
+  const [showCreate,setShowCreate]=useState(()=>{
+    if(!user?.id||!group?.id) return false;
+    return !!localStorage.getItem(taskDraftKey(user.id,group.id));
+  });
   const [openAssigneeKey,setOpenAssigneeKey]=useState(null);
   const [dropdownPos,    setDropdownPos]    =useState({top:0,left:0,width:0});
 
@@ -201,6 +227,8 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
   const [form,setForm]=useState(emptyForm(user?.role));
   const [creating,setCreating]=useState(false);
   const [uploadingFile, setUploadingFile] = useState(null);
+  const hasRestoredRef = useRef(false);
+  const [hasDraft, setHasDraft] = useState(false);
 
   // File upload function for tasks (no auth required)
   const handleTaskFileUpload = async (file) => {
@@ -239,9 +267,12 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
   const fileRef=useRef(null);
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
 
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+
   const openAssignee = (e, key) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+    setAssigneeSearch('');
     setOpenAssigneeKey(prev => prev === key ? null : key);
   };
   const toggleAssignee = (ids, userId) => {
@@ -275,10 +306,14 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
     
     switch(taskType) {
       case 'share_link':
-      case 'pause_pid':
-        // Show only publisher and publisher_manager (excluding current user)
-        return members.filter(member => 
+        return members.filter(member =>
           (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive' || member.role === 'optimization') &&
+          member.id !== user?.id
+        );
+
+      case 'pause_pid':
+        return members.filter(member =>
+          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive' || member.role === 'optimization' || member.role === 'operations') &&
           member.id !== user?.id
         );
       
@@ -365,7 +400,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
           ...lastEntry,
           pause_reason: '' // reset only this (optional)
         }
-      : { pub_id:'', pid:'', assigned_to:[], pause_reason:'' };
+      : { pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'', note:'' };
 
     return {
       ...p,
@@ -457,14 +492,17 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
                           {assigneeLabel(entry.assigned_to)}
                         </button>
                         {openAssigneeKey===`opt-${entryIndex}`&&(
-                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto',boxShadow:'0 4px 16px rgba(0,0,0,0.15)'}}>
-                            {getFilteredMembersForTaskType('optimise').map(u=>(
+                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,boxShadow:'0 4px 16px rgba(0,0,0,0.15)',display:'flex',flexDirection:'column',maxHeight:220}}>
+                            <input autoFocus value={assigneeSearch} onChange={e=>setAssigneeSearch(e.target.value)} placeholder="Search…" onMouseDown={e=>e.stopPropagation()} style={{fontSize:11,padding:'3px 6px',marginBottom:4,border:'1px solid var(--border)',borderRadius:4,background:'var(--bg-primary)',color:'var(--text-primary)',outline:'none',flexShrink:0}}/>
+                            <div style={{overflowY:'auto',flex:1}}>
+                            {getFilteredMembersForTaskType('optimise').filter(u=>u.full_name.toLowerCase().includes(assigneeSearch.toLowerCase())).map(u=>(
                               <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'var(--text-primary)'}}>
                                 <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
                                   onChange={()=>updateOptimiseEntry(entryIndex,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
                                 {u.full_name}
                               </label>
                             ))}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -733,6 +771,49 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
     load();
     authAPI.getUsers().then(d=>setUsers(d.users||[]));
   },[group?.id]);// eslint-disable-line
+
+  // Draft restoration — runs on mount and group/user change
+  useEffect(() => {
+    if (!user?.id || !group?.id) return;
+    const key = taskDraftKey(user.id, group.id);
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      try {
+        const saved = JSON.parse(raw);
+        setForm(saved);
+        setShowCreate(true);
+        setHasDraft(true);
+      } catch {
+        setForm(emptyForm(user?.role));
+        setShowCreate(false);
+        setHasDraft(false);
+      }
+    } else {
+      setForm(emptyForm(user?.role));
+      setShowCreate(false);
+      setHasDraft(false);
+    }
+    hasRestoredRef.current = true;
+    return () => { hasRestoredRef.current = false; };
+  }, [user?.id, group?.id]); // eslint-disable-line
+
+  // Draft save — fires whenever form changes, gated by hasRestoredRef (StrictMode-safe)
+  useEffect(() => {
+    if (!user?.id || !group?.id || !hasRestoredRef.current) return;
+    const key = taskDraftKey(user.id, group.id);
+    if (isDirtyForm(form)) {
+      localStorage.setItem(key, JSON.stringify(serializeForm(form)));
+      setHasDraft(true);
+      window.dispatchEvent(new CustomEvent('task-draft-changed', { detail: { groupId: group.id } }));
+    } else if (hasDraft) {
+      // hasDraft guard: only remove when a draft was previously loaded and user cleared it.
+      // Without this, StrictMode's first-pass save (form=emptyForm, no draft committed yet)
+      // would delete the draft before the second-pass restoration can read it.
+      localStorage.removeItem(key);
+      setHasDraft(false);
+      window.dispatchEvent(new CustomEvent('task-draft-changed', { detail: { groupId: group.id } }));
+    }
+  }, [form]); // eslint-disable-line
 
   useEffect(()=>{
     const unsub=on('task_update',({action,task,task_id,status,response,updated_by})=>{
@@ -1080,6 +1161,9 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to || ent
       }
       setShowCreate(false);
       setForm(emptyForm(user?.role));
+      localStorage.removeItem(taskDraftKey(user.id, group.id));
+      setHasDraft(false);
+      window.dispatchEvent(new CustomEvent('task-draft-changed', { detail: { groupId: group.id } }));
       toast.success('Task created!');
     }catch(e){toast.error(e?.error||'Failed');}
     setCreating(false);
@@ -1218,7 +1302,7 @@ const saveLink = () => {
             )}
           </button>
         ))}
-        <button className="btn btn-xs btn-primary" style={{marginLeft:'auto'}} onClick={()=>{setShowCreate(x=>!x);if(!showCreate)setForm(emptyForm(user?.role));}}>
+        <button className="btn btn-xs btn-primary" style={{marginLeft:'auto'}} onClick={() => setShowCreate(x => !x)}>
           {showCreate?'✕ Cancel':'+ New Task'}
         </button>
       </div>
@@ -1226,6 +1310,17 @@ const saveLink = () => {
       {/* CREATE FORM */}
       {showCreate&&(
         <div style={{padding:16,borderBottom:'1px solid var(--border)',background:'var(--bg-tertiary)',overflowY:'auto',maxHeight:500}}>
+
+          {/* Discard draft button */}
+          {hasDraft && (
+            <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
+              <button type="button" className="btn btn-xs btn-danger"
+                onClick={() => setForm(emptyForm(user?.role))}
+                style={{fontSize:11,opacity:0.8}}>
+                🗑 Discard Draft
+              </button>
+            </div>
+          )}
 
           {/* banner for share_link pre-fill */}
           {form.task_type==='share_link'&&(
@@ -1292,14 +1387,17 @@ const saveLink = () => {
                         {assigneeLabel(entry.assigned_to)}
                       </button>
                       {openAssigneeKey===`sl-${index}`&&(
-                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto',boxShadow:'0 4px 16px rgba(0,0,0,0.15)'}}>
-                          {getFilteredMembersForTaskType('share_link').map(u=>(
+                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,boxShadow:'0 4px 16px rgba(0,0,0,0.15)',display:'flex',flexDirection:'column',maxHeight:220}}>
+                          <input autoFocus value={assigneeSearch} onChange={e=>setAssigneeSearch(e.target.value)} placeholder="Search…" onMouseDown={e=>e.stopPropagation()} style={{fontSize:11,padding:'3px 6px',marginBottom:4,border:'1px solid var(--border)',borderRadius:4,background:'var(--bg-primary)',color:'var(--text-primary)',outline:'none',flexShrink:0}}/>
+                          <div style={{overflowY:'auto',flex:1}}>
+                          {getFilteredMembersForTaskType('share_link').filter(u=>u.full_name.toLowerCase().includes(assigneeSearch.toLowerCase())).map(u=>(
                             <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'var(--text-primary)'}}>
                               <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
                                 onChange={()=>updateEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
                               {u.full_name}
                             </label>
                           ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1484,17 +1582,18 @@ onClick={(e) => openEditor(entry, index, e)}/>
               {/* Unified scroll: header + entries scroll together */}
               <div style={{overflowX:'auto',overflowY:'auto',maxHeight:220,WebkitOverflowScrolling:'touch'}}>
               {/* Table Header — sticky */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:4,fontSize:10,fontWeight:600,minWidth:440,position:'sticky',top:0,background:'rgba(245,158,11,0.18)',zIndex:1,padding:'4px 2px',borderRadius:4}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:4,fontSize:10,fontWeight:600,minWidth:520,position:'sticky',top:0,background:'rgba(245,158,11,0.18)',zIndex:1,padding:'4px 2px',borderRadius:4}}>
                 <div>Assign To</div>
                 <div>PubID</div>
                 <div>PID</div>
                 <div>GEO</div>
                 <div>Pause Scenario</div>
+                <div>Note</div>
                 <div></div>
               </div>
 
                 {form.pause_entries.map((entry, index) => (
-                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,minWidth:440}}>
+                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,minWidth:520}}>
                     {/* <select 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
@@ -1511,14 +1610,17 @@ onClick={(e) => openEditor(entry, index, e)}/>
                         {assigneeLabel(entry.assigned_to)}
                       </button>
                       {openAssigneeKey===`pp-${index}`&&(
-                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto',boxShadow:'0 4px 16px rgba(0,0,0,0.15)'}}>
-                          {getFilteredMembersForTaskType('pause_pid').map(u=>(
+                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,boxShadow:'0 4px 16px rgba(0,0,0,0.15)',display:'flex',flexDirection:'column',maxHeight:220}}>
+                          <input autoFocus value={assigneeSearch} onChange={e=>setAssigneeSearch(e.target.value)} placeholder="Search…" onMouseDown={e=>e.stopPropagation()} style={{fontSize:11,padding:'3px 6px',marginBottom:4,border:'1px solid var(--border)',borderRadius:4,background:'var(--bg-primary)',color:'var(--text-primary)',outline:'none',flexShrink:0}}/>
+                          <div style={{overflowY:'auto',flex:1}}>
+                          {getFilteredMembersForTaskType('pause_pid').filter(u=>u.full_name.toLowerCase().includes(assigneeSearch.toLowerCase())).map(u=>(
                             <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'var(--text-primary)'}}>
                               <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
                                 onChange={()=>updatePauseEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
                               {u.full_name}
                             </label>
                           ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1543,16 +1645,22 @@ onClick={(e) => openEditor(entry, index, e)}/>
                       value={entry.geo || ''} 
                       onChange={e => updatePauseEntry(index, 'geo', e.target.value)}
                     />
-                    <select 
-                      className="form-control" 
+                    <select
+                      className="form-control"
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}}
-                      value={entry.pause_reason} 
+                      value={entry.pause_reason}
                       onChange={e => updatePauseEntry(index, 'pause_reason', e.target.value)}
                     >
-                      
                       <option value="">Select scenario…</option>
                       {PAUSE_SCENARIOS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    <input
+                      className="form-control"
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}}
+                      placeholder="Note"
+                      value={entry.note || ''}
+                      onChange={e => updatePauseEntry(index, 'note', e.target.value)}
+                    />
                     {index > 0 ? (
                       <button
                         type="button"
@@ -1644,6 +1752,20 @@ onClick={(e) => openEditor(entry, index, e)}/>
                 <label className="form-label">Request Type</label>
                 <select className="form-control" value={form.request_type} onChange={e=>f('request_type',e.target.value)}>
                   {REQUEST_TYPES.map(t=><option key={t} value={t}>{t.toUpperCase()}</option>)}
+                </select>
+              </div>
+              <div style={{marginBottom:10}}>
+                <label className="form-label">Cap Management</label>
+                <select className="form-control" value={form.cap_management} onChange={e=>f('cap_management',e.target.value)}>
+                  <option value="">Select Cap Management</option>
+                  <option value="Increase Cap – Installs">Increase Cap – Installs</option>
+                  <option value="Increase Cap – Clicks">Increase Cap – Clicks</option>
+                  <option value="Increase Cap – Events">Increase Cap – Events</option>
+                  <option value="Decrease Cap – Installs">Decrease Cap – Installs</option>
+                  <option value="Decrease Cap – Clicks">Decrease Cap – Clicks</option>
+                  <option value="Decrease Cap – Events">Decrease Cap – Events</option>
+                  <option value="Increase PO">Increase PO</option>
+                  <option value="Decrease PO">Decrease PO</option>
                 </select>
               </div>
               <div style={{marginBottom:10}}>

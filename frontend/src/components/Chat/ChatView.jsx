@@ -5,6 +5,7 @@ import PreviewPanel from '../Preview/PreviewPanel';
 import SummaryPanel from './SummaryPanel';
 import CampaignDetails from './CampaignDetails';
 import { Search } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const TABS=[
   {key:'chat',    label:'Chat',    icon:'💬'},
@@ -19,6 +20,7 @@ const PLACEHOLDER={
 };
 
 export default function ChatView({group, onBack}){
+  const {user}=useAuth();
   const [activeTab,setActiveTab]=useState('chat');
   const [rightPanel,setRightPanel]=useState('cd');
   const [showDetailsSheet,setShowDetailsSheet]=useState(false);
@@ -28,11 +30,15 @@ export default function ChatView({group, onBack}){
   const searchInputRef=useRef(null);
   const isMobile=!!onBack;
 
-  // Reset everything when switching groups
+  // Reset everything when switching groups; auto-switch to tasks tab if a draft exists
   useEffect(()=>{
-    setActiveTab('chat');
     setShowSearch(false);
     setSearchQuery('');
+    if(group?.id && user?.id && localStorage.getItem(`task_draft_${user.id}_${group.id}`)){
+      setActiveTab('tasks');
+    } else {
+      setActiveTab('chat');
+    }
   },[group]);
 
   // Focus input when search opens; clear query when it closes

@@ -9,16 +9,16 @@ const TASK_TYPES = {
   raise_request: { label: 'Raise Request', icon: '📋', color: '#22c55e' },
   optimise:      { label: 'Optimise',      icon: '⚡', color: '#06b6d4' },
 };
-const PAUSE_SCENARIOS = ['Low Quality Traffic','Fraud Detected','Budget Exhausted','Geo Mismatch','KPI Not Met','Technical Issue','Advertiser Request','Other'];
+const PAUSE_SCENARIOS = ['Low Quality Traffic','Fraud Detected','Budget Exhausted','Geo Mismatch','KPI Not Met','Technical Issue','Advertiser Request','Other',, 'Not Live'];
 const OPTIMISE_SCENARIOS = ['Increase Budget','Decrease Budget','Expand GEO','Restrict GEO','Update KPI Target','Change Payout','Pause Sub-publisher','Whitelist Publisher','Blacklist Publisher','Other'];
 const REQUEST_TYPES = ['geo','payout','link','budget'];
 
 const empty = (type='share_link') => ({
   task_type:type, description:'', assigned_to:'',
   entries: [{ pub_id:'', pid:'', link:'', assigned_to:[], note:'', geo:'' }],
-  pause_entries: [{ pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'' }],
+  pause_entries: [{ pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'', note:'' }],
   optimise_entries: [{ assigned_to:[], pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:'' }],
-  pause_reason:'', request_type:'geo', request_details:'',
+  pause_reason:'', request_type:'geo', request_details:'', cap_management:'',
   f1:'', f2:'', f3:'', f4:'', optimise_scenario:'', attachment:null,
 });
 
@@ -105,7 +105,7 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
   const addPauseEntry = () => {
     setForm(p => ({
       ...p,
-      pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:[], pause_reason:'' }]
+      pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'', note:'' }]
     }));
   };
 
@@ -463,19 +463,20 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>⏸️ Pause Details</div>
             
             {/* Table Header */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
               <div>Assign To</div>
               <div>PubID</div>
               <div>PID</div>
               <div>GEO</div>
               <div>Pause Scenario</div>
+              <div>Note</div>
               <div></div>
             </div>
             
             {/* Table Entries */}
             <div style={{maxHeight:'200px',overflowY:'auto'}}>
               {form.pause_entries.map((entry, index) => (
-                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
+                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
                   <div style={{position:'relative'}}>
                     <button type="button"
                       onClick={e=>openAssignee(e,`pp-${index}`)}
@@ -484,7 +485,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                     </button>
                     {openAssigneeKey===`pp-${index}`&&(
                       <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto',boxShadow:'0 4px 16px rgba(0,0,0,0.15)'}}>
-                        {users.map(u=>(
+                        {users.filter(u=>['publisher','publisher_manager','pub_executive','optimization','operations'].includes(u.role)).map(u=>(
                           <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'var(--text-primary)'}}>
                             <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
                               onChange={()=>updatePauseEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
@@ -515,15 +516,22 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                     value={entry.geo || ''} 
                     onChange={e => updatePauseEntry(index, 'geo', e.target.value)}
                   />
-                  <select 
-                    className="form-control" 
+                  <select
+                    className="form-control"
                     style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
-                    value={entry.pause_reason} 
+                    value={entry.pause_reason}
                     onChange={e => updatePauseEntry(index, 'pause_reason', e.target.value)}
                   >
                     <option value="">Select scenario…</option>
                     {PAUSE_SCENARIOS.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
+                  <input
+                    className="form-control"
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                    placeholder="Note"
+                    value={entry.note || ''}
+                    onChange={e => updatePauseEntry(index, 'note', e.target.value)}
+                  />
                   <button
                     type="button"
                     onClick={() => removePauseEntry(index)}
@@ -549,7 +557,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                 </div>
               ))}
             </div>
-            
+
             {/* Add Entry Button */}
             <button
               type="button"
@@ -595,6 +603,20 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                   {t}
                 </button>
               ))}
+            </div>
+            <div style={{marginBottom:8}}>
+              <label className="form-label">Cap Management</label>
+              <select className="form-control" value={form.cap_management} onChange={e=>f('cap_management',e.target.value)}>
+                <option value="">Select Cap Management</option>
+                <option value="Increase Cap – Installs">Increase Cap – Installs</option>
+                <option value="Increase Cap – Clicks">Increase Cap – Clicks</option>
+                <option value="Increase Cap – Events">Increase Cap – Events</option>
+                <option value="Decrease Cap – Installs">Decrease Cap – Installs</option>
+                <option value="Decrease Cap – Clicks">Decrease Cap – Clicks</option>
+                <option value="Decrease Cap – Events">Decrease Cap – Events</option>
+                <option value="Increase PO">Increase PO</option>
+                <option value="Decrease PO">Decrease PO</option>
+              </select>
             </div>
             <label className="form-label">Details</label>
             <textarea className="form-control" style={{minHeight:52}} value={form.request_details}
