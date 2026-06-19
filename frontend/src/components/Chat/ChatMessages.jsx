@@ -691,13 +691,26 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   )}
 
   {/* Text Content */}
-  <div className="text-content">
+  <div className="text-content" onCopy={e => {
+    const selection = window.getSelection();
+    if (!selection || !selection.toString()) return;
+    const plain = selection.toString();
+    const html = plain
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/ {2,}/g, m => '&nbsp;'.repeat(m.length))
+      .replace(/\n/g, '<br>');
+    e.clipboardData.setData('text/plain', plain);
+    e.clipboardData.setData('text/html', html);
+    e.preventDefault();
+  }}>
     {(() => {
       const { prefix, text } = parseMsgContent(msg.content);
       return (
         <>
           {prefix && (
-            <div style={{fontSize:11,fontWeight:600,opacity:0.6,marginBottom:3,letterSpacing:'0.02em'}}>
+            <div style={{fontSize:11,fontWeight:600,opacity:0.6,marginBottom:3,letterSpacing:'0.02em',userSelect:'none'}}>
               {prefix}
             </div>
           )}
@@ -705,7 +718,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         </>
       );
     })()}
-      <div className="message-time">
+      <div className="message-time" style={{userSelect:'none'}}>
             {format(new Date(msg.sent_at), 'HH:mm')}
           </div>
     {msg.task_ref && (
