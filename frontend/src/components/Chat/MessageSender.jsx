@@ -1097,7 +1097,52 @@ const MessageSender = ({
   const handlePaste = (e) => {
     const items = Array.from(e.clipboardData?.items || []);
     const fileItems = items.filter(item => item.kind === 'file');
-    if (fileItems.length === 0) return;
+    if (fileItems.length === 0) {
+      const html = e.clipboardData.getData('text/html');
+      if (html) {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const hasValidLink = Array.from(doc.querySelectorAll('a[href]')).some(a => {
+          const h = a.getAttribute('href');
+          return h && (h.startsWith('http://') || h.startsWith('https://'));
+        });
+        if (hasValidLink) {
+          const blockTags = new Set(['p','div','li','h1','h2','h3','h4','h5','h6','tr','td','th','blockquote']);
+          const domToText = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+            if (node.nodeType !== Node.ELEMENT_NODE) return '';
+            const tag = node.tagName.toLowerCase();
+            if (tag === 'br') return '\n';
+            if (tag === 'a') {
+              const href = node.getAttribute('href');
+              if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+                const label = (node.textContent || '').trim() || href;
+                return `[${label}](${href})`;
+              }
+              return node.textContent;
+            }
+            const inner = Array.from(node.childNodes).map(domToText).join('');
+            return blockTags.has(tag) ? inner + '\n' : inner;
+          };
+          const insertText = domToText(doc.body).replace(/\n{3,}/g, '\n\n').trim();
+          if (insertText) {
+            e.preventDefault();
+            const ta = textareaRef.current;
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            const newStr = content.slice(0, start) + insertText + content.slice(end);
+            const newCursor = start + insertText.length;
+            setContent(newStr);
+            requestAnimationFrame(() => {
+              ta.setSelectionRange(newCursor, newCursor);
+              ta.style.height = 'auto';
+              ta.style.height = ta.scrollHeight + 'px';
+            });
+            return;
+          }
+        }
+      }
+      return;
+    }
     e.preventDefault();
     const files = fileItems.map(item => {
       const file = item.getAsFile();

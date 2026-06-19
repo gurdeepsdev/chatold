@@ -872,20 +872,34 @@ function highlightText(text,query){
 }
 
 const URL_REGEX = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+// Matches markdown links [label](url) first, then plain URLs — left-to-right priority.
+const COMBINED_REGEX = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+|www\.[^\s]+)/g;
 
 function renderContent(text, searchQuery) {
   if (!text) return text;
   const segments = [];
   let last = 0, match;
-  URL_REGEX.lastIndex = 0;
-  while ((match = URL_REGEX.exec(text)) !== null) {
+  COMBINED_REGEX.lastIndex = 0;
+  while ((match = COMBINED_REGEX.exec(text)) !== null) {
     if (match.index > last) segments.push({ type: 'text', value: text.slice(last, match.index) });
-    segments.push({ type: 'url', value: match[0] });
+    if (match[1] != null) {
+      segments.push({ type: 'mdlink', label: match[1], href: match[2] });
+    } else {
+      segments.push({ type: 'url', value: match[3] });
+    }
     last = match.index + match[0].length;
   }
   if (last < text.length) segments.push({ type: 'text', value: text.slice(last) });
 
   return segments.map((seg, i) => {
+    if (seg.type === 'mdlink') {
+      return (
+        <a key={i} href={seg.href} target="_blank" rel="noopener noreferrer"
+          style={{color:'#60a5fa',wordBreak:'break-all',textDecoration:'underline'}}>
+          {seg.label}
+        </a>
+      );
+    }
     if (seg.type === 'url') {
       const href = seg.value.startsWith('www.') ? `https://${seg.value}` : seg.value;
       return (
