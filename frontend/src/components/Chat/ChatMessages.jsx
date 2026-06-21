@@ -510,6 +510,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [onDeleteMessageState, setOnDeleteMessageState] = useState(null);
+  const [reactionPopup, setReactionPopup] = useState(null);
   const messageRef = useRef(null);
   
   // Sync local reactions with message reactions when they change
@@ -517,10 +518,13 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
     setLocalReactions(msg.reactions || []);
   }, [msg.reactions]);
   
+  const [copied, setCopied] = useState(false);
+
   const handleCopy = () => {
     const textToCopy = parseMsgContent(msg.content).text;
     navigator.clipboard.writeText(textToCopy).then(() => {
-      toast.success('Message copied to clipboard!');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
       toast.error('Failed to copy message');
     });
@@ -547,7 +551,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         setLocalReactions(prev => prev.filter(r => !(r.user_id === user?.id && r.emoji === emoji)));
       } else {
         await messagesAPI.addReaction(group.id, msg.id, emoji);
-        setLocalReactions(prev => [...prev.filter(r => !(r.user_id === user?.id)), { user_id: user?.id, emoji }]);
+        setLocalReactions(prev => [...prev.filter(r => !(r.user_id === user?.id && r.emoji === emoji)), { user_id: user?.id, emoji, user_name: user?.full_name || 'You' }]);
       }
     } catch (error) {
       toast.error('Failed to add reaction');
@@ -687,13 +691,26 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   )}
 
   {/* Text Content */}
-  <div className="text-content">
+  <div className="text-content" onCopy={e => {
+    const selection = window.getSelection();
+    if (!selection || !selection.toString()) return;
+    const plain = selection.toString();
+    const html = plain
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/ {2,}/g, m => '&nbsp;'.repeat(m.length))
+      .replace(/\n/g, '<br>');
+    e.clipboardData.setData('text/plain', plain);
+    e.clipboardData.setData('text/html', html);
+    e.preventDefault();
+  }}>
     {(() => {
       const { prefix, text } = parseMsgContent(msg.content);
       return (
         <>
           {prefix && (
-            <div style={{fontSize:11,fontWeight:600,opacity:0.6,marginBottom:3,letterSpacing:'0.02em'}}>
+            <div style={{fontSize:11,fontWeight:600,opacity:0.6,marginBottom:3,letterSpacing:'0.02em',userSelect:'none'}}>
               {prefix}
             </div>
           )}
@@ -701,7 +718,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         </>
       );
     })()}
-      <div className="message-time">
+      <div className="message-time" style={{userSelect:'none'}}>
             {format(new Date(msg.sent_at), 'HH:mm')}
           </div>
     {msg.task_ref && (
@@ -713,16 +730,51 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         {/* Reactions */}
         {!msg.is_deleted && localReactions.length > 0 && (
           <div className="reactions-bar">
-            {localReactions.map((reaction, index) => (
-              <div
-                key={index}
-                className={`reaction-item ${reaction.user_id === user?.id ? 'own-reaction' : ''}`}
-                onClick={() => handleReaction(reaction.emoji)}
-              >
-                <span className="reaction-emoji">{reaction.emoji}</span>
-                <span className="reaction-count">{reaction.count || 1}</span>
+            {Object.entries(
+              localReactions.reduce((acc, r) => {
+                if (!acc[r.emoji]) acc[r.emoji] = [];
+                acc[r.emoji].push(r);
+                return acc;
+              }, {})
+            ).map(([emoji, reactors]) => {
+              const isOwn = reactors.some(r => r.user_id === user?.id);
+              return (
+                <div
+                  key={emoji}
+                  className={`reaction-item ${isOwn ? 'own-reaction' : ''}`}
+                  onClick={() => handleReaction(emoji)}
+                  onMouseEnter={e => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setReactionPopup({ names: reactors.map(r => r.user_name || 'User'), rect });
+                  }}
+                  onMouseLeave={() => setReactionPopup(null)}
+                >
+                  <span className="reaction-emoji">{emoji}</span>
+                  <span className="reaction-count">{reactors.length}</span>
+                </div>
+              );
+            })}
+            {reactionPopup && (
+              <div style={{
+                position: 'fixed',
+                bottom: window.innerHeight - reactionPopup.rect.top + 6,
+                left: reactionPopup.rect.left + reactionPopup.rect.width / 2,
+                transform: 'translateX(-50%)',
+                zIndex: 9999,
+                background: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 8,
+                padding: '5px 10px',
+                fontSize: 12,
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+                pointerEvents: 'none',
+              }}>
+                {reactionPopup.names.join(', ')}
               </div>
-            ))}
+            )}
           </div>
         )}
 
@@ -766,8 +818,8 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
               onClick={(e) => e.stopPropagation()} // prevent closing
 >
             <button className="option-btn" onClick={(e) => { e.stopPropagation(); handleCopy(); }}>
-              <span className="option-icon">📋</span>
-              <span className="option-text">Copy</span>
+              <span className="option-icon">{copied ? '✅' : '📋'}</span>
+              <span className="option-text">{copied ? 'Copied!' : 'Copy'}</span>
             </button>
             {/* <button className="option-btn" onClick={(e) => { e.stopPropagation(); setShowForwardModal(true); }}>
               <span className="option-icon">↗️</span>
@@ -820,20 +872,34 @@ function highlightText(text,query){
 }
 
 const URL_REGEX = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+// Matches markdown links [label](url) first, then plain URLs — left-to-right priority.
+const COMBINED_REGEX = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+|www\.[^\s]+)/g;
 
 function renderContent(text, searchQuery) {
   if (!text) return text;
   const segments = [];
   let last = 0, match;
-  URL_REGEX.lastIndex = 0;
-  while ((match = URL_REGEX.exec(text)) !== null) {
+  COMBINED_REGEX.lastIndex = 0;
+  while ((match = COMBINED_REGEX.exec(text)) !== null) {
     if (match.index > last) segments.push({ type: 'text', value: text.slice(last, match.index) });
-    segments.push({ type: 'url', value: match[0] });
+    if (match[1] != null) {
+      segments.push({ type: 'mdlink', label: match[1], href: match[2] });
+    } else {
+      segments.push({ type: 'url', value: match[3] });
+    }
     last = match.index + match[0].length;
   }
   if (last < text.length) segments.push({ type: 'text', value: text.slice(last) });
 
   return segments.map((seg, i) => {
+    if (seg.type === 'mdlink') {
+      return (
+        <a key={i} href={seg.href} target="_blank" rel="noopener noreferrer"
+          style={{color:'#60a5fa',wordBreak:'break-all',textDecoration:'underline'}}>
+          {seg.label}
+        </a>
+      );
+    }
     if (seg.type === 'url') {
       const href = seg.value.startsWith('www.') ? `https://${seg.value}` : seg.value;
       return (

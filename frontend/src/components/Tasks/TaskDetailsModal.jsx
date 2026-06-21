@@ -265,7 +265,7 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PID</div>
                             <div style={{ color: 'var(--text-primary)' }}>{subTask.pid || '-'}</div>
                           </div>
-                           <div>
+                          <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>GEO</div>
                             <div style={{ color: 'var(--text-primary)' }}>{subTask.geo || '-'}</div>
                           </div>
@@ -273,6 +273,12 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Reason</div>
                             <div style={{ color: 'var(--text-primary)' }}>{subTask.pause_reason || '-'}</div>
                           </div>
+                          {subTask.note && (
+                            <div style={{ gridColumn: '1 / -1' }}>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Note</div>
+                              <div style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{subTask.note}</div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -284,6 +290,12 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                               {subTask.request_type || '-'}
                             </div>
                           </div>
+                          {subTask.cap_management && (
+                            <div style={{ marginBottom: '8px' }}>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Cap Management</div>
+                              <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{subTask.cap_management}</div>
+                            </div>
+                          )}
                           {subTask.request_details && (
                             <div>
                               <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Details</div>
@@ -438,14 +450,20 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PID</div>
                         <div style={{ color: 'var(--text-primary)' }}>{task.pid || '-'}</div>
                       </div>
-                       <div>
-                            <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>GEO</div>
-                            <div style={{ color: 'var(--text-primary)' }}>{task.geo || '-'}</div>
-                          </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>GEO</div>
+                        <div style={{ color: 'var(--text-primary)' }}>{task.geo || '-'}</div>
+                      </div>
                       <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Reason</div>
                         <div style={{ color: 'var(--text-primary)' }}>{task.pause_reason || '-'}</div>
                       </div>
+                      {task.note && (
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Note</div>
+                          <div style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{task.note}</div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -457,6 +475,12 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                           {task.request_type || '-'}
                         </div>
                       </div>
+                      {task.cap_management && (
+                        <div style={{ marginBottom: '8px' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Cap Management</div>
+                          <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{task.cap_management}</div>
+                        </div>
+                      )}
                       {task.request_details && (
                         <div>
                           <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Details</div>

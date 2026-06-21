@@ -852,6 +852,23 @@ const MessageSender = ({
   const recipientCacheRef = useRef({});
   const reloadTimerRef    = useRef(null);
 
+  // Always-fresh refs so group-change effect can read current values
+  const contentRef     = useRef('');
+  const selectedIdsRef = useRef([]);
+  contentRef.current     = content;
+  selectedIdsRef.current = selectedIds;
+
+  const prevGroupIdRef = useRef(null);
+  // True once the restoration effect has run for the current group.
+  // Prevents the save effect from clobbering localStorage before we've read it.
+  const hasRestoredRef = useRef(false);
+
+  // Always-fresh refs for beforeunload handler (closure would capture stale values)
+  const userIdRef  = useRef(user?.id);
+  const groupIdRef = useRef(groupId);
+  userIdRef.current  = user?.id;
+  groupIdRef.current = groupId;
+
   const loadRecipients = useCallback(async (skipCache = false) => {
     if (!groupId) return;
     if (!skipCache && recipientCacheRef.current[groupId]) {
@@ -870,15 +887,83 @@ const MessageSender = ({
     }
   }, [groupId]);
 
-  // Reset on group change — always fresh
+  // Save draft whenever content or recipients change, but only after restoration
+  // has run (hasRestoredRef guards against wiping localStorage on initial mount
+  // before the draft has been read back).
   useEffect(() => {
+    if (!groupId || !user?.id || !hasRestoredRef.current) return;
+    const key = `chat_draft_${user.id}_${groupId}`;
+    if (content.trim() || selectedIds.length > 0) {
+      localStorage.setItem(key, JSON.stringify({ content, selectedIds }));
+    } else {
+      localStorage.removeItem(key);
+    }
+    window.dispatchEvent(new CustomEvent('chat-draft-changed', { detail: { groupId } }));
+  }, [content, selectedIds]); // eslint-disable-line
+
+  // Group change: flush save for old group + reset UI only (no restoration here)
+  useEffect(() => {
+    hasRestoredRef.current = false; // arm guard for the incoming group
+    if (prevGroupIdRef.current && user?.id) {
+      const prevKey = `chat_draft_${user.id}_${prevGroupIdRef.current}`;
+      // Only save — never delete. The save effect (with hasRestoredRef guard) owns
+      // draft cleanup. Deleting here would wipe a valid draft when restoration
+      // hasn't run yet (e.g. auth delayed, content still '').
+      if (contentRef.current.trim() || selectedIdsRef.current.length > 0) {
+        localStorage.setItem(prevKey, JSON.stringify({ content: contentRef.current, selectedIds: selectedIdsRef.current }));
+      }
+      window.dispatchEvent(new CustomEvent('chat-draft-changed', { detail: { groupId: prevGroupIdRef.current } }));
+    }
+    prevGroupIdRef.current = groupId;
+
     setRecipients([]);
-    setSelectedIds([]);
     setSecondaryRecipientId('');
     setAssignmentInfo(null);
     setShowSecondaryOption(false);
     loadRecipients(true);
   }, [groupId]); // eslint-disable-line
+
+  // Single restoration effect — handles both group switch AND hard refresh (auth delay)
+  // Runs whenever groupId or user?.id changes, whichever comes last.
+  // The cleanup resets hasRestoredRef so React StrictMode's double-invocation
+  // can't fire the save effect with stale content before state commits.
+  useEffect(() => {
+    if (!user?.id || !groupId) return;
+    const key = `chat_draft_${user.id}_${groupId}`;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      try {
+        const { content: c, selectedIds: ids } = JSON.parse(raw);
+        setContent(c || '');
+        setSelectedIds(Array.isArray(ids) ? ids : []);
+      } catch {
+        setContent('');
+        setSelectedIds([]);
+      }
+    } else {
+      setContent('');
+      setSelectedIds([]);
+    }
+    hasRestoredRef.current = true;
+    return () => { hasRestoredRef.current = false; };
+  }, [user?.id, groupId]); // eslint-disable-line
+
+  // beforeunload is more reliable than React cleanup for hard-refresh / tab-close.
+  // Uses refs so the handler always sees the latest content without re-registering.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!userIdRef.current || !groupIdRef.current) return;
+      const key = `chat_draft_${userIdRef.current}_${groupIdRef.current}`;
+      if (contentRef.current.trim() || selectedIdsRef.current.length > 0) {
+        localStorage.setItem(key, JSON.stringify({
+          content: contentRef.current,
+          selectedIds: selectedIdsRef.current,
+        }));
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []); // eslint-disable-line
 
   // Debounce socket-triggered reloads
   const scheduleReload = useCallback(() => {
@@ -1009,6 +1094,72 @@ const MessageSender = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handlePaste = (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const fileItems = items.filter(item => item.kind === 'file');
+    if (fileItems.length === 0) {
+      const html = e.clipboardData.getData('text/html');
+      if (html) {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const hasValidLink = Array.from(doc.querySelectorAll('a[href]')).some(a => {
+          const h = a.getAttribute('href');
+          return h && (h.startsWith('http://') || h.startsWith('https://'));
+        });
+        if (hasValidLink) {
+          const blockTags = new Set(['p','div','li','h1','h2','h3','h4','h5','h6','tr','td','th','blockquote']);
+          const domToText = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+            if (node.nodeType !== Node.ELEMENT_NODE) return '';
+            const tag = node.tagName.toLowerCase();
+            if (tag === 'br') return '\n';
+            if (tag === 'a') {
+              const href = node.getAttribute('href');
+              if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+                const label = (node.textContent || '').trim() || href;
+                return `[${label}](${href})`;
+              }
+              return node.textContent;
+            }
+            const inner = Array.from(node.childNodes).map(domToText).join('');
+            return blockTags.has(tag) ? inner + '\n' : inner;
+          };
+          const insertText = domToText(doc.body).replace(/\n{3,}/g, '\n\n').trim();
+          if (insertText) {
+            e.preventDefault();
+            const ta = textareaRef.current;
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            const newStr = content.slice(0, start) + insertText + content.slice(end);
+            const newCursor = start + insertText.length;
+            setContent(newStr);
+            requestAnimationFrame(() => {
+              ta.setSelectionRange(newCursor, newCursor);
+              ta.style.height = 'auto';
+              ta.style.height = ta.scrollHeight + 'px';
+            });
+            return;
+          }
+        }
+      }
+      return;
+    }
+    e.preventDefault();
+    const files = fileItems.map(item => {
+      const file = item.getAsFile();
+      if (!file) return null;
+      // Give pasted screenshots a proper name
+      if (!file.name || file.name === 'image.png') {
+        const ext = file.type.split('/')[1] || 'png';
+        return new File([file], `pasted-image-${Date.now()}.${ext}`, { type: file.type });
+      }
+      return file;
+    }).filter(Boolean);
+    const validFiles = files.filter(validateFile);
+    if (validFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...validFiles]);
+    }
+  };
+
   const removeFile = (index) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
@@ -1067,6 +1218,12 @@ const MessageSender = ({
         };
         const resp = await messagesAPI.sendMessage(groupId, messageData);
         if (onMessageSent) onMessageSent(resp.message);
+      }
+
+      // Clear draft on successful send
+      if (user?.id) {
+        localStorage.removeItem(`chat_draft_${user.id}_${groupId}`);
+        window.dispatchEvent(new CustomEvent('chat-draft-changed', { detail: { groupId } }));
       }
 
       setContent('');
@@ -1301,6 +1458,7 @@ const MessageSender = ({
                   handleSubmit(e);
                 }
               }}
+              onPaste={handlePaste}
             />
 
             {/* Action Buttons — unchanged */}

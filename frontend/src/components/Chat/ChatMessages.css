@@ -268,9 +268,12 @@
 
 .reaction-count {
   font-size: 11px;
-  font-weight: 600;
-  min-width: 16px;
+  font-weight: 500;
   text-align: center;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 😊 Emoji Picker */
@@ -300,6 +303,27 @@
 
 .emoji-picker-trigger:hover .emoji-picker-hint {
   opacity: 1;
+}
+
+.message-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--text-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+.message-actions:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .emoji-picker {
