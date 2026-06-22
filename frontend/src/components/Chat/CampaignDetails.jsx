@@ -416,6 +416,7 @@ export default function CampaignDetails({ group }) {
   const [showAllMembers, setShowAllMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [addMemberSearch, setAddMemberSearch] = useState('');
+  const [kpiExpanded, setKpiExpanded] = useState(false);
 
   // Subscribe to real-time member events so this panel updates instantly
   // without requiring a full page reload or re-fetch.
@@ -612,7 +613,16 @@ export default function CampaignDetails({ group }) {
         {crmData && (
           <>
             <div className="campaign-detail-row"><span className="campaign-detail-label">Campaign</span><span className="campaign-detail-value">{crmData.campaign_name || 'N/A'}</span></div>
-            <div className="campaign-detail-row"><span className="campaign-detail-label">KPI</span><span className="campaign-detail-value">{crmData.kpi || 'N/A'}</span></div>
+            <div className="campaign-detail-row"><span className="campaign-detail-label">KPI</span><span className="campaign-detail-value" style={{flex:1}}>
+              {crmData.kpi && crmData.kpi.length > 80 ? (
+                <>
+                  {kpiExpanded ? crmData.kpi : crmData.kpi.slice(0, 80) + '…'}
+                  <span onClick={() => setKpiExpanded(v => !v)} style={{marginLeft:6,color:'var(--accent)',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>
+                    {kpiExpanded ? 'Show less' : 'Show more'}
+                  </span>
+                </>
+              ) : (crmData.kpi || 'N/A')}
+            </span></div>
             <div className="campaign-detail-row"><span className="campaign-detail-label">Payable Event</span><span className="campaign-detail-value">{crmData.payable_event || 'N/A'}</span></div>
             <div className="campaign-detail-row"><span className="campaign-detail-label">GEO</span><span className="campaign-detail-value">
               {Array.isArray(crmData.geo) ? crmData.geo.join(', ') : crmData.geo || 'N/A'}
@@ -639,7 +649,16 @@ export default function CampaignDetails({ group }) {
             {group.geo && <div className="campaign-detail-row"><span className="campaign-detail-label">GEO</span><span className="campaign-detail-value">{group.geo}</span></div>}
             {group.payout && <div className="campaign-detail-row"><span className="campaign-detail-label">Payout</span><span className="campaign-detail-value" style={{ color: 'var(--success)', fontWeight: 600 }}>${group.payout}</span></div>}
             {group.payable_event && <div className="campaign-detail-row"><span className="campaign-detail-label">Event</span><span className="campaign-detail-value">{group.payable_event}</span></div>}
-            {group.kpi && <div className="campaign-detail-row"><span className="campaign-detail-label">KPI</span><span className="campaign-detail-value">{group.kpi}</span></div>}
+            {group.kpi && <div className="campaign-detail-row"><span className="campaign-detail-label">KPI</span><span className="campaign-detail-value" style={{flex:1}}>
+              {group.kpi.length > 80 ? (
+                <>
+                  {kpiExpanded ? group.kpi : group.kpi.slice(0, 80) + '…'}
+                  <span onClick={() => setKpiExpanded(v => !v)} style={{marginLeft:6,color:'var(--accent)',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>
+                    {kpiExpanded ? 'Show less' : 'Show more'}
+                  </span>
+                </>
+              ) : group.kpi}
+            </span></div>}
             {group.mmp_tracker && <div className="campaign-detail-row"><span className="campaign-detail-label">MMP</span><span className="campaign-detail-value">{group.mmp_tracker}</span></div>}
             {group.preview_url && (
               <div className="campaign-detail-row">
