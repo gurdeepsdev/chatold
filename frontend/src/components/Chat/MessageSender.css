@@ -408,10 +408,13 @@
   padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid var(--border, #444);
-  background:var(--text);
-  color: #fff;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-size: 13px;
   outline: none;
+}
+.dropdown-search input::placeholder {
+  color: var(--text-muted);
 }
 .parent-container {
   overflow: visible !important;
