@@ -66,4 +66,18 @@ CREATE TABLE IF NOT EXISTS reactions (
   INDEX idx_user_reactions (user_id)
 );
 
+-- pinned_messages table
+CREATE TABLE IF NOT EXISTS pinned_messages (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  group_id    INT NOT NULL,
+  message_id  INT NOT NULL,
+  pinned_by   INT NOT NULL,
+  pinned_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY  unique_pin (group_id, message_id),
+  FOREIGN KEY (group_id)   REFERENCES chat_groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (message_id) REFERENCES messages(id)    ON DELETE CASCADE,
+  FOREIGN KEY (pinned_by)  REFERENCES users(id)       ON DELETE CASCADE,
+  INDEX idx_group_pinned (group_id)
+);
+
 SELECT 'Migration complete ✅' AS status;

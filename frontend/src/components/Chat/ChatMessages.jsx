@@ -503,15 +503,18 @@ function TaskPill({taskRef,onTaskClick}){
 }
 
 /* ── Single bubble ─────────────────────────────────────────── */
-function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQuery,onReplyClick,onImageClick}){
+function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQuery,onReplyClick,onImageClick,isPinned,pinnedByName,onPin,onUnpin}){
   const {user} = useAuth();
   const [showOptions, setShowOptions] = useState(false);
   const [localReactions, setLocalReactions] = useState(msg.reactions || []);
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showExtendedPicker, setShowExtendedPicker] = useState(false);
+  const [extendedPickerPos, setExtendedPickerPos] = useState(null);
   const [onDeleteMessageState, setOnDeleteMessageState] = useState(null);
   const [reactionPopup, setReactionPopup] = useState(null);
   const messageRef = useRef(null);
+  const plusBtnRef = useRef(null);
   
   // Sync local reactions with message reactions when they change
   useEffect(() => {
@@ -521,6 +524,36 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
+    if (msg.message_type === 'image' && fileUrl) {
+      fetch(fileUrl)
+        .then(res => res.blob())
+        .then(blob => {
+          if (blob.type === 'image/png') return blob;
+          // Convert non-PNG formats to PNG via canvas (Clipboard API only supports image/png reliably)
+          return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              URL.revokeObjectURL(img.src);
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+              canvas.getContext('2d').drawImage(img, 0, 0);
+              canvas.toBlob(png => png ? resolve(png) : reject(new Error('canvas failed')), 'image/png');
+            };
+            img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('load failed')); };
+            img.src = URL.createObjectURL(blob);
+          });
+        })
+        .then(pngBlob => navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]))
+        .then(() => {
+          if (msg.file_name) sessionStorage.setItem('clipboard_image_name', msg.file_name);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        })
+        .catch(() => toast.error('Failed to copy image'));
+      return;
+    }
     const textToCopy = parseMsgContent(msg.content).text;
     navigator.clipboard.writeText(textToCopy).then(() => {
       setCopied(true);
@@ -555,6 +588,28 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
       }
     } catch (error) {
       toast.error('Failed to add reaction');
+    }
+  };
+
+  const handlePin = async (e) => {
+    e.stopPropagation();
+    setShowOptions(false);
+    try {
+      await messagesAPI.pinMessage(group.id, msg.id);
+      onPin && onPin(msg.id);
+    } catch {
+      toast.error('Failed to pin message');
+    }
+  };
+
+  const handleUnpin = async (e) => {
+    e.stopPropagation();
+    setShowOptions(false);
+    try {
+      await messagesAPI.unpinMessage(group.id, msg.id);
+      onUnpin && onUnpin(msg.id);
+    } catch {
+      toast.error('Failed to unpin message');
     }
   };
 
@@ -778,39 +833,82 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
           </div>
         )}
 
-        {/* Emoji Picker on Hover - Larger trigger area */}
+        {/* Emoji Picker on Hover */}
         {!msg.is_deleted && <div
           className="emoji-picker-trigger"
           onMouseEnter={() => setShowEmojiPicker(true)}
-          onMouseLeave={() => setShowEmojiPicker(false)}
+          onMouseLeave={() => { if(!showExtendedPicker) setShowEmojiPicker(false); }}
         >
-          {/* <div className="emoji-picker-hint">
-            h
-          </div> */}
           {showEmojiPicker && (
             <div className="emoji-picker">
-              {['❤️', '👍', '😊', '😂', '🎉', '🔥', '💯', '😢', '😡', '👎'].map((emoji) => (
-                <button
-                  key={emoji}
-                  className="emoji-btn"
-                  onClick={() => handleReaction(emoji)}
-                >
-                  {emoji}
-                </button>
+              {['❤️', '👍', '😂', '🎉', '🔥', '💯', '😢', '😡', '👎', '😍'].map((emoji) => (
+                <button key={emoji} className="emoji-btn" onClick={() => handleReaction(emoji)}>{emoji}</button>
               ))}
+              <button
+                ref={plusBtnRef}
+                className="emoji-btn"
+                style={{fontWeight:700,fontSize:14,color:'var(--text-primary)'}}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = plusBtnRef.current?.getBoundingClientRect();
+                  if(rect) setExtendedPickerPos(rect);
+                  setShowExtendedPicker(v => !v);
+                }}
+              >＋</button>
             </div>
-            
           )}
-          <div 
-  className="message-actions"
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowOptions(!showOptions);
-  }}
->
-  ⋮
-</div>
+          <div
+            className="message-actions"
+            onClick={(e) => { e.stopPropagation(); setShowOptions(!showOptions); }}
+          >⋮</div>
         </div>}
+
+        {/* Extended emoji picker panel */}
+        {showExtendedPicker && extendedPickerPos && (
+          <div
+            style={{position:'fixed',inset:0,zIndex:9998}}
+            onClick={() => { setShowExtendedPicker(false); setShowEmojiPicker(false); }}
+          >
+            <div
+              onClick={e=>e.stopPropagation()}
+              style={{
+                position:'fixed',
+                bottom: window.innerHeight - extendedPickerPos.top + 8,
+                left: Math.min(extendedPickerPos.left, window.innerWidth - 250),
+                zIndex:9999,
+                background:'var(--bg-primary)',
+                border:'1px solid var(--border-color)',
+                borderRadius:12,
+                padding:'10px 8px 8px',
+                boxShadow:'0 4px 24px rgba(0,0,0,0.25)',
+                width:242,
+              }}
+            >
+              <div style={{fontSize:10,fontWeight:600,color:'var(--text-muted)',marginBottom:6,paddingLeft:2,letterSpacing:'0.05em'}}>REACTIONS</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:3}}>
+                {[
+                  '😢','😮','🙏','😭','🫩','🙇‍♂️',
+                  '😰','🤭','😊','🤞','👀','🤔',
+                  '🤘','🤜','🥺','😎','😤','😍',
+                  '🙌','🔥','🎉','💯','💡','✔️',
+                  '➕','❌','🔜','🚢','😌','🫡',
+                ].map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => { handleReaction(emoji); setShowExtendedPicker(false); setShowEmojiPicker(false); }}
+                    style={{
+                      background:'none',border:'none',cursor:'pointer',
+                      fontSize:20,padding:'4px 2px',borderRadius:6,
+                      transition:'background 0.1s',lineHeight:1.2,
+                    }}
+                    onMouseEnter={e=>e.currentTarget.style.background='var(--bg-secondary)'}
+                    onMouseLeave={e=>e.currentTarget.style.background='none'}
+                  >{emoji}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Message Options */}
         {!msg.is_deleted && showOptions && (
@@ -821,16 +919,34 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
               <span className="option-icon">{copied ? '✅' : '📋'}</span>
               <span className="option-text">{copied ? 'Copied!' : 'Copy'}</span>
             </button>
-            {/* <button className="option-btn" onClick={(e) => { e.stopPropagation(); setShowForwardModal(true); }}>
-              <span className="option-icon">↗️</span>
-              <span className="option-text">Forward</span>
-            </button> */}
+            {isPinned ? (
+              <button className="option-btn" onClick={handleUnpin}>
+                <span className="option-icon">📌</span>
+                <span className="option-text">Unpin</span>
+              </button>
+            ) : (
+              <button className="option-btn" onClick={handlePin}>
+                <span className="option-icon">📌</span>
+                <span className="option-text">Pin</span>
+              </button>
+            )}
             {isOwn && (
               <button className="option-btn delete-btn" onClick={(e) => { e.stopPropagation(); handleDelete(); }}>
                 <span className="option-icon">🗑️</span>
                 <span className="option-text">Delete</span>
               </button>
             )}
+          </div>
+        )}
+        {isPinned && (
+          <div style={{
+            display:'flex', alignItems:'center', gap:4,
+            fontSize:10, color:'var(--text-muted)', marginTop:2,
+            paddingLeft: isOwn ? 0 : 4,
+            justifyContent: isOwn ? 'flex-end' : 'flex-start',
+          }}>
+            <span>📌</span>
+            <span>Pinned{pinnedByName ? ` by ${pinnedByName}` : ''}</span>
           </div>
         )}
       </div>
@@ -931,6 +1047,8 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   const [isDragging,setIsDragging]=useState(false);
   const [dropBatch,setDropBatch]=useState(null);
   const [previewImage,setPreviewImage]=useState(null); // {url, name, downloadUrl}
+  const [pinnedMessages,setPinnedMessages]=useState([]);
+  const [pinnedBannerIdx,setPinnedBannerIdx]=useState(0);
   useEffect(()=>{
     if(!previewImage)return;
     const onKey=(e)=>{if(e.key==='Escape')setPreviewImage(null);};
@@ -1000,6 +1118,15 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     load(1);joinGroup(group.id);
   },[group?.id]);// eslint-disable-line
 
+  useEffect(()=>{
+    if(!group?.id)return;
+    setPinnedMessages([]);
+    setPinnedBannerIdx(0);
+    messagesAPI.getPinnedMessages(group.id)
+      .then(data=>setPinnedMessages(data.pinned||[]))
+      .catch(()=>{});
+  },[group?.id]);
+
   const handleDeleteMessage=useCallback((messageId)=>{
     setMessages(prev=>prev.filter(msg=>msg.id!==messageId));
   },[]);
@@ -1067,6 +1194,21 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     const unsubTyping=on('typing',handleTyping);
     const unsubDeleted=on('message_deleted',handleDeletedMessage);
 
+    const unsubPinned=on('message_pinned',(data)=>{
+      if(Number(data.group_id)!==groupIdRef.current)return;
+      const mid=Number(data.message_id);
+      setPinnedMessages(prev=>{
+        if(prev.some(p=>Number(p.message_id)===mid))return prev;
+        return [...prev,{message_id:mid,pinned_by_name:data.pinned_by_name,pinned_at:data.pinned_at}];
+      });
+    });
+    const unsubUnpinned=on('message_unpinned',(data)=>{
+      if(Number(data.group_id)!==groupIdRef.current)return;
+      const mid=Number(data.message_id);
+      setPinnedMessages(prev=>prev.filter(p=>Number(p.message_id)!==mid));
+      setPinnedBannerIdx(0);
+    });
+
     // FIX: listen for self-removal while this chat panel is open.
     // When received, set accessRevoked=true which renders a "you were removed"
     // message and stops any further load() / markSeen() calls that would 403.
@@ -1081,7 +1223,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
       }
     });
 
-    return()=>{unsubNewMsg();unsubReaction();unsubTyping();unsubDeleted();unsubRemoved();};
+    return()=>{unsubNewMsg();unsubReaction();unsubTyping();unsubDeleted();unsubPinned();unsubUnpinned();unsubRemoved();};
   },[on,handleNewMsg,handleReactionUpdate,handleTyping,handleDeletedMessage,group?.id]);
 
   const typingTmr=useRef(null);
@@ -1233,6 +1375,40 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
         </div>
       )}
 
+      {/* ── Pinned message banner ── */}
+      {pinnedMessages.length>0&&(()=>{
+        const safeIdx=pinnedBannerIdx%pinnedMessages.length;
+        const current=pinnedMessages[pinnedMessages.length-1-safeIdx];
+        return(
+          <div style={{
+            display:'flex',alignItems:'center',gap:8,
+            padding:'5px 12px',
+            borderBottom:'1px solid var(--border-color)',
+            background:'var(--bg-secondary)',
+            flexShrink:0,fontSize:12,cursor:'pointer',userSelect:'none',
+          }}
+            onClick={()=>{
+              const el=matchRefs.current[current.message_id];
+              if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+              setPinnedBannerIdx(i=>(i+1)%pinnedMessages.length);
+            }}
+          >
+            <span style={{fontSize:14}}>📌</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:600,color:'var(--text-primary)',fontSize:11}}>
+                {pinnedMessages.length>1?`${safeIdx+1} / ${pinnedMessages.length} pinned messages`:'Pinned message'}
+              </div>
+              <div style={{color:'var(--text-muted)',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                Pinned by {current.pinned_by_name}
+              </div>
+            </div>
+            {pinnedMessages.length>1&&(
+              <span style={{fontSize:10,color:'var(--text-muted)',flexShrink:0}}>▲</span>
+            )}
+          </div>
+        );
+      })()}
+
       <div className="messages-area" ref={messagesAreaRef}>
         {hasMore&&<div style={{textAlign:'center',paddingBottom:12}}><button className="btn btn-secondary btn-sm" onClick={()=>load(page+1)}>Load older</button></div>}
         {loading?(
@@ -1265,6 +1441,10 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
                 searchQuery={searchQuery}
                 onReplyClick={scrollToMessage}
                 onImageClick={setPreviewImage}
+                isPinned={pinnedMessages.some(p=>Number(p.message_id)===Number(msg.id))}
+                pinnedByName={pinnedMessages.find(p=>Number(p.message_id)===Number(msg.id))?.pinned_by_name}
+                onPin={(msgId)=>setPinnedMessages(prev=>{const n=Number(msgId);if(prev.some(p=>Number(p.message_id)===n))return prev;return[...prev,{message_id:n,pinned_by_name:user?.full_name||'You',pinned_at:new Date().toISOString()}];})}
+                onUnpin={(msgId)=>{const n=Number(msgId);setPinnedMessages(prev=>prev.filter(p=>Number(p.message_id)!==n));setPinnedBannerIdx(0);}}
               />
             </div>
           </React.Fragment>

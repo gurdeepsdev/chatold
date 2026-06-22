@@ -1147,10 +1147,12 @@ const MessageSender = ({
     const files = fileItems.map(item => {
       const file = item.getAsFile();
       if (!file) return null;
-      // Give pasted screenshots a proper name
+      // Restore original filename if this image was copied from the chat, else name pasted screenshots
       if (!file.name || file.name === 'image.png') {
-        const ext = file.type.split('/')[1] || 'png';
-        return new File([file], `pasted-image-${Date.now()}.${ext}`, { type: file.type });
+        const savedName = sessionStorage.getItem('clipboard_image_name');
+        sessionStorage.removeItem('clipboard_image_name');
+        const fallbackExt = file.type.split('/')[1] || 'png';
+        return new File([file], savedName || `pasted-image-${Date.now()}.${fallbackExt}`, { type: file.type });
       }
       return file;
     }).filter(Boolean);

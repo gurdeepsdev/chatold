@@ -72,6 +72,9 @@ export const messagesAPI = {
   deleteMessage: (groupId, messageId) => api.delete(`/messages/${groupId}/${messageId}`),
   addReaction: (groupId, messageId, emoji) => api.post(`/messages/${groupId}/${messageId}/reaction`, { emoji }),
   removeReaction: (groupId, messageId, emoji) => api.delete(`/messages/${groupId}/${messageId}/reaction`, { data: { emoji } }),
+  getPinnedMessages: (groupId) => api.get(`/messages/${groupId}/pinned`),
+  pinMessage: (groupId, messageId) => api.post(`/messages/${groupId}/${messageId}/pin`),
+  unpinMessage: (groupId, messageId) => api.delete(`/messages/${groupId}/${messageId}/pin`),
   getUnreadCounts: () => api.get('/messages/unread-counts'),
   // 🆕 New endpoints for user assignment
   getRecipients: (groupId) => api.get(`/messages/${groupId}/recipients`),
