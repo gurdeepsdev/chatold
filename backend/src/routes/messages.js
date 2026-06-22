@@ -3541,4 +3541,82 @@ router.delete('/:groupId/:messageId/reaction',auth,checkMember,async(req,res)=>{
   }catch(e){console.error(e);res.status(500).json({error:'Failed to remove reaction'});}
 });
 
+/* ═══════════════════════════════════════════════════════════════
+   GET /:groupId/pinned  — list all pinned messages for a group
+   ═══════════════════════════════════════════════════════════════ */
+router.get('/:groupId/pinned', auth, checkMember, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const [rows] = await db.query(`
+      SELECT pm.message_id, pm.pinned_at,
+             pu.full_name AS pinned_by_name,
+             m.encrypted_content, m.iv, m.is_deleted, m.message_type,
+             m.file_name, m.sent_at,
+             su.full_name AS sender_name
+      FROM pinned_messages pm
+      JOIN users pu   ON pu.id  = pm.pinned_by
+      JOIN messages m ON m.id   = pm.message_id
+      JOIN users su   ON su.id  = m.sender_id
+      WHERE pm.group_id = ?
+      ORDER BY pm.pinned_at DESC
+    `, [groupId]);
+
+    const pinned = rows.map(r => ({
+      message_id:     r.message_id,
+      pinned_at:      r.pinned_at,
+      pinned_by_name: r.pinned_by_name,
+      sender_name:    r.sender_name,
+      message_type:   r.message_type,
+      file_name:      r.file_name,
+      content: r.is_deleted ? 'This message was deleted' : decrypt(r.encrypted_content, r.iv),
+    }));
+
+    res.json({ pinned });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Failed to load pinned messages' }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   POST /:groupId/:messageId/pin  — pin a message
+   ═══════════════════════════════════════════════════════════════ */
+router.post('/:groupId/:messageId/pin', auth, checkMember, async (req, res) => {
+  try {
+    const { groupId, messageId } = req.params;
+    const [[msg]] = await db.query('SELECT id FROM messages WHERE id=? AND group_id=?', [messageId, groupId]);
+    if (!msg) return res.status(404).json({ error: 'Message not found' });
+
+    await db.query(
+      'INSERT IGNORE INTO pinned_messages (group_id, message_id, pinned_by) VALUES (?,?,?)',
+      [groupId, messageId, req.user.id]
+    );
+
+    const io = req.app.get('io');
+    if (io) io.to(`group_${groupId}`).emit('message_pinned', {
+      group_id:       Number(groupId),
+      message_id:     Number(messageId),
+      pinned_by_name: req.user.full_name,
+      pinned_at:      new Date(),
+    });
+
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Failed to pin message' }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   DELETE /:groupId/:messageId/pin  — unpin a message
+   ═══════════════════════════════════════════════════════════════ */
+router.delete('/:groupId/:messageId/pin', auth, async (req, res) => {
+  try {
+    const { groupId, messageId } = req.params;
+    await db.query('DELETE FROM pinned_messages WHERE group_id=? AND message_id=?', [groupId, messageId]);
+
+    const io = req.app.get('io');
+    if (io) io.to(`group_${groupId}`).emit('message_unpinned', {
+      group_id:   Number(groupId),
+      message_id: Number(messageId),
+    });
+
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Failed to unpin message' }); }
+});
+
 module.exports=router;
