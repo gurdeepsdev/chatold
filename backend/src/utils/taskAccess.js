@@ -122,9 +122,8 @@ if (role === 'operations') {
     if (advUserIds.length > 0) {
       const advPlaceholders = advUserIds.map(() => '?').join(',');
       
-      // 🎯 KEY FIX: Replace base condition for operations users
-      where = `t.assigned_by = ? OR t.assigned_to IN (${advPlaceholders})`;
-      params = [userId, ...advUserIds]; // Reset params array
+      where = `t.assigned_to = ? OR t.assigned_by = ? OR t.assigned_to IN (${advPlaceholders})`;
+      params = [userId, userId, ...advUserIds];
     }
   }
 }
