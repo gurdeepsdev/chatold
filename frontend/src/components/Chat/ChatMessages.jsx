@@ -554,12 +554,21 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
         .catch(() => toast.error('Failed to copy image'));
       return;
     }
-    const textToCopy = parseMsgContent(msg.content).text;
-    navigator.clipboard.writeText(textToCopy).then(() => {
+    const plain = parseMsgContent(msg.content).text;
+    const html  = contentToHtml(plain);
+    navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html':  new Blob([html],  { type: 'text/html'  }),
+        'text/plain': new Blob([plain], { type: 'text/plain' }),
+      })
+    ]).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
-      toast.error('Failed to copy message');
+      // Fallback: plain text only (older browsers)
+      navigator.clipboard.writeText(plain)
+        .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })
+        .catch(() => toast.error('Failed to copy message'));
     });
   };
 
@@ -748,16 +757,13 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   {/* Text Content */}
   <div className="text-content" onCopy={e => {
     const selection = window.getSelection();
-    if (!selection || !selection.toString()) return;
-    const plain = selection.toString();
-    const html = plain
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/ {2,}/g, m => '&nbsp;'.repeat(m.length))
-      .replace(/\n/g, '<br>');
-    e.clipboardData.setData('text/plain', plain);
-    e.clipboardData.setData('text/html', html);
+    if (!selection || !selection.rangeCount || !selection.toString()) return;
+    const range = selection.getRangeAt(0);
+    const fragment = range.cloneContents();
+    const div = document.createElement('div');
+    div.appendChild(fragment);
+    e.clipboardData.setData('text/html', div.innerHTML);
+    e.clipboardData.setData('text/plain', selection.toString());
     e.preventDefault();
   }}>
     {(() => {
@@ -990,6 +996,30 @@ function highlightText(text,query){
 const URL_REGEX = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
 // Matches markdown links [label](url) first, then plain URLs — left-to-right priority.
 const COMBINED_REGEX = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Converts message text to HTML string — same link logic as renderContent but returns a string.
+function contentToHtml(text) {
+  if (!text) return '';
+  let out = '', last = 0;
+  COMBINED_REGEX.lastIndex = 0;
+  let m;
+  while ((m = COMBINED_REGEX.exec(text)) !== null) {
+    if (m.index > last) out += escHtml(text.slice(last, m.index));
+    if (m[1] != null) {
+      out += `<a href="${escHtml(m[2])}">${escHtml(m[1])}</a>`;
+    } else {
+      const href = m[3].startsWith('www.') ? `https://${m[3]}` : m[3];
+      out += `<a href="${escHtml(href)}">${escHtml(m[3])}</a>`;
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out += escHtml(text.slice(last));
+  return out.replace(/\n/g, '<br>');
+}
 
 function renderContent(text, searchQuery) {
   if (!text) return text;
