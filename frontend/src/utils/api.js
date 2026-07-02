@@ -70,6 +70,7 @@ export const messagesAPI = {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   deleteMessage: (groupId, messageId) => api.delete(`/messages/${groupId}/${messageId}`),
+  editMessage: (groupId, messageId, content) => api.patch(`/messages/${groupId}/${messageId}`, { content }),
   addReaction: (groupId, messageId, emoji) => api.post(`/messages/${groupId}/${messageId}/reaction`, { emoji }),
   removeReaction: (groupId, messageId, emoji) => api.delete(`/messages/${groupId}/${messageId}/reaction`, { data: { emoji } }),
   getPinnedMessages: (groupId) => api.get(`/messages/${groupId}/pinned`),

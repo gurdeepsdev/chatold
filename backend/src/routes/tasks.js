@@ -1244,19 +1244,76 @@ router.get('/:taskId/responses',auth,async(req,res)=>{
 router.post('/followup',auth,async(req,res)=>{
   try {
     const{group_id,task_id,message,scheduled_at}=req.body;
-    const[r]=await db.query('INSERT INTO followups (group_id,task_id,created_by,message,scheduled_at) VALUES(?,?,?,?,?)',
-      [group_id,task_id||null,req.user.id,message,scheduled_at||null]);
+    if(!group_id||!task_id||!message?.trim()) return res.status(400).json({error:'group_id, task_id and message required'});
+
+    // Look up the task to find assigner and assignee
+    const[[task]]=await db.query('SELECT id,assigned_by,assigned_to FROM tasks WHERE id=?',[task_id]);
+    if(!task) return res.status(404).json({error:'Task not found'});
+
+    // Determine recipient: the OTHER party
+    const senderId=req.user.id;
+    let recipientId=null;
+    if(senderId===task.assigned_by) recipientId=task.assigned_to;
+    else if(senderId===task.assigned_to) recipientId=task.assigned_by;
+    // If neither (e.g. admin), default to assignee
+    if(!recipientId) recipientId=task.assigned_to||task.assigned_by;
+
+    // Save followup with recipient
+    const[r]=await db.query(
+      'INSERT INTO followups (group_id,task_id,created_by,recipient_id,message,scheduled_at) VALUES(?,?,?,?,?,?)',
+      [group_id,task_id,senderId,recipientId,message.trim(),scheduled_at||null]
+    );
+
+    // Send a chat message in the group directed to the recipient
+    const chatContent=`↩ Follow-up: ${message.trim()}`;
+    const{encrypted,iv}=encrypt(chatContent);
+    const recipientIds=recipientId?[recipientId]:[];
+    const[mRes]=await db.query(
+      `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids)
+       VALUES(?,?,'task_notification',?,?,?,?)`,
+      [group_id,senderId,encrypted,iv,task_id,recipientIds.length?JSON.stringify(recipientIds):null]
+    );
+
+    const io=req.app.get('io');
+    if(io){
+      const senderName=req.user.full_name||req.user.username;
+      io.to(`group_${group_id}`).emit('new_message',{
+        id:mRes.insertId,
+        group_id:Number(group_id),
+        sender_id:senderId,
+        sender_name:senderName,
+        sender_role:req.user.role,
+        message_type:'task_notification',
+        content:chatContent,
+        recipient_ids:recipientIds,
+        task_ref:{task_id:Number(task_id),task_type:'followup',task_title:'Follow-up'},
+        sent_at:new Date().toISOString(),
+        is_task:true,
+      });
+      if(recipientId){
+        io.to(`user_${recipientId}`).emit('task_assigned',{
+          task_id:Number(task_id),
+          group_id:Number(group_id),
+          message:`Follow-up from ${senderName}: ${message.trim()}`,
+        });
+      }
+    }
+
     res.status(201).json({followup_id:r.insertId});
-  } catch(e) { console.error('followup error:',e.message); res.status(500).json({error:'Server error'}); }
+  } catch(e){console.error('followup error:',e.message);res.status(500).json({error:'Server error'});}
 });
 
 router.get('/followups/group/:groupId',auth,async(req,res)=>{
   try {
     const[r]=await db.query(
-      'SELECT f.*,u.full_name AS created_by_name FROM followups f JOIN users u ON u.id=f.created_by WHERE f.group_id=? ORDER BY f.created_at DESC',
+      `SELECT f.*, u.full_name AS created_by_name, u2.full_name AS recipient_name
+       FROM followups f
+       JOIN users u ON u.id=f.created_by
+       LEFT JOIN users u2 ON u2.id=f.recipient_id
+       WHERE f.group_id=? ORDER BY f.created_at ASC`,
       [req.params.groupId]);
     res.json({ followups: r });
-  } catch(e) { console.error('followups error:',e.message); res.status(500).json({error:'Server error'}); }
+  } catch(e){console.error('followups error:',e.message);res.status(500).json({error:'Server error'});}
 });
 
 // Task file upload endpoint - similar to chat upload (no auth required)

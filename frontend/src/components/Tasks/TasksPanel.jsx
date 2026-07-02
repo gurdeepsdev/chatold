@@ -88,16 +88,31 @@ const emptyForm=(userRole, type=null)=>{
 };
 
 /* ── Task item ─────────────────────────────────────────────── */
-function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
+function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick,followups=[]}){
   const [expanded,setExpanded]=useState(false);
   const [comment,setComment]=useState('');
   const [busy,setBusy]=useState(false);
+  const [showFollowupInput,setShowFollowupInput]=useState(false);
+  const [followupMsg,setFollowupMsg]=useState('');
+  const [followupBusy,setFollowupBusy]=useState(false);
   const type=TASK_TYPES[task.task_type]||TASK_TYPES.initial_setup;
   const sc={pending:'#f59e0b',accepted:'#4f7dff',completed:'#22c55e',rejected:'#ef4444'};
 
-  // Check if current user is the assigned user
   const isAssignedUser = task.assigned_to === currentUser.id;
   const isTaskCreator = task.assigned_by === currentUser.id;
+
+  const taskFollowups = followups.filter(f => f.task_id === task.id);
+
+  const handleFollowupSubmit = async () => {
+    if (!followupMsg.trim()) return;
+    setFollowupBusy(true);
+    try {
+      await onFollowup(task, followupMsg.trim());
+      setFollowupMsg('');
+      setShowFollowupInput(false);
+    } catch { /* toast handled in parent */ }
+    setFollowupBusy(false);
+  };
 
   const doStatus=async(status)=>{
     setBusy(true);
@@ -184,8 +199,42 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick}){
               You can only view this task. Actions are available to the assigned user.
             </div>
           )}
-          {(task.status==='completed'||task.status==='rejected')&&(
-            <button className="btn btn-xs btn-secondary" style={{marginTop:6}} onClick={()=>onFollowup(task)}>↩ Follow Up</button>
+          {/* Follow-up thread */}
+          {taskFollowups.length > 0 && (
+            <div style={{marginTop:8,borderLeft:'2px solid var(--border)',paddingLeft:10}}>
+              {taskFollowups.map(f=>(
+                <div key={f.id} style={{marginBottom:6,fontSize:11}}>
+                  <span style={{fontWeight:600,color:'var(--text-primary)'}}>{f.created_by_name}</span>
+                  <span style={{color:'var(--text-muted)',marginLeft:6}}>{format(new Date(f.created_at),'MMM d, HH:mm')}</span>
+                  {f.recipient_name&&<span style={{color:'var(--text-muted)',marginLeft:4}}>→ {f.recipient_name}</span>}
+                  <div style={{color:'var(--text-secondary)',marginTop:2}}>{f.message}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Follow-up button — visible to assigner and assignee */}
+          {(isAssignedUser||isTaskCreator)&&(task.status==='completed'||task.status==='rejected')&&(
+            showFollowupInput ? (
+              <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+                <textarea
+                  className="form-control"
+                  style={{minHeight:52,fontSize:12}}
+                  placeholder="Type your follow-up message…"
+                  value={followupMsg}
+                  onChange={e=>setFollowupMsg(e.target.value)}
+                  onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleFollowupSubmit();}if(e.key==='Escape')setShowFollowupInput(false);}}
+                  autoFocus
+                />
+                <div style={{display:'flex',gap:6}}>
+                  <button className="btn btn-xs btn-secondary" onClick={()=>setShowFollowupInput(false)}>Cancel</button>
+                  <button className="btn btn-xs btn-primary" onClick={handleFollowupSubmit} disabled={followupBusy||!followupMsg.trim()}>
+                    {followupBusy?'Sending…':'Send Follow-up'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="btn btn-xs btn-secondary" style={{marginTop:6}} onClick={()=>setShowFollowupInput(true)}>↩ Follow Up</button>
+            )
           )}
           {/* Details button - always show */}
           <button 
@@ -206,6 +255,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
   const {user}=useAuth();
   const {on}=useSocket();
   const [tasks,setTasks]=useState([]);
+  const [followups,setFollowups]=useState([]);
   const [filter,setFilter]=useState('all');
   const [showCreate,setShowCreate]=useState(()=>{
     if(!user?.id||!group?.id) return false;
@@ -770,6 +820,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
   useEffect(()=>{
     load();
     authAPI.getUsers().then(d=>setUsers(d.users||[]));
+    if(group?.id) tasksAPI.getFollowups(group.id).then(d=>setFollowups(d.followups||[])).catch(()=>{});
   },[group?.id]);// eslint-disable-line
 
   // Draft restoration — runs on mount and group/user change
@@ -1183,12 +1234,26 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to || ent
     }
   };
 
-  const handleFollowup=async(task)=>{
-    const taskType=TASK_TYPES[task.task_type]||TASK_TYPES.initial_setup;
-    const msg=prompt(`Follow-up for: ${taskType.label} task`);
-    if(!msg)return;
-    await tasksAPI.createFollowup({group_id:group.id,task_id:task.id,message:msg});
-    toast.success('Follow-up added!');
+  const handleFollowup=async(task, message)=>{
+    try {
+      const data = await tasksAPI.createFollowup({group_id:group.id, task_id:task.id, message});
+      // Add to local followups so it shows immediately without a reload
+      setFollowups(prev=>[...prev,{
+        id: data.followup_id,
+        task_id: task.id,
+        group_id: group.id,
+        created_by: user.id,
+        created_by_name: user.full_name,
+        recipient_id: task.assigned_by===user.id ? task.assigned_to : task.assigned_by,
+        recipient_name: task.assigned_by===user.id ? task.assigned_to_name : task.assigned_by_name,
+        message,
+        created_at: new Date().toISOString(),
+      }]);
+      toast.success('Follow-up sent!');
+    } catch {
+      toast.error('Failed to send follow-up');
+      throw new Error('failed');
+    }
   };
 
   const handleTaskClick = async (taskId) => {
@@ -1934,7 +1999,8 @@ onClick={(e) => openEditor(entry, index, e)}/>
                 onStatusUpdate={handleStatusUpdate} 
                 onFollowup={handleFollowup}
                 onTaskClick={handleTaskClick}
-                group={group} 
+                followups={followups}
+                group={group}
               />
             </div>
           ))

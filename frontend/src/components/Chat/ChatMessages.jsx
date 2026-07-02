@@ -503,7 +503,7 @@ function TaskPill({taskRef,onTaskClick}){
 }
 
 /* ── Single bubble ─────────────────────────────────────────── */
-function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQuery,onReplyClick,onImageClick,isPinned,pinnedByName,onPin,onUnpin}){
+function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMessage,searchQuery,onReplyClick,onImageClick,isPinned,pinnedByName,onPin,onUnpin}){
   const {user} = useAuth();
   const [showOptions, setShowOptions] = useState(false);
   const [localReactions, setLocalReactions] = useState(msg.reactions || []);
@@ -513,6 +513,10 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
   const [extendedPickerPos, setExtendedPickerPos] = useState(null);
   const [onDeleteMessageState, setOnDeleteMessageState] = useState(null);
   const [reactionPopup, setReactionPopup] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const editInputRef = useRef(null);
   const messageRef = useRef(null);
   const plusBtnRef = useRef(null);
   
@@ -582,6 +586,42 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
     } catch (error) {
       toast.error('Failed to delete message');
     }
+  };
+
+  const handleEditStart = () => {
+    const { text } = parseMsgContent(msg.content);
+    setEditContent(text);
+    setIsEditing(true);
+    setShowOptions(false);
+    setTimeout(() => {
+      if (editInputRef.current) {
+        editInputRef.current.style.height = 'auto';
+        editInputRef.current.style.height = editInputRef.current.scrollHeight + 'px';
+        editInputRef.current.focus();
+        editInputRef.current.setSelectionRange(editInputRef.current.value.length, editInputRef.current.value.length);
+      }
+    }, 0);
+  };
+
+  const handleEditSave = async () => {
+    const trimmed = editContent.trim();
+    if (!trimmed) return;
+    const { text: original } = parseMsgContent(msg.content);
+    if (trimmed === original) { setIsEditing(false); return; }
+    setEditSaving(true);
+    try {
+      await messagesAPI.editMessage(group.id, msg.id, trimmed);
+      if (onEditMessage) onEditMessage(msg.id, trimmed);
+      setIsEditing(false);
+    } catch {
+      toast.error('Failed to edit message');
+    }
+    setEditSaving(false);
+  };
+
+  const handleEditCancel = () => {
+    setIsEditing(false);
+    setEditContent('');
   };
 
   const handleReaction = async (emoji) => {
@@ -762,25 +802,66 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
     const fragment = range.cloneContents();
     const div = document.createElement('div');
     div.appendChild(fragment);
-    e.clipboardData.setData('text/html', div.innerHTML);
+    // <br> for Teams, pre-wrap wrapper for Gmail — no trailing \n or double breaks.
+    const rawHtml = div.innerHTML.replace(/\n/g, '<br>');
+    const html = `<div style="white-space:pre-wrap;font-family:inherit">${rawHtml}</div>`;
+    e.clipboardData.setData('text/html', html);
     e.clipboardData.setData('text/plain', selection.toString());
     e.preventDefault();
   }}>
-    {(() => {
-      const { prefix, text } = parseMsgContent(msg.content);
-      return (
-        <>
-          {prefix && (
-            <div style={{fontSize:11,fontWeight:600,opacity:0.6,marginBottom:3,letterSpacing:'0.02em',userSelect:'none'}}>
-              {prefix}
-            </div>
-          )}
-          <div className="message-text">{renderContent(text, searchQuery)}</div>
-        </>
-      );
-    })()}
+    {isEditing ? (
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        <textarea
+          ref={editInputRef}
+          value={editContent}
+          onChange={e => {
+            setEditContent(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = e.target.scrollHeight + 'px';
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEditSave(); }
+            if (e.key === 'Escape') handleEditCancel();
+          }}
+          style={{
+            width:'100%', minHeight:80, resize:'none', overflow:'hidden',
+            background:'var(--bg-primary)', color:'var(--text-primary)',
+            border:'1.5px solid var(--accent)', borderRadius:8,
+            padding:'8px 10px', fontSize:13, fontFamily:'inherit', lineHeight:1.5,
+            outline:'none', boxSizing:'border-box',
+          }}
+        />
+        <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}>
+          <button onClick={handleEditCancel}
+            style={{padding:'3px 10px',borderRadius:6,border:'1px solid var(--border)',
+              background:'transparent',color:'var(--text-secondary)',fontSize:12,cursor:'pointer'}}>
+            Cancel
+          </button>
+          <button onClick={handleEditSave} disabled={editSaving || !editContent.trim()}
+            style={{padding:'3px 10px',borderRadius:6,border:'none',
+              background:'var(--accent)',color:'#fff',fontSize:12,cursor:'pointer',opacity:editSaving?0.6:1}}>
+            {editSaving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    ) : (
+      (() => {
+        const { prefix, text } = parseMsgContent(msg.content);
+        return (
+          <>
+            {prefix && (
+              <div style={{fontSize:11,fontWeight:600,opacity:0.6,marginBottom:3,letterSpacing:'0.02em',userSelect:'none'}}>
+                {prefix}
+              </div>
+            )}
+            <div className="message-text">{renderContent(text, searchQuery)}</div>
+          </>
+        );
+      })()
+    )}
       <div className="message-time" style={{userSelect:'none'}}>
             {format(new Date(msg.sent_at), 'HH:mm')}
+            {msg.is_edited && <span style={{fontSize:10,opacity:0.5,marginLeft:4}}>(edited)</span>}
           </div>
     {msg.task_ref && (
       <TaskPill taskRef={msg.task_ref} onTaskClick={onTaskClick} />
@@ -936,6 +1017,12 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,searchQu
                 <span className="option-text">Pin</span>
               </button>
             )}
+            {isOwn && msg.message_type === 'text' && (
+              <button className="option-btn" onClick={(e) => { e.stopPropagation(); handleEditStart(); }}>
+                <span className="option-icon">✏️</span>
+                <span className="option-text">Edit</span>
+              </button>
+            )}
             {isOwn && (
               <button className="option-btn delete-btn" onClick={(e) => { e.stopPropagation(); handleDelete(); }}>
                 <span className="option-icon">🗑️</span>
@@ -1018,7 +1105,8 @@ function contentToHtml(text) {
     last = m.index + m[0].length;
   }
   if (last < text.length) out += escHtml(text.slice(last));
-  return out.replace(/\n/g, '<br>');
+  // <br> for Teams, pre-wrap wrapper for Gmail — no trailing \n or double breaks.
+  return `<div style="white-space:pre-wrap;font-family:inherit">${out.replace(/\n/g, '<br>')}</div>`;
 }
 
 function renderContent(text, searchQuery) {
@@ -1214,8 +1302,20 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
 
   const handleDeletedMessage=useCallback((data)=>{
     if(Number(data.group_id)!==groupIdRef.current)return;
-    // Remove the deleted message from the current state
     setMessages(prev => prev.filter(m => m.id !== data.message_id));
+  },[]);
+
+  const handleEditMessage=useCallback((messageId, newContent)=>{
+    setMessages(prev=>prev.map(m=>
+      m.id===messageId ? {...m, content:newContent, is_edited:true} : m
+    ));
+  },[]);
+
+  const handleEditedMessage=useCallback((data)=>{
+    if(Number(data.group_id)!==groupIdRef.current)return;
+    setMessages(prev=>prev.map(m=>
+      m.id===data.message_id ? {...m, content:data.content, is_edited:true, edited_at:data.edited_at} : m
+    ));
   },[]);
 
   useEffect(()=>{
@@ -1223,6 +1323,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     const unsubReaction=on('reaction_update',handleReactionUpdate);
     const unsubTyping=on('typing',handleTyping);
     const unsubDeleted=on('message_deleted',handleDeletedMessage);
+    const unsubEdited=on('message_edited',handleEditedMessage);
 
     const unsubPinned=on('message_pinned',(data)=>{
       if(Number(data.group_id)!==groupIdRef.current)return;
@@ -1253,8 +1354,8 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
       }
     });
 
-    return()=>{unsubNewMsg();unsubReaction();unsubTyping();unsubDeleted();unsubPinned();unsubUnpinned();unsubRemoved();};
-  },[on,handleNewMsg,handleReactionUpdate,handleTyping,handleDeletedMessage,group?.id]);
+    return()=>{unsubNewMsg();unsubReaction();unsubTyping();unsubDeleted();unsubEdited();unsubPinned();unsubUnpinned();unsubRemoved();};
+  },[on,handleNewMsg,handleReactionUpdate,handleTyping,handleDeletedMessage,handleEditedMessage,group?.id]);
 
   const typingTmr=useRef(null);
 
@@ -1468,6 +1569,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
                 onTaskClick={onTaskClick}
                 group={group}
                 onDeleteMessage={handleDeleteMessage}
+                onEditMessage={handleEditMessage}
                 searchQuery={searchQuery}
                 onReplyClick={scrollToMessage}
                 onImageClick={setPreviewImage}
