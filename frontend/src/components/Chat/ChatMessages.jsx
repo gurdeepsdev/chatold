@@ -1233,6 +1233,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   useEffect(()=>{
     if(!group)return;
     setMessages([]);setPage(1);setFirstUnreadId(null);setAccessRevoked(false);
+    setReplyTo(null);
     load(1);joinGroup(group.id);
   },[group?.id]);// eslint-disable-line
 

@@ -179,6 +179,13 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick,follow
               )}
             </div>
           )}
+          {/* rejection info */}
+          {task.status === 'rejected' && (task.rejected_by_name || task.rejection_note) && (
+            <div style={{background:'#ef444415',border:'1px solid #ef444430',borderRadius:8,padding:'7px 10px',marginBottom:8,fontSize:12}}>
+              {task.rejected_by_name && <div style={{marginBottom:2}}><span style={{color:'#ef4444',fontWeight:600}}>Rejected by: </span><span style={{color:'var(--text-primary)'}}>{task.rejected_by_name}</span></div>}
+              {task.rejection_note && <div><span style={{color:'#ef4444',fontWeight:600}}>Note: </span><span style={{color:'var(--text-secondary)'}}>{task.rejection_note}</span></div>}
+            </div>
+          )}
           {/* actions - Only show for assigned users */}
           {isAssignedUser && task.status==='pending'&&(
             <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
@@ -879,7 +886,13 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
       if(action==='status_changed'){
         // Update task status in the list with single state update
         setTasks(prev => {
-          const updatedTasks = prev.map(t=>t.id===task_id?{...t,status}:t);
+          const updatedTasks = prev.map(t => {
+            if (t.id !== task_id) return t;
+            const extra = status === 'rejected' && response
+              ? { rejection_note: response.comment || null, rejected_by_name: response.user_name || null }
+              : {};
+            return { ...t, status, ...extra };
+          });
           return updatedTasks;
         });
         // Force re-render

@@ -3102,9 +3102,14 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       LEFT JOIN users ru ON ru.id=rm.sender_id
       LEFT JOIN tasks t ON t.id=m.task_ref_id
       WHERE m.group_id=?
+      AND (
+        m.is_private = 0
+        OR m.sender_id = ?
+        OR (m.recipient_ids IS NOT NULL AND JSON_CONTAINS(m.recipient_ids, CAST(? AS JSON)))
+      )
       ORDER BY m.sent_at DESC
       LIMIT ? OFFSET ?
-    `,[groupId,limit,(page-1)*limit]);
+    `,[groupId, req.user.id, req.user.id, limit,(page-1)*limit]);
 
     // Reactions batch-fetch
     const messageIds = rows.map(m => m.id);

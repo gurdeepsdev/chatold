@@ -137,6 +137,24 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
               </div>
             </div>
 
+            {/* Rejection info */}
+            {task.status === 'rejected' && (task.rejected_by_name || task.rejection_note) && (
+              <div style={{ background: '#ef444415', border: '1px solid #ef444430', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>
+                {task.rejected_by_name && (
+                  <div style={{ marginBottom: task.rejection_note ? 4 : 0 }}>
+                    <span style={{ color: '#ef4444', fontWeight: 600 }}>Rejected by: </span>
+                    <span style={{ color: 'var(--text-primary)' }}>{task.rejected_by_name}</span>
+                  </div>
+                )}
+                {task.rejection_note && (
+                  <div>
+                    <span style={{ color: '#ef4444', fontWeight: 600 }}>Note: </span>
+                    <span style={{ color: 'var(--text-secondary)' }}>{task.rejection_note}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Task Description */}
             {task.description && (
               <div style={{ marginBottom: '20px' }}>

@@ -40,19 +40,25 @@ router.get('/group/:groupId',auth,async(req,res)=>{
     u1.full_name AS assigned_to_name,
     u2.full_name AS assigned_by_name,
     c.campaign_name,
-    parent.task_type AS parent_task_type
+    parent.task_type AS parent_task_type,
+    tr_reject.comment AS rejection_note,
+    u_reject.full_name AS rejected_by_name
   FROM tasks t
   LEFT JOIN users u1 ON u1.id=t.assigned_to
   LEFT JOIN users u2 ON u2.id=t.assigned_by
   LEFT JOIN campaigns c ON c.id=t.campaign_id
   LEFT JOIN tasks parent ON parent.id=t.parent_task_id
-  WHERE t.group_id=? 
+  LEFT JOIN task_responses tr_reject ON tr_reject.id = (
+    SELECT id FROM task_responses WHERE task_id = t.id AND action = 'rejected' ORDER BY responded_at DESC LIMIT 1
+  )
+  LEFT JOIN users u_reject ON u_reject.id = tr_reject.user_id
+  WHERE t.group_id=?
   AND (${where})
-  ORDER BY 
-    CASE t.status 
-      WHEN 'pending' THEN 1 
-      WHEN 'accepted' THEN 2 
-      ELSE 3 
+  ORDER BY
+    CASE t.status
+      WHEN 'pending' THEN 1
+      WHEN 'accepted' THEN 2
+      ELSE 3
     END,
     t.created_at DESC
 `, [req.params.groupId, ...params]);
@@ -88,11 +94,17 @@ router.get('/group/:groupId',auth,async(req,res)=>{
         const [subTasks] = await db.query(`
   SELECT t.*,
     u1.full_name AS assigned_to_name,
-    u2.full_name AS assigned_by_name
+    u2.full_name AS assigned_by_name,
+    tr_reject.comment AS rejection_note,
+    u_reject.full_name AS rejected_by_name
   FROM tasks t
   LEFT JOIN users u1 ON u1.id=t.assigned_to
   LEFT JOIN users u2 ON u2.id=t.assigned_by
-  WHERE t.parent_task_id=? 
+  LEFT JOIN task_responses tr_reject ON tr_reject.id = (
+    SELECT id FROM task_responses WHERE task_id = t.id AND action = 'rejected' ORDER BY responded_at DESC LIMIT 1
+  )
+  LEFT JOIN users u_reject ON u_reject.id = tr_reject.user_id
+  WHERE t.parent_task_id=?
   AND (${where})
   ORDER BY t.created_at DESC
 `, [task.id, ...params]);
@@ -1199,12 +1211,18 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
     
     // Get updated task with full details
     const[[updatedTask]]=await db.query(`
-      SELECT t.*, 
+      SELECT t.*,
         u1.full_name AS assigned_to_name,
-        u2.full_name AS assigned_by_name
-      FROM tasks t 
-      LEFT JOIN users u1 ON u1.id=t.assigned_to 
+        u2.full_name AS assigned_by_name,
+        tr_reject.comment AS rejection_note,
+        u_reject.full_name AS rejected_by_name
+      FROM tasks t
+      LEFT JOIN users u1 ON u1.id=t.assigned_to
       LEFT JOIN users u2 ON u2.id=t.assigned_by
+      LEFT JOIN task_responses tr_reject ON tr_reject.id = (
+        SELECT id FROM task_responses WHERE task_id = t.id AND action = 'rejected' ORDER BY responded_at DESC LIMIT 1
+      )
+      LEFT JOIN users u_reject ON u_reject.id = tr_reject.user_id
       WHERE t.id=?`,[taskId]);
     
     // Get the latest response/comment
@@ -1227,6 +1245,61 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
         updated_by: req.user.full_name
       });
     }
+
+    // Notify operations users when a pause_pid task is rejected with a note
+    if (status === 'rejected' && task.task_type === 'pause_pid') {
+      try {
+        // Find all operations users in this group
+        const [opsUsers] = await db.query(`
+          SELECT gm.user_id, u.full_name
+          FROM group_members gm
+          JOIN users u ON u.id = gm.user_id
+          WHERE gm.group_id = ? AND u.role = 'operations'
+        `, [task.group_id]);
+
+        if (opsUsers.length > 0) {
+          const opsUserIds = opsUsers.map(u => u.user_id);
+          const rejectorName = req.user.full_name || req.user.username;
+          const noteText = comment ? ` — Note: ${comment}` : '';
+          const notifContent = `⚠️ Pause PID task rejected by ${rejectorName}${noteText}`;
+          const { encrypted, iv } = encrypt(notifContent);
+
+          const [mRes] = await db.query(
+            `INSERT INTO messages (group_id, sender_id, message_type, encrypted_content, iv, task_ref_id, recipient_ids, is_private)
+             VALUES (?, ?, 'task_notification', ?, ?, ?, ?, 1)`,
+            [task.group_id, req.user.id, encrypted, iv, taskId, JSON.stringify(opsUserIds)]
+          );
+
+          if (io) {
+            io.to(`group_${task.group_id}`).emit('new_message', {
+              id: mRes.insertId,
+              group_id: Number(task.group_id),
+              sender_id: req.user.id,
+              sender_name: rejectorName,
+              sender_role: req.user.role,
+              message_type: 'task_notification',
+              content: notifContent,
+              recipient_ids: opsUserIds,
+              task_ref: { task_id: Number(taskId), task_type: 'pause_pid', task_title: 'Pause PID' },
+              sent_at: new Date().toISOString(),
+            });
+
+            // Personal ping to each operations user
+            for (const ops of opsUsers) {
+              io.to(`user_${ops.user_id}`).emit('task_assigned', {
+                task_id: Number(taskId),
+                group_id: Number(task.group_id),
+                message: notifContent,
+              });
+            }
+          }
+        }
+      } catch (notifErr) {
+        // Non-fatal — don't fail the whole status update
+        console.error('Failed to notify operations on pause_pid rejection:', notifErr.message);
+      }
+    }
+
     res.json({message:'Updated',status,task:updatedTask,response:latestResponse});
   }catch(e){await conn.rollback();res.status(500).json({error:'Server error'});}
   finally{conn.release();}

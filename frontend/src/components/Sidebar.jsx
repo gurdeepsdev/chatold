@@ -1292,7 +1292,7 @@ useEffect(() => {
     // 🔥 Update stable position
     if (msg?.group_id) {
       const now = Date.now();
-      stablePositionRef.current[msg.group_id] = now;
+      stablePositionRef.current[Number(msg.group_id)] = now;
 
       localStorage.setItem(
         `stable_order_${user?.id}`,
@@ -1300,14 +1300,18 @@ useEffect(() => {
       );
     }
 
-    // 🔥 Update group last message
-    setGroups(prev =>
-      prev.map(g =>
-        g.id === msg.group_id
-          ? { ...g, last_message_at: msg.sent_at }
-          : g
-      )
-    );
+    // 🔥 Update group last message AND move it to the top of the list
+    setGroups(prev => {
+      const gid = Number(msg.group_id);
+      const idx = prev.findIndex(g => g.id === gid);
+      if (idx < 0) return prev;
+      const updated = prev.map(g =>
+        g.id === gid ? { ...g, last_message_at: msg.sent_at || new Date().toISOString() } : g
+      );
+      // Move to front so the sort always sees it first
+      const [moved] = updated.splice(idx, 1);
+      return [moved, ...updated];
+    });
 
     // 🔥 FIXED CONDITION (MAIN FIX)
     if (
@@ -1339,13 +1343,16 @@ useEffect(() => {
       );
     }
 
-    setGroups(prev =>
-      prev.map(g =>
-        g.id === group_id
-          ? { ...g, last_message_at: new Date().toISOString() }
-          : g
-      )
-    );
+    setGroups(prev => {
+      const gid = Number(group_id);
+      const idx = prev.findIndex(g => g.id === gid);
+      if (idx < 0) return prev;
+      const updated = prev.map(g =>
+        g.id === gid ? { ...g, last_message_at: new Date().toISOString() } : g
+      );
+      const [moved] = updated.splice(idx, 1);
+      return [moved, ...updated];
+    });
 
     setUnreadCounts(prev => ({
       ...prev,
