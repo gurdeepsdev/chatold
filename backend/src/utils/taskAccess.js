@@ -354,7 +354,7 @@ const canViewAction = (userRole, action) => {
   const visibilityRules = {
     // Share Link & Pause PID
     'share_link': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin'],
-    'pause_pid': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin'],
+    'pause_pid': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin', 'pub_executive', 'publisher', 'publisher_manager'],
     
     // Raise Request  
     'raise_request': ['pub_executive', 'optimization', 'publisher', 'publisher_manager', 'admin'],
