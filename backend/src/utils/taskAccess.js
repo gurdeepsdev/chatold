@@ -87,16 +87,13 @@ const getTaskAccessFilter = async (crmDb, userId) => {
 // 🆕 OPERATIONS → expose tasks ONLY to advertiser-side users in SAME group
 // 🆕 OPERATIONS → expose tasks ONLY to advertiser-side users in SAME group
 if (role === 'operations') {
-    console.log('🔧 OPERATIONS ROLE - Processing...');
-
   // Step 1: Find which groups this operations user belongs to
   const [groupRows] = await crmDb.query(
-    `SELECT manager_id, sub_admin_id 
-     FROM manager_subadmins 
+    `SELECT manager_id, sub_admin_id
+     FROM manager_subadmins
      WHERE manager_id = ? OR sub_admin_id = ?`,
     [userId, userId]
   );
-  console.log('🔍 Operations user groups:', groupRows);
 
   // Collect all peer IDs from those group rows (excluding self)
   let groupMemberIds = [];
@@ -111,7 +108,7 @@ if (role === 'operations') {
 
     // Step 2: From those peers, pick only advertiser-side roles
     const [advUsers] = await crmDb.query(
-      `SELECT id FROM login 
+      `SELECT id FROM login
        WHERE role IN ('advertiser_manager', 'advertiser', 'adv_executive')
        AND id IN (${placeholders})`,
       [...groupMemberIds]
@@ -121,11 +118,21 @@ if (role === 'operations') {
 
     if (advUserIds.length > 0) {
       const advPlaceholders = advUserIds.map(() => '?').join(',');
-      
-      where = `t.assigned_to = ? OR t.assigned_by = ? OR t.assigned_to IN (${advPlaceholders})`;
-      params = [userId, userId, ...advUserIds];
+
+      // Check both assigned_to and assigned_by for adv-side peers
+      where = `t.assigned_to = ? OR t.assigned_by = ? OR t.assigned_to IN (${advPlaceholders}) OR t.assigned_by IN (${advPlaceholders})`;
+      params = [userId, userId, ...advUserIds, ...advUserIds];
     }
   }
+
+  // Operations can also see rejected pause_pid tasks raised by optimization users
+  // and assigned to any publisher-side user, for follow-up visibility
+  where += ` OR (
+    t.task_type = 'pause_pid'
+    AND t.status = 'rejected'
+    AND t.assigned_by IN (SELECT id FROM users WHERE role = 'optimization')
+    AND t.assigned_to IN (SELECT id FROM users WHERE role IN ('publisher_manager', 'publisher', 'pub_executive'))
+  )`;
 }
 
   // 🧑‍💼 Advertiser Manager
@@ -347,7 +354,7 @@ const canViewAction = (userRole, action) => {
   const visibilityRules = {
     // Share Link & Pause PID
     'share_link': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin'],
-    'pause_pid': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin'],
+    'pause_pid': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin', 'pub_executive', 'publisher', 'publisher_manager'],
     
     // Raise Request  
     'raise_request': ['pub_executive', 'optimization', 'publisher', 'publisher_manager', 'admin'],

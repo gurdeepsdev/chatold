@@ -3091,7 +3091,7 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       SELECT m.id,m.group_id,m.message_type,m.encrypted_content,m.iv,
              m.file_url,m.file_name,m.file_size,m.mime_type,
              m.reply_to_id,m.is_deleted,m.sent_at,m.task_ref_id,
-             m.recipient_ids, m.is_broadcast,
+             m.recipient_ids, m.is_broadcast, m.is_edited, m.edited_at,
              u.id AS sender_id,u.full_name AS sender_name,u.username,u.role AS sender_role,
              rm.encrypted_content AS reply_encrypted,rm.iv AS reply_iv,
              ru.full_name AS reply_sender_name,
@@ -3102,9 +3102,14 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       LEFT JOIN users ru ON ru.id=rm.sender_id
       LEFT JOIN tasks t ON t.id=m.task_ref_id
       WHERE m.group_id=?
+      AND (
+        m.is_private = 0
+        OR m.sender_id = ?
+        OR (m.recipient_ids IS NOT NULL AND JSON_CONTAINS(m.recipient_ids, CAST(? AS JSON)))
+      )
       ORDER BY m.sent_at DESC
       LIMIT ? OFFSET ?
-    `,[groupId,limit,(page-1)*limit]);
+    `,[groupId, req.user.id, req.user.id, limit,(page-1)*limit]);
 
     // Reactions batch-fetch
     const messageIds = rows.map(m => m.id);
@@ -3140,6 +3145,8 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       sender_role:msg.sender_role,
       // NEW fields (safe to add — front-end ignores unknown props on old messages)
       is_broadcast:  !!msg.is_broadcast,
+      is_edited:     !!msg.is_edited,
+      edited_at:     msg.edited_at || null,
       recipient_ids: (() => {
         try { return msg.recipient_ids ? JSON.parse(msg.recipient_ids) : []; }
         catch(_){ return []; }
@@ -3466,6 +3473,47 @@ router.delete('/:groupId/:messageId',auth,async(req,res)=>{
   }
   
   res.json({message:'Deleted'});
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PATCH /:groupId/:messageId  — edit message content
+   ═══════════════════════════════════════════════════════════════ */
+router.patch('/:groupId/:messageId', auth, async (req, res) => {
+  try {
+    const { groupId, messageId } = req.params;
+    const { content } = req.body;
+    if (!content || !content.trim()) return res.status(400).json({ error: 'Content required' });
+
+    const [rows] = await db.query(
+      'SELECT id, message_type, is_deleted FROM messages WHERE id=? AND sender_id=?',
+      [messageId, req.user.id]
+    );
+    if (!rows.length) return res.status(403).json({ error: 'Cannot edit' });
+    if (rows[0].is_deleted) return res.status(400).json({ error: 'Cannot edit deleted message' });
+    if (rows[0].message_type !== 'text') return res.status(400).json({ error: 'Only text messages can be edited' });
+
+    const { encrypted, iv } = encrypt(content.trim());
+    await db.query(
+      'UPDATE messages SET encrypted_content=?, iv=?, is_edited=1, edited_at=NOW() WHERE id=?',
+      [encrypted, iv, messageId]
+    );
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`group_${groupId}`).emit('message_edited', {
+        message_id: parseInt(messageId),
+        group_id:   parseInt(groupId),
+        content:    content.trim(),
+        edited_by:  req.user.id,
+        edited_at:  new Date().toISOString(),
+      });
+    }
+
+    res.json({ success: true, content: content.trim() });
+  } catch (e) {
+    console.error('Edit message error:', e);
+    res.status(500).json({ error: 'Failed to edit message' });
+  }
 });
 
 /* ═══════════════════════════════════════════════════════════════
