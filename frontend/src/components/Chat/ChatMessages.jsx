@@ -1387,15 +1387,38 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     }
   },[currentMatchIdx,searchMatches]);
 
-  const scrollToMessage = useCallback((messageId) => {
-    const el = matchRefs.current[messageId];
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.style.transition = 'outline 0.2s';
-    el.style.outline = '2px solid var(--accent)';
-    el.style.borderRadius = '8px';
-    setTimeout(() => { el.style.outline = ''; }, 1500);
-  }, []);
+  const scrollToMessage = useCallback(async (messageId) => {
+    const highlight = (el) => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'outline 0.2s';
+      el.style.outline = '2px solid var(--accent)';
+      el.style.borderRadius = '8px';
+      setTimeout(() => { el.style.outline = ''; }, 1500);
+    };
+
+    // If already in DOM, jump immediately
+    const existing = matchRefs.current[messageId];
+    if (existing) { highlight(existing); return; }
+
+    // Message not loaded yet — keep fetching older pages until we find it
+    let nextPage = page + 1;
+    let found = false;
+    while (!found && hasMore) {
+      try {
+        const data = await messagesAPI.getMessages(group.id, nextPage);
+        const older = data.messages || [];
+        setMessages(prev => [...older, ...prev]);
+        setPage(nextPage);
+        setHasMore(data.hasMore);
+        // Give React time to render the new messages into the DOM
+        await new Promise(r => setTimeout(r, 150));
+        const el = matchRefs.current[messageId];
+        if (el) { highlight(el); found = true; }
+        if (!data.hasMore) break;
+        nextPage++;
+      } catch { break; }
+    }
+  }, [group, page, hasMore]);
 
   if(!group)return(<div className="empty-state" style={{flex:1}}><div className="empty-state-icon">💬</div><p>Select a group</p></div>);
 
