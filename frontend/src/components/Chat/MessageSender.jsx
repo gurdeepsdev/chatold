@@ -815,6 +815,12 @@ import toast from 'react-hot-toast';
 import TaskQuickPopup from '../Tasks/TaskQuickPopup';
 import './MessageSender.css';
 
+// Same palette/initials logic as the avatar circles in ChatMessages.jsx, kept local
+// since that file doesn't export them.
+const MENTION_COLORS = ['#4f7dff','#a855f7','#22c55e','#f59e0b','#ef4444','#06b6d4'];
+function ac(n=''){let h=0;for(const c of n)h=c.charCodeAt(0)+((h<<5)-h);return MENTION_COLORS[Math.abs(h)%MENTION_COLORS.length];}
+function ini(n=''){return n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);}
+
 const MessageSender = ({
   groupId,
   onMessageSent,
@@ -845,6 +851,11 @@ const MessageSender = ({
   const [showTaskPopup, setShowTaskPopup] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [search, setSearch] = useState('');
+
+  // ── @mention autocomplete ──
+  const [mentionQuery, setMentionQuery] = useState(null); // null = inactive; string = text typed after '@'
+  const [mentionStart, setMentionStart] = useState(-1);   // index of '@' in `content`
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
 
   const fileInputRef  = useRef(null);
   const dropdownRef   = useRef(null);
@@ -920,6 +931,10 @@ const MessageSender = ({
     setSecondaryRecipientId('');
     setAssignmentInfo(null);
     setShowSecondaryOption(false);
+    setSearch('');
+    setDropdownOpen(false);
+    setMentionStart(-1);
+    setMentionQuery(null);
     loadRecipients(true);
   }, [groupId]); // eslint-disable-line
 
@@ -1057,10 +1072,90 @@ const MessageSender = ({
   };
 
   const handleContentChange = (e) => {
-    setContent(e.target.value);
+    const value = e.target.value;
+    setContent(value);
     const el = e.target;
     el.style.height = 'auto';
     el.style.height = el.scrollHeight + 'px';
+
+    // Detect an active "@query" right before the cursor to drive mention autocomplete.
+    const cursorPos = el.selectionStart;
+    const uptoCursor = value.slice(0, cursorPos);
+    const atIndex = uptoCursor.lastIndexOf('@');
+    if (atIndex !== -1) {
+      const between = uptoCursor.slice(atIndex + 1);
+      // Bail if it's whitespace-broken or looks like it's inside an already-inserted
+      // @[Name](uid:1) token (contains '[') rather than a fresh mention being typed.
+      if (!/\s/.test(between) && !between.includes('[')) {
+        setMentionStart(atIndex);
+        setMentionQuery(between);
+        setMentionActiveIndex(0);
+        return;
+      }
+    }
+    setMentionStart(-1);
+    setMentionQuery(null);
+  };
+
+  const mentionSuggestions = mentionQuery !== null
+    ? recipients.filter(r => r.full_name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 6)
+    : [];
+
+  const insertMention = (member) => {
+    if (mentionStart === -1) return;
+    const cursorPos = textareaRef.current?.selectionStart ?? content.length;
+    const before = content.slice(0, mentionStart);
+    const after = content.slice(cursorPos);
+    const token = `@[${member.full_name}](uid:${member.user_id}) `;
+    const newContent = before + token + after;
+    setContent(newContent);
+    setMentionStart(-1);
+    setMentionQuery(null);
+    // @mentioning someone is interchangeable with checking them in the "To" list —
+    // it satisfies the recipient requirement the same way, no separate checkbox needed.
+    setSelectedIds(prev => prev.includes(member.user_id) ? prev : [...prev, member.user_id]);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      const pos = before.length + token.length;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    });
+  };
+
+  const handleTextareaKeyDown = (e) => {
+    // Don't treat Enter as submit/select while an IME (Japanese/Chinese/Korean input)
+    // is still composing a character — let it confirm the composition instead.
+    if (e.key === 'Enter' && e.nativeEvent.isComposing) return;
+    if (mentionQuery !== null && mentionSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionActiveIndex(i => (i + 1) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionActiveIndex(i => (i - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertMention(mentionSuggestions[mentionActiveIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionStart(-1);
+        setMentionQuery(null);
+        return;
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
   };
 
   const validateFile = (file) => {
@@ -1181,7 +1276,7 @@ const MessageSender = ({
     e.preventDefault();
 
     if (selectedIds.length === 0) {
-      alert('Please select at least one recipient before sending a message.');
+      alert('Please select at least one recipient (via "To" or by @mentioning someone) before sending a message.');
       return;
     }
 
@@ -1235,6 +1330,9 @@ const MessageSender = ({
       setShowSecondaryOption(false);
       setAssignmentInfo(null);
       setDropdownOpen(false);
+      setSearch('');
+      setMentionStart(-1);
+      setMentionQuery(null);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
       if (onReplyCancel) onReplyCancel();
 
@@ -1257,7 +1355,7 @@ const MessageSender = ({
         <div className="reply-to-indicator">
           <div className="reply-info">
             <span className="reply-label">Replying to</span>
-            <span className="reply-content">{replyTo.content}</span>
+            <span className="reply-content">{replyTo.content?.replace(/@\[([^\]]+)\]\(uid:\d+\)/g, '@$1')}</span>
             <span className="reply-author">- {replyTo.sender_name}</span>
           </div>
           <button type="button" className="reply-cancel" onClick={handleReplyCancel}>
@@ -1278,7 +1376,7 @@ const MessageSender = ({
             <div className="recipient-tags-area">
               {selectedIds.length === 0
                 ? <span className="placeholder-text">
-                    {loadingRecipients ? 'Loading…' : 'Select recipients *'}
+                    {loadingRecipients ? 'Loading…' : 'Select recipients or @mention below *'}
                   </span>
                 : selectionLabel()
               }
@@ -1452,16 +1550,52 @@ const MessageSender = ({
               className="message-input"
               value={content}
               onChange={handleContentChange}
-              placeholder="Type a message..."
+              placeholder="Type a message... (@ to mention someone)"
               rows={1}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }
-              }}
+              onKeyDown={handleTextareaKeyDown}
               onPaste={handlePaste}
             />
+
+            {mentionQuery !== null && mentionSuggestions.length > 0 && (
+              <div style={{
+                position: 'fixed',
+                bottom: window.innerHeight - (textareaRef.current?.getBoundingClientRect().top ?? 0) + 6,
+                left: textareaRef.current?.getBoundingClientRect().left ?? 0,
+                minWidth: 200,
+                maxWidth: 280,
+                zIndex: 9999,
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 10,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+                overflow: 'hidden',
+              }}>
+                {mentionSuggestions.map((m, i) => (
+                  <div
+                    key={m.user_id}
+                    onMouseDown={(e) => { e.preventDefault(); insertMention(m); }}
+                    onMouseEnter={() => setMentionActiveIndex(i)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '7px 10px', cursor: 'pointer',
+                      background: i === mentionActiveIndex ? 'var(--bg-hover)' : 'transparent',
+                    }}
+                  >
+                    <div style={{
+                      width: 20, height: 20, borderRadius: '50%',
+                      background: ac(m.full_name || ''), color: '#fff',
+                      fontSize: 9, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      {ini(m.full_name || 'U')}
+                    </div>
+                    <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{m.full_name}</span>
+                    {m.role && <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>{m.role}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Action Buttons — unchanged */}
             <div className="action-buttons">

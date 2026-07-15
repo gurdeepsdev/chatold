@@ -3,6 +3,9 @@ import { groupsAPI } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
+// Strips @[Name](uid:123) mention tokens down to plain "@Name" for this plain-text preview.
+const stripMentionMarkup = (text) => (text || '').replace(/@\[([^\]]+)\]\(uid:\d+\)/g, '@$1');
+
 export default function ForwardModal({ message, onClose, onForward }) {
   const { user } = useAuth();
   const [groups, setGroups] = useState([]);
@@ -148,7 +151,7 @@ export default function ForwardModal({ message, onClose, onForward }) {
                   </div>
                   {message.content && (
                     <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                      {message.content}
+                      {stripMentionMarkup(message.content)}
                     </div>
                   )}
                 </div>
@@ -173,7 +176,7 @@ export default function ForwardModal({ message, onClose, onForward }) {
                   </div>
                   {message.content && (
                     <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                      {message.content}
+                      {stripMentionMarkup(message.content)}
                     </div>
                   )}
                 </div>
@@ -198,13 +201,13 @@ export default function ForwardModal({ message, onClose, onForward }) {
                   </div>
                   {message.content && (
                     <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                      {message.content}
+                      {stripMentionMarkup(message.content)}
                     </div>
                   )}
                 </div>
               </div>
             ) : (
-              message.content || 'No content'
+              stripMentionMarkup(message.content) || 'No content'
             )}
           </div>
         </div>

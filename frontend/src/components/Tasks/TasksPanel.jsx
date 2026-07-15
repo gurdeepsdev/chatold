@@ -162,7 +162,7 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick,follow
               {task.pub_id&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>PubID: </span><code style={{color:'var(--accent)'}}>{task.pub_id}</code></div>}
               {task.pid&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>PID: </span><code style={{color:'var(--accent)'}}>{task.pid}</code></div>}
               {task.task_type==='share_link'&&task.geo&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>GEO: </span><span style={{color:'var(--accent)',fontWeight:600}}>{task.geo}</span></div>}
-              {(task.task_type==='share_link'||task.task_type==='pause_pid')&&task.note&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>Note: </span><span style={{color:'var(--text-primary)'}}>{task.note}</span></div>}
+              {(task.task_type==='share_link'||task.task_type==='pause_pid'||task.task_type==='optimise')&&task.note&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>Note: </span><span style={{color:'var(--text-primary)'}}>{task.note}</span></div>}
               {task.link&&<div style={{marginBottom:2}}><span style={{color:'var(--text-muted)'}}>Link: </span><a href={task.link} target="_blank" rel="noreferrer" style={{color:'var(--accent)',wordBreak:'break-all'}}>{task.link}</a></div>}
               {task.pause_reason&&<div style={{color:'#f59e0b'}}>⚠️ {task.pause_reason}</div>}
               {task.request_type&&<div><span style={{color:'var(--text-muted)'}}>Request: </span><strong style={{textTransform:'uppercase'}}>{task.request_type}</strong>{task.request_details ? ` – ${task.request_details}` : ''}</div>}
