@@ -329,7 +329,8 @@ if (assignees.length > 0) {
 const taskAssigneeIds = [...new Set(
   parsedEntries
     .filter(e => e.assigned_to && e.assigned_to !== 'null')
-    .map(e => Number(e.assigned_to))
+    .flatMap(e => toAssigneeList(e.assigned_to))
+    .filter(id => id !== null)
 )];
 
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
@@ -382,7 +383,8 @@ const messageIds = [{ messageId: mRes.insertId }];
 const allAssignees = [...new Set(
   parsedEntries
     .filter(e => e.assigned_to && e.assigned_to !== 'null')
-    .map(e => Number(e.assigned_to))
+    .flatMap(e => toAssigneeList(e.assigned_to))
+    .filter(id => id !== null)
 )];
 
 const io = req.app.get('io');
@@ -518,7 +520,8 @@ if (assignees.length > 0) {
 const taskAssigneeIds = [...new Set(
   parsedPauseEntries
     .filter(e => e.assigned_to && e.assigned_to !== 'null')
-    .map(e => Number(e.assigned_to))
+    .flatMap(e => toAssigneeList(e.assigned_to))
+    .filter(id => id !== null)
 )];
 
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
@@ -818,7 +821,8 @@ const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${en
 const taskAssigneeIds = [...new Set(
   parsedOptimiseEntries
     .filter(e => e.assigned_to && e.assigned_to !== 'null')
-    .map(e => Number(e.assigned_to))
+    .flatMap(e => toAssigneeList(e.assigned_to))
+    .filter(id => id !== null)
 )];
 
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
@@ -978,7 +982,8 @@ else {
   const taskAssigneeIds = [...new Set(
     entries
       .filter(e => e.assigned_to && e.assigned_to !== 'null')
-      .map(e => Number(e.assigned_to))
+      .flatMap(e => toAssigneeList(e.assigned_to))
+      .filter(id => id !== null)
   )];
 
   recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;

@@ -451,7 +451,7 @@
 //   );
 // }
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { messagesAPI, authAPI } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -513,6 +513,8 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
   const [extendedPickerPos, setExtendedPickerPos] = useState(null);
   const [onDeleteMessageState, setOnDeleteMessageState] = useState(null);
   const [reactionPopup, setReactionPopup] = useState(null);
+  const [localReadBy, setLocalReadBy] = useState(msg.read_by || []);
+  const [seenPopup, setSeenPopup] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [editSaving, setEditSaving] = useState(false);
@@ -524,7 +526,20 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
   useEffect(() => {
     setLocalReactions(msg.reactions || []);
   }, [msg.reactions]);
-  
+
+  // Sync local read-by list with message read_by when it changes
+  useEffect(() => {
+    setLocalReadBy(msg.read_by || []);
+  }, [msg.read_by]);
+
+  // Close the seen-by popup on any click outside it (it's click-toggled, not hover)
+  useEffect(() => {
+    if (!seenPopup) return;
+    const closeIt = () => setSeenPopup(null);
+    document.addEventListener('click', closeIt);
+    return () => document.removeEventListener('click', closeIt);
+  }, [seenPopup]);
+
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -690,7 +705,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
           >
             <div className="reply-content">
               <span className="reply-label">Replying to {msg.reply_sender_name}</span>
-              <span className="reply-text">{msg.reply_content}</span>
+              <span className="reply-text">{msg.reply_content.replace(/@\[([^\]]+)\]\(uid:\d+\)/g, '@$1')}</span>
             </div>
           </div>
         )}
@@ -727,7 +742,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
           </div>
         )}
         {/* </div> */}
-        <div 
+        <div
           ref={messageRef}
           className={`message-bubble ${isOwn ? 'own' : 'received'} ${msg.message_type}`}
           onMouseEnter={() => setShowEmojiPicker(true)}
@@ -869,8 +884,34 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
   </div>
 
 </div>
-        {/* Reactions */}
-        {!msg.is_deleted && localReactions.length > 0 && (
+
+  {isOwn && seenPopup && (
+    <div style={{
+      position: 'fixed',
+      bottom: window.innerHeight - seenPopup.rect.top + 6,
+      left: seenPopup.rect.left + seenPopup.rect.width / 2,
+      transform: 'translateX(-50%)',
+      zIndex: 9999,
+      background: 'var(--bg-primary)',
+      color: 'var(--text-primary)',
+      border: '1px solid var(--border-color)',
+      borderRadius: 8,
+      padding: '5px 10px',
+      fontSize: 12,
+      fontWeight: 500,
+      whiteSpace: 'nowrap',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+      pointerEvents: 'none',
+    }}>
+      <div style={{fontWeight:600,opacity:0.7,marginBottom:2}}>Seen by</div>
+      {seenPopup.names.map((n,i) => <div key={i}>{n}</div>)}
+    </div>
+  )}
+
+        {/* Reactions + Seen-by */}
+        {!msg.is_deleted && (localReactions.length > 0 || (isOwn && localReadBy.length > 0)) && (
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          {localReactions.length > 0 && (
           <div className="reactions-bar">
             {Object.entries(
               localReactions.reduce((acc, r) => {
@@ -917,6 +958,43 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
                 {reactionPopup.names.join(', ')}
               </div>
             )}
+          </div>
+          )}
+
+          {isOwn && localReadBy.length > 0 && (
+            <div
+              className="seen-by-bar"
+              style={{display:'flex',alignItems:'center',cursor:'pointer',padding:'3px 8px 3px 3px',borderRadius:20,border:'1px solid var(--border-color)'}}
+              onClick={e => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                setSeenPopup(prev => prev ? null : {
+                  names: localReadBy.map(r => `${r.user_name || 'User'} · ${format(new Date(r.timestamp), 'HH:mm')}`),
+                  rect
+                });
+              }}
+              title="Seen by"
+            >
+              <div style={{display:'flex'}}>
+                {localReadBy.slice(0,4).map((r,i) => (
+                  <div key={r.user_id} style={{
+                    width:18,height:18,borderRadius:'50%',
+                    background:ac(r.user_name||''),
+                    color:'#fff',fontSize:8,fontWeight:700,
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    border:'1.5px solid var(--bg-primary)',
+                    marginLeft: i===0?0:-6,
+                  }}>
+                    {ini(r.user_name||'U')}
+                  </div>
+                ))}
+              </div>
+              {localReadBy.length > 4 && (
+                <span style={{fontSize:10,color:'var(--text-muted)',marginLeft:3}}>+{localReadBy.length-4}</span>
+              )}
+              <span style={{fontSize:10,color:'var(--text-muted)',marginLeft:4}}>Seen</span>
+            </div>
+          )}
           </div>
         )}
 
@@ -1081,8 +1159,8 @@ function highlightText(text,query){
 }
 
 const URL_REGEX = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-// Matches markdown links [label](url) first, then plain URLs — left-to-right priority.
-const COMBINED_REGEX = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+// Matches @[Name](uid:1) mention tokens first, then markdown links [label](url), then plain URLs.
+const COMBINED_REGEX = /@\[([^\]]+)\]\(uid:(\d+)\)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+|www\.[^\s]+)/g;
 
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1097,10 +1175,12 @@ function contentToHtml(text) {
   while ((m = COMBINED_REGEX.exec(text)) !== null) {
     if (m.index > last) out += escHtml(text.slice(last, m.index));
     if (m[1] != null) {
-      out += `<a href="${escHtml(m[2])}">${escHtml(m[1])}</a>`;
+      out += `<b>@${escHtml(m[1])}</b>`;
+    } else if (m[3] != null) {
+      out += `<a href="${escHtml(m[4])}">${escHtml(m[3])}</a>`;
     } else {
-      const href = m[3].startsWith('www.') ? `https://${m[3]}` : m[3];
-      out += `<a href="${escHtml(href)}">${escHtml(m[3])}</a>`;
+      const href = m[5].startsWith('www.') ? `https://${m[5]}` : m[5];
+      out += `<a href="${escHtml(href)}">${escHtml(m[5])}</a>`;
     }
     last = m.index + m[0].length;
   }
@@ -1117,15 +1197,24 @@ function renderContent(text, searchQuery) {
   while ((match = COMBINED_REGEX.exec(text)) !== null) {
     if (match.index > last) segments.push({ type: 'text', value: text.slice(last, match.index) });
     if (match[1] != null) {
-      segments.push({ type: 'mdlink', label: match[1], href: match[2] });
+      segments.push({ type: 'mention', label: match[1], uid: match[2] });
+    } else if (match[3] != null) {
+      segments.push({ type: 'mdlink', label: match[3], href: match[4] });
     } else {
-      segments.push({ type: 'url', value: match[3] });
+      segments.push({ type: 'url', value: match[5] });
     }
     last = match.index + match[0].length;
   }
   if (last < text.length) segments.push({ type: 'text', value: text.slice(last) });
 
   return segments.map((seg, i) => {
+    if (seg.type === 'mention') {
+      return (
+        <span key={i} style={{color:'#4f7dff',fontWeight:600,background:'rgba(79,125,255,0.15)',borderRadius:4,padding:'0 3px'}}>
+          @{seg.label}
+        </span>
+      );
+    }
     if (seg.type === 'mdlink') {
       return (
         <a key={i} href={seg.href} target="_blank" rel="noopener noreferrer"
@@ -1180,6 +1269,12 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   const groupIdRef=useRef(null);
   const msRef=useRef(markSeen);
 
+  // ── Infinite-scroll (load older on scroll-to-top) bookkeeping ──
+  const olderLoadingRef=useRef(false);   // synchronous re-entrancy guard against double-fetching a page
+  const scrollAnchorRef=useRef(null);    // {height, top} captured just before an older-page fetch
+  const restoreScrollRef=useRef(false);  // tells the layout effect "the last messages update was a prepend"
+  const [loadingOlder,setLoadingOlder]=useState(false);
+
   const isNearBottom=useCallback(()=>{
     const el=messagesAreaRef.current;
     if(!el)return true;
@@ -1193,7 +1288,15 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
 
   const load=useCallback(async(p=1)=>{
     if(!group)return;
-    if(p===1)setLoading(true);
+    if(p===1){
+      setLoading(true);
+    } else {
+      if(olderLoadingRef.current)return; // a fetch for an older page is already in flight
+      olderLoadingRef.current=true;
+      setLoadingOlder(true);
+      const el=messagesAreaRef.current;
+      scrollAnchorRef.current={height:el?el.scrollHeight:0,top:el?el.scrollTop:0};
+    }
     try{
       const data=await messagesAPI.getMessages(group.id,p);
       if(p===1){
@@ -1223,12 +1326,36 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
           setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:'instant'}),80);
         }
       } else {
+        restoreScrollRef.current=true;
         setMessages(prev=>[...(data.messages||[]),...prev]);
       }
       setHasMore(data.hasMore);setPage(p);
     }catch(e){console.error(e);}
-    setLoading(false);
+    if(p===1){
+      setLoading(false);
+    } else {
+      olderLoadingRef.current=false;
+      setLoadingOlder(false);
+    }
   },[group]);// eslint-disable-line
+
+  // After older messages are prepended, the browser keeps scrollTop fixed in pixels —
+  // since a chunk of new (taller) content just appeared above the viewport, that visually
+  // yanks the view to a different spot. Re-anchor scrollTop so the same message stays put.
+  useLayoutEffect(()=>{
+    if(!restoreScrollRef.current)return;
+    restoreScrollRef.current=false;
+    const el=messagesAreaRef.current;
+    const anchor=scrollAnchorRef.current;
+    if(!el||!anchor)return;
+    el.scrollTop=anchor.top+(el.scrollHeight-anchor.height);
+  },[messages]);
+
+  const handleMessagesScroll=useCallback(()=>{
+    const el=messagesAreaRef.current;
+    if(!el||!hasMore||olderLoadingRef.current)return;
+    if(el.scrollTop<150)load(page+1);
+  },[hasMore,page,load]);
 
   useEffect(()=>{
     if(!group)return;
@@ -1294,6 +1421,16 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     setMessages(prev=>prev.map(msg=>msg.id===data.message_id?{...msg,reactions:data.reactions}:msg));
   },[]);
 
+  const handleSeenUpdate=useCallback((data)=>{
+    if(Number(data.group_id)!==groupIdRef.current)return;
+    setMessages(prev=>prev.map(msg=>{
+      if(msg.id!==data.message_id||msg.sender_id===data.user_id)return msg;
+      const existing=msg.read_by||[];
+      if(existing.some(r=>r.user_id===data.user_id))return msg;
+      return {...msg,read_by:[...existing,{user_id:data.user_id,user_name:data.user_name,timestamp:data.timestamp}]};
+    }));
+  },[]);
+
   const handleTyping=useCallback((data)=>{
     if(Number(data.group_id)!==groupIdRef.current)return;
     setTypingUsers(data.users||[]);
@@ -1322,6 +1459,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   useEffect(()=>{
     const unsubNewMsg=on('new_message',handleNewMsg);
     const unsubReaction=on('reaction_update',handleReactionUpdate);
+    const unsubSeen=on('message_status_update',handleSeenUpdate);
     const unsubTyping=on('typing',handleTyping);
     const unsubDeleted=on('message_deleted',handleDeletedMessage);
     const unsubEdited=on('message_edited',handleEditedMessage);
@@ -1355,8 +1493,8 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
       }
     });
 
-    return()=>{unsubNewMsg();unsubReaction();unsubTyping();unsubDeleted();unsubEdited();unsubPinned();unsubUnpinned();unsubRemoved();};
-  },[on,handleNewMsg,handleReactionUpdate,handleTyping,handleDeletedMessage,handleEditedMessage,group?.id]);
+    return()=>{unsubNewMsg();unsubReaction();unsubSeen();unsubTyping();unsubDeleted();unsubEdited();unsubPinned();unsubUnpinned();unsubRemoved();};
+  },[on,handleNewMsg,handleReactionUpdate,handleSeenUpdate,handleTyping,handleDeletedMessage,handleEditedMessage,group?.id]);
 
   const typingTmr=useRef(null);
 
@@ -1387,15 +1525,38 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     }
   },[currentMatchIdx,searchMatches]);
 
-  const scrollToMessage = useCallback((messageId) => {
-    const el = matchRefs.current[messageId];
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.style.transition = 'outline 0.2s';
-    el.style.outline = '2px solid var(--accent)';
-    el.style.borderRadius = '8px';
-    setTimeout(() => { el.style.outline = ''; }, 1500);
-  }, []);
+  const scrollToMessage = useCallback(async (messageId) => {
+    const highlight = (el) => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'outline 0.2s';
+      el.style.outline = '2px solid var(--accent)';
+      el.style.borderRadius = '8px';
+      setTimeout(() => { el.style.outline = ''; }, 1500);
+    };
+
+    // If already in DOM, jump immediately
+    const existing = matchRefs.current[messageId];
+    if (existing) { highlight(existing); return; }
+
+    // Message not loaded yet — keep fetching older pages until we find it
+    let nextPage = page + 1;
+    let found = false;
+    while (!found && hasMore) {
+      try {
+        const data = await messagesAPI.getMessages(group.id, nextPage);
+        const older = data.messages || [];
+        setMessages(prev => [...older, ...prev]);
+        setPage(nextPage);
+        setHasMore(data.hasMore);
+        // Give React time to render the new messages into the DOM
+        await new Promise(r => setTimeout(r, 150));
+        const el = matchRefs.current[messageId];
+        if (el) { highlight(el); found = true; }
+        if (!data.hasMore) break;
+        nextPage++;
+      } catch { break; }
+    }
+  }, [group, page, hasMore]);
 
   if(!group)return(<div className="empty-state" style={{flex:1}}><div className="empty-state-icon">💬</div><p>Select a group</p></div>);
 
@@ -1541,8 +1702,8 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
         );
       })()}
 
-      <div className="messages-area" ref={messagesAreaRef}>
-        {hasMore&&<div style={{textAlign:'center',paddingBottom:12}}><button className="btn btn-secondary btn-sm" onClick={()=>load(page+1)}>Load older</button></div>}
+      <div className="messages-area" ref={messagesAreaRef} onScroll={handleMessagesScroll}>
+        {loadingOlder&&<div style={{textAlign:'center',padding:'8px 0',fontSize:12,color:'var(--text-muted)'}}>Loading older messages…</div>}
         {loading?(
           <div className="empty-state"><p>Loading…</p></div>
         ):messages.length===0?(

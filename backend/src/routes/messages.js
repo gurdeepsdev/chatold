@@ -2957,6 +2957,12 @@ const checkMember=async(req,res,next)=>{
   next();
 };
 
+// Strips @[Name](uid:123) mention tokens down to plain "@Name" for plain-text
+// contexts (notification body/toast) that can't render the token as a tag.
+function stripMentionMarkup(text) {
+  return (text || '').replace(/@\[([^\]]+)\]\(uid:\d+\)/g, '@$1');
+}
+
 // ── NEW HELPER: build mention prefix for message content ──────
 // is_broadcast true  → "📤 @all: "
 // specific users     → "📤 @John @Mike: "
@@ -2974,9 +2980,10 @@ async function pushToUserList(io, groupId, senderId, recipientIds, msg, groupNam
   try{
     const unique = [...new Set(recipientIds)].filter(id => id !== senderId);
     for(const recipientId of unique){
+      const notifBody = msg.content ? stripMentionMarkup(msg.content).slice(0,100) : 'Sent a file';
       await db.query(
         'INSERT INTO notifications (user_id,group_id,message_id,type,title,body) VALUES(?,?,?,?,?,?)',
-        [recipientId, groupId, msg.id, 'message', `Message from ${msg.sender_name}`, msg.content?.slice(0,100)||'Sent a file']
+        [recipientId, groupId, msg.id, 'message', `Message from ${msg.sender_name}`, notifBody]
       ).catch(()=>{});
       if(io){
   // ✅ ADD DEBUG HERE (VERY IMPORTANT POSITION)
@@ -2986,7 +2993,7 @@ async function pushToUserList(io, groupId, senderId, recipientIds, msg, groupNam
         io.to(`user_${recipientId}`).emit('push_notification',{
           type:'message',
           title:`Message from ${msg.sender_name}`,
-          body: msg.content?.slice(0,100)||'Sent a file',
+          body: notifBody,
           group_id:  groupId,
           group_name:groupName,
           message_id:msg.id,
@@ -3109,7 +3116,10 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       )
       ORDER BY m.sent_at DESC
       LIMIT ? OFFSET ?
-    `,[groupId, req.user.id, req.user.id, limit,(page-1)*limit]);
+    `,[groupId, req.user.id, req.user.id, limit+1,(page-1)*limit]);
+
+    const hasMore = rows.length > limit;
+    if (hasMore) rows.length = limit;
 
     // Reactions batch-fetch
     const messageIds = rows.map(m => m.id);
@@ -3123,6 +3133,19 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
         ORDER BY r.created_at ASC
       `, messageIds);
       reactions = reactionRows;
+    }
+
+    // Read-receipts batch-fetch — who has seen each message
+    let readBy = [];
+    if (messageIds.length > 0) {
+      const [readByRows] = await db.query(`
+        SELECT ms.message_id, ms.user_id, u.full_name AS user_name, ms.timestamp
+        FROM message_status ms
+        JOIN users u ON u.id = ms.user_id
+        WHERE ms.status = 'seen' AND ms.message_id IN (${messageIds.map(() => '?').join(',')})
+        ORDER BY ms.timestamp ASC
+      `, messageIds);
+      readBy = readByRows;
     }
 
     const messages=rows.reverse().map(msg=>({
@@ -3156,6 +3179,11 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
         emoji: r.emoji,
         user_id: r.user_id,
         user_name: r.user_name
+      })),
+      read_by: readBy.filter(r => r.message_id === msg.id && r.user_id !== msg.sender_id).map(r => ({
+        user_id: r.user_id,
+        user_name: r.user_name,
+        timestamp: r.timestamp
       }))
     }));
 
@@ -3164,7 +3192,7 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       [m.id,req.user.id,'seen']
     ).catch(()=>{}));
 
-    res.json({messages,page,hasMore:rows.length===limit});
+    res.json({messages,page,hasMore});
   }catch(e){console.error(e);res.status(500).json({error:'Failed to load messages'});}
 });
 

@@ -239,8 +239,11 @@ socket.join(`user_${userId}`);
         );
         socket.to(`group_${groupId}`).emit('message_status_update', {
           message_id: messageId,
+          group_id: groupId,
           user_id: userId,
-          status: 'seen'
+          user_name: socket.user.full_name,
+          status: 'seen',
+          timestamp: new Date()
         });
       } catch (err) {
         console.error('[socket] message_seen DB error (non-critical):', err.message);
