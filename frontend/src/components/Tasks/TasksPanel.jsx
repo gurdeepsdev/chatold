@@ -371,12 +371,12 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
       case 'pause_pid':
         if (['pub_executive', 'publisher', 'publisher_manager'].includes(user?.role)) {
           return members.filter(member =>
-            (member.role === 'optimization' || member.role === 'operations') &&
+            (member.role === 'optimization' || member.role === 'operations' || member.role === 'operation_manager') &&
             member.id !== user?.id
           );
         }
         return members.filter(member =>
-          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive' || member.role === 'optimization' || member.role === 'operations') &&
+          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive' || member.role === 'optimization' || member.role === 'operations' || member.role === 'operation_manager') &&
           member.id !== user?.id
         );
       

@@ -77,9 +77,11 @@ export const messagesAPI = {
   pinMessage: (groupId, messageId) => api.post(`/messages/${groupId}/${messageId}/pin`),
   unpinMessage: (groupId, messageId) => api.delete(`/messages/${groupId}/${messageId}/pin`),
   getUnreadCounts: () => api.get('/messages/unread-counts'),
+  markGroupFullyRead: (groupId) => api.post(`/messages/${groupId}/mark-all-read`),
   // 🆕 New endpoints for user assignment
   getRecipients: (groupId) => api.get(`/messages/${groupId}/recipients`),
   getAssignmentInfo: (groupId, recipientId) => api.get(`/messages/${groupId}/assignment/${recipientId}`),
+  searchMessages: (groupId, q, before) => api.get(`/messages/${groupId}/search`, { params: { q, before } }),
 };
 
 export const tasksAPI = {

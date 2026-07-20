@@ -3087,6 +3087,43 @@ router.get('/unread-counts', auth, async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════
+   POST /api/messages/:groupId/mark-all-read
+   Marks every currently-unread message in this group as seen for the
+   caller — not just whatever page happens to be loaded. Without this,
+   a message that falls outside a user's typical scroll depth in a long
+   group (e.g. an old message from weeks back) can never be marked seen
+   by simply opening the group, permanently inflating the unread badge.
+   Uses the exact same "what counts as unread" conditions as
+   GET /unread-counts, so this is guaranteed to zero that count out.
+   ═══════════════════════════════════════════════════════════════ */
+router.post('/:groupId/mark-all-read', auth, checkMember, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const userId = req.user.id;
+
+    await db.query(`
+      INSERT IGNORE INTO message_status (message_id, user_id, status)
+      SELECT m.id, ?, 'seen'
+      FROM messages m
+      WHERE m.group_id = ?
+      AND (
+        (m.recipient_id IS NULL AND m.message_type != 'task_notification')
+        OR m.recipient_id = ?
+        OR m.secondary_recipient_id = ?
+        OR (m.recipient_ids IS NOT NULL AND JSON_CONTAINS(m.recipient_ids, CAST(? AS JSON)))
+        OR m.is_broadcast = 1
+      )
+      AND m.sender_id != ?
+    `, [userId, groupId, userId, userId, userId, userId]);
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Failed to mark group as fully read:', error);
+    return res.status(500).json({ success: false, message: 'Failed to mark group as read' });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════
    GET /api/messages/:groupId  — fetch paginated messages
    ═══════════════════════════════════════════════════════════════ */
 router.get('/:groupId',auth,checkMember,async(req,res)=>{
@@ -3187,13 +3224,98 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       }))
     }));
 
-    rows.forEach(m=>db.query(
-      'INSERT IGNORE INTO message_status (message_id,user_id,status) VALUES(?,?,?)',
-      [m.id,req.user.id,'seen']
-    ).catch(()=>{}));
+    if (rows.length > 0) {
+      const seenVals = rows.map(m => [m.id, req.user.id, 'seen']);
+      await db.query(
+        'INSERT IGNORE INTO message_status (message_id,user_id,status) VALUES ?',
+        [seenVals]
+      ).catch(() => {});
+    }
 
     res.json({messages,page,hasMore});
   }catch(e){console.error(e);res.status(500).json({error:'Failed to load messages'});}
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   GET /api/messages/:groupId/search  — full-history text search
+   Content is encrypted at rest, so matching can't happen in SQL —
+   we scan messages oldest-batch-by-batch (newest first), decrypt,
+   and filter in JS. `before` (a message id cursor) lets the client
+   ask for older matches once a batch is exhausted.
+   ═══════════════════════════════════════════════════════════════ */
+const SEARCH_BATCH_SIZE = 300;   // rows pulled from DB per scan step
+const SEARCH_MAX_SCAN   = 3000;  // safety cap on rows scanned per request
+
+router.get('/:groupId/search', auth, checkMember, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const q = (req.query.q || '').trim().toLowerCase();
+    const limit  = Math.min(50, parseInt(req.query.limit) || 30);
+    const before = req.query.before ? parseInt(req.query.before) : null;
+
+    if (!q) return res.json({ messages: [], hasMore: false, nextCursor: null });
+
+    const matches = [];
+    let cursor = before;
+    let scanned = 0;
+    let exhausted = false;
+
+    while (matches.length < limit && scanned < SEARCH_MAX_SCAN) {
+      const [rows] = await db.query(`
+        SELECT m.id,m.group_id,m.message_type,m.encrypted_content,m.iv,
+               m.file_url,m.file_name,m.file_size,m.mime_type,
+               m.reply_to_id,m.sent_at,
+               u.id AS sender_id,u.full_name AS sender_name,u.username,u.role AS sender_role
+        FROM messages m
+        JOIN users u ON u.id=m.sender_id
+        WHERE m.group_id=?
+        AND m.is_deleted=0
+        AND (
+          m.is_private = 0
+          OR m.sender_id = ?
+          OR (m.recipient_ids IS NOT NULL AND JSON_CONTAINS(m.recipient_ids, CAST(? AS JSON)))
+        )
+        AND (? IS NULL OR m.id < ?)
+        ORDER BY m.id DESC
+        LIMIT ?
+      `,[groupId, req.user.id, req.user.id, cursor, cursor, SEARCH_BATCH_SIZE]);
+
+      scanned += rows.length;
+
+      for (const msg of rows) {
+        const content = decrypt(msg.encrypted_content, msg.iv);
+        if (content.toLowerCase().includes(q)) {
+          matches.push({
+            id: msg.id,
+            group_id: Number(msg.group_id),
+            message_type: msg.message_type,
+            content,
+            file_url: absUrl(req, msg.file_url),
+            file_name: msg.file_name,
+            file_size: msg.file_size,
+            mime_type: msg.mime_type,
+            reply_to_id: msg.reply_to_id,
+            sent_at: msg.sent_at,
+            sender_id: msg.sender_id,
+            sender_name: msg.sender_name,
+            username: msg.username,
+            sender_role: msg.sender_role,
+          });
+          if (matches.length >= limit) break;
+        }
+      }
+
+      cursor = rows.length ? rows[rows.length - 1].id : cursor;
+
+      if (rows.length < SEARCH_BATCH_SIZE) { exhausted = true; break; }
+    }
+
+    res.json({
+      messages: matches,
+      hasMore: !exhausted,
+      nextCursor: exhausted ? null : cursor,
+    });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Search failed' }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════

@@ -1259,7 +1259,7 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
           SELECT gm.user_id, u.full_name
           FROM group_members gm
           JOIN users u ON u.id = gm.user_id
-          WHERE gm.group_id = ? AND u.role = 'operations'
+          WHERE gm.group_id = ? AND u.role IN ('operations', 'operation_manager')
         `, [task.group_id]);
 
         if (opsUsers.length > 0) {

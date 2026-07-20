@@ -1273,6 +1273,19 @@ console.log("DEFAULT USERS:", defaultUsers);
 
           // Expand with hierarchy using CRM database
           expandedMembers = await expandUsersWithHierarchy(crmPool, additionalUserObjects);
+
+          // If any operations/optimization user is being added, auto-include ALL operation_managers
+          const hasOpsUser = expandedMembers.some(u => u.role === 'operations' || u.role === 'optimization');
+          if (hasOpsUser) {
+            const [opManagers] = await conn.query(
+              `SELECT id, full_name, email, role FROM users WHERE role = 'operation_manager'`
+            );
+            for (const om of opManagers) {
+              if (!expandedMembers.find(u => u.id === om.id)) {
+                expandedMembers.push(om);
+              }
+            }
+          }
         } else {
           console.log('No additional_members to process');
         }
@@ -1698,7 +1711,8 @@ const [allUsers] = await crmPool.query(`
     'adv_executive', 
     'advertiser', 
     'advertiser_manager', 
-    'operations', 
+    'operations',
+    'operation_manager',
     'optimization'
   )
   AND pause != 1
@@ -1718,6 +1732,7 @@ const [allUsers] = await crmPool.query(`
           advertiser_manager: allUsers.filter(u => u.role === 'advertiser_manager')
         },
         operations: allUsers.filter(u => u.role === 'operations'),
+        operation_manager: allUsers.filter(u => u.role === 'operation_manager'),
         optimization: allUsers.filter(u => u.role === 'optimization')
       };
 
@@ -1782,6 +1797,19 @@ const [allUsers] = await crmPool.query(`
 
       // Expand with hierarchy using CRM database
       const expandedUsers = await expandUsersWithHierarchy(crmPool, userObjects);
+
+      // If any operations/optimization user in selection, auto-include ALL operation_managers
+      const hasOpsUser = expandedUsers.some(u => u.role === 'operations' || u.role === 'optimization');
+      if (hasOpsUser) {
+        const [opManagers] = await conn.query(
+          `SELECT id, full_name, email, role FROM users WHERE role = 'operation_manager'`
+        );
+        for (const om of opManagers) {
+          if (!expandedUsers.find(u => u.id === om.id)) {
+            expandedUsers.push(om);
+          }
+        }
+      }
 
       res.json({ users: expandedUsers });
     } catch (err) {
@@ -2162,6 +2190,7 @@ const PUB_ROLES = [
   "pub_executive",
   "optimization",
   "operations",
+  "operation_manager",
 ];
 
 const ADV_ROLES = [
