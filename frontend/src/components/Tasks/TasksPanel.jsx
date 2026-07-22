@@ -44,6 +44,8 @@ const OPTIMISE_FIELDS = {
   publisher_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   pub_executive: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   optimization: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
+  operations: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
+  operation_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note']
 };
 

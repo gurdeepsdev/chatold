@@ -84,10 +84,8 @@ const getTaskAccessFilter = async (crmDb, userId) => {
 //   }
 // }
 
-// 🆕 OPERATIONS / OPERATION_MANAGER → expose tasks ONLY to advertiser-side users in SAME group
-// 🆕 OPERATIONS / OPERATION_MANAGER → expose tasks ONLY to advertiser-side users in SAME group
+// 🆕 OPERATIONS / OPERATION_MANAGER → expose tasks to advertiser-side users in SAME group (via manager_subadmins)
 if (role === 'operations' || role === 'operation_manager') {
-  // Step 1: Find which groups this operations user belongs to
   const [groupRows] = await crmDb.query(
     `SELECT manager_id, sub_admin_id
      FROM manager_subadmins
