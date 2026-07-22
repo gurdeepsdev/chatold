@@ -1559,7 +1559,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     if(!searchMatches.length)return;
     const target=searchMatches[currentMatchIdx];
     if(target)scrollToMessage(target.msg.id);
-  },[currentMatchIdx,searchMatches]);// eslint-disable-line react-hooks/exhaustive-deps
+  },[currentMatchIdx,searchMatches]);
 
   const scrollToMessage = useCallback(async (messageId) => {
     const highlight = (el) => {
