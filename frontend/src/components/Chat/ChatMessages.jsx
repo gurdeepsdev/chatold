@@ -1256,6 +1256,12 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   const [previewImage,setPreviewImage]=useState(null); // {url, name, downloadUrl}
   const [pinnedMessages,setPinnedMessages]=useState([]);
   const [pinnedBannerIdx,setPinnedBannerIdx]=useState(0);
+  // ── Full-history search (backend-driven, not limited to loaded messages) ──
+  const [remoteMatches,setRemoteMatches]=useState([]);
+  const [searching,setSearching]=useState(false);
+  const [searchCursor,setSearchCursor]=useState(null);
+  const [searchHasMore,setSearchHasMore]=useState(false);
+  const searchDebounceRef=useRef(null);
   useEffect(()=>{
     if(!previewImage)return;
     const onKey=(e)=>{if(e.key==='Escape')setPreviewImage(null);};
@@ -1285,6 +1291,43 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
 
   // Reset match index when searchQuery changes (controlled from parent)
   useEffect(()=>{setCurrentMatchIdx(0);},[searchQuery]);
+
+  // Debounced full-history search — queries the backend instead of only
+  // filtering whatever page of messages happens to already be loaded.
+  useEffect(()=>{
+    clearTimeout(searchDebounceRef.current);
+    const q=searchQuery.trim();
+    if(!q||!group?.id){
+      setRemoteMatches([]);setSearchCursor(null);setSearchHasMore(false);setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchDebounceRef.current=setTimeout(async()=>{
+      try{
+        const data=await messagesAPI.searchMessages(group.id,q);
+        setRemoteMatches(data.messages||[]);
+        setSearchCursor(data.nextCursor);
+        setSearchHasMore(!!data.hasMore);
+      }catch(e){console.error(e);setRemoteMatches([]);}
+      setSearching(false);
+    },300);
+    return()=>clearTimeout(searchDebounceRef.current);
+  },[searchQuery,group?.id]);
+
+  // Fetches the next batch of older matches (only relevant on very long histories
+  // where the backend stopped scanning before filling the requested limit).
+  const searchDeeper=useCallback(async()=>{
+    const q=searchQuery.trim();
+    if(!q||!group?.id||!searchCursor)return;
+    setSearching(true);
+    try{
+      const data=await messagesAPI.searchMessages(group.id,q,searchCursor);
+      setRemoteMatches(prev=>[...prev,...(data.messages||[])]);
+      setSearchCursor(data.nextCursor);
+      setSearchHasMore(!!data.hasMore);
+    }catch(e){console.error(e);}
+    setSearching(false);
+  },[searchQuery,group?.id,searchCursor]);
 
   const load=useCallback(async(p=1)=>{
     if(!group)return;
@@ -1361,6 +1404,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     if(!group)return;
     setMessages([]);setPage(1);setFirstUnreadId(null);setAccessRevoked(false);
     setReplyTo(null);
+    setRemoteMatches([]);setSearchCursor(null);setSearchHasMore(false);setSearching(false);
     load(1);joinGroup(group.id);
   },[group?.id]);// eslint-disable-line
 
@@ -1504,26 +1548,18 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     return acc;
   },[]);
 
-  // Compute search matches across loaded messages
-  const searchMatches=useMemo(()=>{
-    if(!searchQuery.trim())return[];
-    const q=searchQuery.toLowerCase();
-    return grouped
-      .map((msg,i)=>({msg,i}))
-      .filter(({msg})=>msg.content&&msg.content.toLowerCase().includes(q));
-  },[grouped,searchQuery]);
+  // Search matches — authoritative list comes from the backend (full history,
+  // not just whatever page of messages happens to be loaded right now).
+  const searchMatches=useMemo(()=>remoteMatches.map(msg=>({msg})),[remoteMatches]);
+  const matchIdSet=useMemo(()=>new Set(remoteMatches.map(m=>m.id)),[remoteMatches]);
 
-  // Reset match index when query changes (handled by parent-controlled searchQuery)
-  // useEffect already set above
-
-  // Scroll to current match
+  // Scroll to current match — the target may not be in the currently loaded
+  // page, so this reuses scrollToMessage's "keep loading older pages" logic.
   useEffect(()=>{
     if(!searchMatches.length)return;
     const target=searchMatches[currentMatchIdx];
-    if(target&&matchRefs.current[target.msg.id]){
-      matchRefs.current[target.msg.id].scrollIntoView({behavior:'smooth',block:'center'});
-    }
-  },[currentMatchIdx,searchMatches]);
+    if(target)scrollToMessage(target.msg.id);
+  },[currentMatchIdx,searchMatches]);// eslint-disable-line react-hooks/exhaustive-deps
 
   const scrollToMessage = useCallback(async (messageId) => {
     const highlight = (el) => {
@@ -1659,8 +1695,14 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
       {searchQuery.trim()&&(
         <div style={{display:'flex',alignItems:'center',gap:8,padding:'4px 12px',borderBottom:'1px solid var(--border-color)',background:'var(--bg-secondary)',flexShrink:0,fontSize:11}}>
           <span style={{color:'var(--text-muted)'}}>
-            {searchMatches.length===0?`No results for "${searchQuery}"`:`${currentMatchIdx+1} / ${searchMatches.length} matches`}
+            {searching&&!searchMatches.length?'Searching…':searchMatches.length===0?`No results for "${searchQuery}"`:`${currentMatchIdx+1} / ${searchMatches.length}${searchHasMore?'+':''} matches`}
           </span>
+          {searchHasMore&&!searching&&(
+            <button onClick={searchDeeper}
+              style={{background:'none',border:'1px solid var(--border-color)',borderRadius:5,padding:'2px 7px',cursor:'pointer',color:'var(--text-muted)',fontSize:11}}>
+              Search further back
+            </button>
+          )}
           <button disabled={!searchMatches.length} onClick={()=>setCurrentMatchIdx(i=>(i-1+searchMatches.length)%searchMatches.length)}
             style={{background:'none',border:'1px solid var(--border-color)',borderRadius:5,padding:'2px 7px',cursor:'pointer',color:'var(--text-muted)',opacity:searchMatches.length?1:0.4}}>▲</button>
           <button disabled={!searchMatches.length} onClick={()=>setCurrentMatchIdx(i=>(i+1)%searchMatches.length)}
@@ -1709,7 +1751,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
         ):messages.length===0?(
           <div className="empty-state"><div className="empty-state-icon">🚀</div><p>Start the conversation!</p></div>
         ):grouped.map(msg=>{
-          const isMatch=searchQuery.trim()&&msg.content&&msg.content.toLowerCase().includes(searchQuery.toLowerCase());
+          const isMatch=searchQuery.trim()&&matchIdSet.has(msg.id);
           const isCurrent=msg.id===activeMatchId;
           const isFirstUnread=firstUnreadId&&msg.id===firstUnreadId;
           return(

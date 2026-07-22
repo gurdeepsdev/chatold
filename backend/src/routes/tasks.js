@@ -26,116 +26,113 @@ const storage = multer.diskStorage({
 const upload=multer({storage,limits:{fileSize:52428800}});
 
 /* GET tasks for group */
-router.get('/group/:groupId',auth,async(req,res)=>{
-  try{
-        const userId = req.user.id;
+router.get("/group/:groupId", auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const groupId = Number(req.params.groupId);
 
-    const crmDb = db.crmPool;   // 👈 crmclickorbits
-    const chatDb = db;          // 👈 crm_chat
+    if (!Number.isInteger(groupId) || groupId <= 0) {
+      return res.status(400).json({
+        error: "Invalid group ID",
+      });
+    }
 
-    // 🔹 GET FILTER FROM CRM DB
-    const { where, params } = await getTaskAccessFilter(crmDb, userId);
-    const [tasks] = await db.query(`
-  SELECT t.*,
-    u1.full_name AS assigned_to_name,
-    u2.full_name AS assigned_by_name,
-    c.campaign_name,
-    parent.task_type AS parent_task_type,
-    tr_reject.comment AS rejection_note,
-    u_reject.full_name AS rejected_by_name
-  FROM tasks t
-  LEFT JOIN users u1 ON u1.id=t.assigned_to
-  LEFT JOIN users u2 ON u2.id=t.assigned_by
-  LEFT JOIN campaigns c ON c.id=t.campaign_id
-  LEFT JOIN tasks parent ON parent.id=t.parent_task_id
-  LEFT JOIN task_responses tr_reject ON tr_reject.id = (
-    SELECT id FROM task_responses WHERE task_id = t.id AND action = 'rejected' ORDER BY responded_at DESC LIMIT 1
-  )
-  LEFT JOIN users u_reject ON u_reject.id = tr_reject.user_id
-  WHERE t.group_id=?
-  AND (${where})
-  ORDER BY
-    CASE t.status
-      WHEN 'pending' THEN 1
-      WHEN 'accepted' THEN 2
-      ELSE 3
-    END,
-    t.created_at DESC
-`, [req.params.groupId, ...params]);
-//   const [tasks] = await db.query(`
-//   SELECT t.*,
-//     u1.full_name AS assigned_to_name,
-//     u2.full_name AS assigned_by_name,
-//     c.campaign_name,
-//     parent.task_type AS parent_task_type
-//   FROM tasks t
-//   LEFT JOIN users u1 ON u1.id=t.assigned_to
-//   LEFT JOIN users u2 ON u2.id=t.assigned_by
-//   LEFT JOIN campaigns c ON c.id=t.campaign_id
-//   LEFT JOIN tasks parent ON parent.id=t.parent_task_id
-//   WHERE t.group_id=? 
-//   AND (   ${where}   
+    const crmDb = db.crmPool;
+    const chatDb = db;
 
-  
-//   )
-//   ORDER BY 
-//     CASE t.status 
-//       WHEN 'pending' THEN 1 
-//       WHEN 'accepted' THEN 2 
-//       ELSE 3 
-//     END,
-//     t.created_at DESC
-// `, [req.params.groupId, ...params]);
-// [req.params.groupId, userId, userId, ...params]);
-    
-    // Get sub-tasks for each main task
-    const tasksWithSubs = await Promise.all(tasks.map(async (task) => {
-      if (task.parent_task_id === null) {
-        const [subTasks] = await db.query(`
-  SELECT t.*,
-    u1.full_name AS assigned_to_name,
-    u2.full_name AS assigned_by_name,
-    tr_reject.comment AS rejection_note,
-    u_reject.full_name AS rejected_by_name
-  FROM tasks t
-  LEFT JOIN users u1 ON u1.id=t.assigned_to
-  LEFT JOIN users u2 ON u2.id=t.assigned_by
-  LEFT JOIN task_responses tr_reject ON tr_reject.id = (
-    SELECT id FROM task_responses WHERE task_id = t.id AND action = 'rejected' ORDER BY responded_at DESC LIMIT 1
-  )
-  LEFT JOIN users u_reject ON u_reject.id = tr_reject.user_id
-  WHERE t.parent_task_id=?
-  AND (${where})
-  ORDER BY t.created_at DESC
-`, [task.id, ...params]);
-//        const [subTasks] = await db.query(`
-//   SELECT t.*,
-//     u1.full_name AS assigned_to_name,
-//     u2.full_name AS assigned_by_name
-//   FROM tasks t
-//   LEFT JOIN users u1 ON u1.id=t.assigned_to
-//   LEFT JOIN users u2 ON u2.id=t.assigned_by
-//   WHERE t.parent_task_id=? 
-   
-//     AND (${where})
+    const { where, params } = await getTaskAccessFilter(
+      crmDb,
+      userId,
+      chatDb
+    );
 
-  
-//   ORDER BY t.created_at DESC
-// `,[task.id, ...params]);
-//  [task.id, userId, userId, ...params]);
-        return{...task,subTasks};
+    const [tasks] = await db.query(
+      `
+      SELECT
+        t.*,
+        u1.full_name AS assigned_to_name,
+        u2.full_name AS assigned_by_name,
+        c.campaign_name,
+        parent.task_type AS parent_task_type,
+        tr_reject.comment AS rejection_note,
+        u_reject.full_name AS rejected_by_name
+      FROM tasks t
+
+      LEFT JOIN users u1
+        ON u1.id = t.assigned_to
+
+      LEFT JOIN users u2
+        ON u2.id = t.assigned_by
+
+      LEFT JOIN campaigns c
+        ON c.id = t.campaign_id
+
+      LEFT JOIN tasks parent
+        ON parent.id = t.parent_task_id
+
+      LEFT JOIN task_responses tr_reject
+        ON tr_reject.id = (
+          SELECT tr2.id
+          FROM task_responses tr2
+          WHERE tr2.task_id = t.id
+            AND tr2.action = 'rejected'
+          ORDER BY tr2.responded_at DESC, tr2.id DESC
+          LIMIT 1
+        )
+
+      LEFT JOIN users u_reject
+        ON u_reject.id = tr_reject.user_id
+
+      WHERE t.group_id = ?
+        AND (${where})
+
+      ORDER BY
+        CASE t.status
+          WHEN 'pending' THEN 1
+          WHEN 'accepted' THEN 2
+          ELSE 3
+        END,
+        t.created_at DESC
+      `,
+      [groupId, ...params]
+    );
+
+    const subTasksByParent = new Map();
+
+    for (const task of tasks) {
+      if (task.parent_task_id !== null) {
+        const parentId = String(task.parent_task_id);
+
+        if (!subTasksByParent.has(parentId)) {
+          subTasksByParent.set(parentId, []);
+        }
+
+        subTasksByParent.get(parentId).push(task);
       }
-      return task;
-    }));
-    
-    // Filter out sub-tasks from main list (they're included as subTasks)
-    const mainTasks = tasksWithSubs.filter(task => task.parent_task_id === null);
-    
-    res.json({tasks: mainTasks});
-  }catch (e) {
+    }
 
-  res.status(500).json({ error: e.message || 'Server error' });
-}
+    const mainTasks = tasks
+      .filter((task) => task.parent_task_id === null)
+      .map((task) => ({
+        ...task,
+        subTasks: subTasksByParent.get(String(task.id)) || [],
+      }));
+
+    return res.json({
+      tasks: mainTasks,
+    });
+  } catch (error) {
+    console.error("[GET /api/tasks/group/:groupId]", {
+      groupId: req.params.groupId,
+      userId: req.user?.id,
+      error: error.message,
+      stack: error.stack,
+    });
+
+    return res.status(500).json({
+      error: error.message || "Server error",
+    });
+  }
 });
 
 /* POST create task */
@@ -1259,7 +1256,7 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
           SELECT gm.user_id, u.full_name
           FROM group_members gm
           JOIN users u ON u.id = gm.user_id
-          WHERE gm.group_id = ? AND u.role = 'operations'
+          WHERE gm.group_id = ? AND u.role IN ('operations', 'operation_manager')
         `, [task.group_id]);
 
         if (opsUsers.length > 0) {

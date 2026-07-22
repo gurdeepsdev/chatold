@@ -44,6 +44,8 @@ const OPTIMISE_FIELDS = {
   publisher_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   pub_executive: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   optimization: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
+  operations: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
+  operation_manager: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note'],
   am: ['assigned_to', 'pub_id', 'pid', 'fp', 'optimise_scenario', 'attachment', 'note']
 };
 
@@ -371,12 +373,12 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
       case 'pause_pid':
         if (['pub_executive', 'publisher', 'publisher_manager'].includes(user?.role)) {
           return members.filter(member =>
-            (member.role === 'optimization' || member.role === 'operations') &&
+            (member.role === 'optimization' || member.role === 'operations' || member.role === 'operation_manager') &&
             member.id !== user?.id
           );
         }
         return members.filter(member =>
-          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive' || member.role === 'optimization' || member.role === 'operations') &&
+          (member.role === 'publisher' || member.role === 'publisher_manager' || member.role === 'pub_executive' || member.role === 'optimization' || member.role === 'operations' || member.role === 'operation_manager') &&
           member.id !== user?.id
         );
       

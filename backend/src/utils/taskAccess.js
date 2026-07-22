@@ -84,10 +84,8 @@ const getTaskAccessFilter = async (crmDb, userId) => {
 //   }
 // }
 
-// 🆕 OPERATIONS → expose tasks ONLY to advertiser-side users in SAME group
-// 🆕 OPERATIONS → expose tasks ONLY to advertiser-side users in SAME group
-if (role === 'operations') {
-  // Step 1: Find which groups this operations user belongs to
+// 🆕 OPERATIONS / OPERATION_MANAGER → expose tasks to advertiser-side users in SAME group (via manager_subadmins)
+if (role === 'operations' || role === 'operation_manager') {
   const [groupRows] = await crmDb.query(
     `SELECT manager_id, sub_admin_id
      FROM manager_subadmins
@@ -323,7 +321,7 @@ if (['advertiser_manager', 'advertiser', 'adv_executive'].includes(role)) {
 
 where += `
   OR (
-    t.assigned_by IN (SELECT id FROM users WHERE role = 'operations')
+    t.assigned_by IN (SELECT id FROM users WHERE role IN ('operations', 'operation_manager'))
   )
 `;
 
@@ -353,14 +351,14 @@ const canViewAction = (userRole, action) => {
   
   const visibilityRules = {
     // Share Link & Pause PID
-    'share_link': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin'],
-    'pause_pid': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin', 'pub_executive', 'publisher', 'publisher_manager'],
-    
-    // Raise Request  
+    'share_link': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'operation_manager', 'optimization', 'admin'],
+    'pause_pid': ['adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'operation_manager', 'optimization', 'admin', 'pub_executive', 'publisher', 'publisher_manager'],
+
+    // Raise Request
     'raise_request': ['pub_executive', 'optimization', 'publisher', 'publisher_manager', 'admin'],
-    
+
     // Optimize (visible to all)
-    'optimize': ['pub_executive', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'optimization', 'admin']
+    'optimize': ['pub_executive', 'publisher', 'publisher_manager', 'adv_executive', 'advertiser', 'advertiser_manager', 'operations', 'operation_manager', 'optimization', 'admin']
   };
   
   const allowedRoles = visibilityRules[action] || [];
@@ -414,12 +412,12 @@ const getAssignedHierarchyUsers = async (crmDb, userId) => {
 // 🔄 Expand selected users with their hierarchy
 const expandUsersWithHierarchy = async (crmDb, selectedUsers) => {
   console.log(`👉 Expanding hierarchy for ${selectedUsers.length} selected users`);
-  
+
   let expandedUsers = [...selectedUsers];
-  
+
   for (const user of selectedUsers) {
     const hierarchyUsers = await getAssignedHierarchyUsers(crmDb, user.id);
-    
+
     // Add hierarchy users that aren't already in the list
     for (const hierarchyUser of hierarchyUsers) {
       if (!expandedUsers.find(u => u.id === hierarchyUser.id)) {
@@ -427,7 +425,7 @@ const expandUsersWithHierarchy = async (crmDb, selectedUsers) => {
       }
     }
   }
-  
+
   return expandedUsers;
 };
 

@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 const ROLE_COLORS = {
   admin: '#a855f7', advertiser_manager: '#4f7dff', publisher_manager: '#06b6d4',
   advertiser: '#22c55e', publisher: '#f59e0b', am: '#4f7dff',
-  operations: '#ef4444', optimization: '#f97316'
+  operations: '#ef4444', operation_manager: '#dc2626', optimization: '#f97316'
 };
 
 export default function CreateGroupModal({ onClose, onCreated }) {
@@ -26,6 +26,7 @@ export default function CreateGroupModal({ onClose, onCreated }) {
       advertiser_manager: []
     },
     operations: [],
+    operation_manager: [],
     optimization: []
   });
   const [selectedSubId, setSelectedSubId] = useState('');
@@ -96,6 +97,7 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                   ...response.users_by_role.advertiser_side.advertiser,
                   ...response.users_by_role.advertiser_side.advertiser_manager,
                   ...response.users_by_role.operations || [],
+                  ...response.users_by_role.operation_manager || [],
                   ...response.users_by_role.optimization || []
                 ];
                 setUsers(allUsers);
@@ -556,6 +558,14 @@ export default function CreateGroupModal({ onClose, onCreated }) {
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Operations</div>
                       {usersByRole.operations.map(u => renderUserItem(u))}
+                    </div>
+                  )}
+
+                  {/* Operation Manager */}
+                  {usersByRole.operation_manager && usersByRole.operation_manager.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Operation Manager</div>
+                      {usersByRole.operation_manager.map(u => renderUserItem(u))}
                     </div>
                   )}
 

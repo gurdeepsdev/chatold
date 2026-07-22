@@ -954,6 +954,10 @@ const isInitialUnreadLoad = useRef(true);
   const markGroupAsRead = useCallback(async (groupId) => {
     try {
       await messagesAPI.getMessages(groupId);
+      // Also mark every unread message in the group as seen, not just the page
+      // that just got fetched — otherwise an old message beyond the user's usual
+      // scroll depth can never be marked seen and permanently inflates the badge.
+      await messagesAPI.markGroupFullyRead(groupId);
       // Only clear unread count locally — do NOT touch stablePositionRef here
       setUnreadCounts(prev => ({ ...prev, [groupId]: 0 }));
       await loadUnreadCounts();
@@ -1468,6 +1472,15 @@ const unsubGroupCreated = on('group_created', (data) => {
   };
 
 }, [on, user?.id, loadGroups, loadUnreadCounts, joinGroup, leaveGroup]);
+
+// Refresh unread counts on socket reconnect so missed task_assigned / new_message
+// events (while disconnected) are recovered from the DB.
+useEffect(() => {
+  if (connected) {
+    loadUnreadCounts();
+  }
+}, [connected, loadUnreadCounts]);
+
   const toggleThread = (key) => {
     setExpandedThreads(prev => ({ ...prev, [key]: !prev[key] }));
   };
