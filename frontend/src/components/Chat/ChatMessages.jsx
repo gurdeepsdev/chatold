@@ -478,6 +478,33 @@ function parseMsgContent(content) {
   return { prefix: match[1].trim(), text: match[2] };
 }
 
+// Pulls the {name, uid} pairs out of "@[Name](uid:123)" tokens and returns the
+// display-safe text (id stripped) alongside them, so the edit box never shows a uid.
+function extractMentions(text) {
+  const mentions = [];
+  const stripped = text.replace(/@\[([^\]]+)\]\(uid:(\d+)\)/g, (_, name, uid) => {
+    mentions.push({ name, uid });
+    return `@${name}`;
+  });
+  return { stripped, mentions };
+}
+
+// Reverses extractMentions: puts the uid tokens back for any mention names still
+// present (in order) in the edited text, so tags survive an edit that didn't touch them.
+function rehydrateMentions(text, mentions) {
+  let result = text;
+  let searchFrom = 0;
+  for (const { name, uid } of mentions) {
+    const plain = `@${name}`;
+    const idx = result.indexOf(plain, searchFrom);
+    if (idx === -1) continue; // user removed this mention while editing
+    const token = `@[${name}](uid:${uid})`;
+    result = result.slice(0, idx) + token + result.slice(idx + plain.length);
+    searchFrom = idx + token.length;
+  }
+  return result;
+}
+
 /* ── localStorage "last seen" tracker ───────────────────────── */
 // Stores the sent_at timestamp of the newest message the user has loaded
 // per group. On next open, any message newer than this (by others) is unread.
@@ -519,6 +546,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
   const [editContent, setEditContent] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const editInputRef = useRef(null);
+  const editMentionsRef = useRef([]); // {name, uid} pairs stripped out of msg.content when edit mode opened
   const messageRef = useRef(null);
   const plusBtnRef = useRef(null);
   
@@ -605,7 +633,9 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
 
   const handleEditStart = () => {
     const { text } = parseMsgContent(msg.content);
-    setEditContent(text);
+    const { stripped, mentions } = extractMentions(text);
+    editMentionsRef.current = mentions;
+    setEditContent(stripped);
     setIsEditing(true);
     setShowOptions(false);
     setTimeout(() => {
@@ -622,11 +652,12 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
     const trimmed = editContent.trim();
     if (!trimmed) return;
     const { text: original } = parseMsgContent(msg.content);
-    if (trimmed === original) { setIsEditing(false); return; }
+    const rehydrated = rehydrateMentions(trimmed, editMentionsRef.current);
+    if (rehydrated === original) { setIsEditing(false); return; }
     setEditSaving(true);
     try {
-      await messagesAPI.editMessage(group.id, msg.id, trimmed);
-      if (onEditMessage) onEditMessage(msg.id, trimmed);
+      await messagesAPI.editMessage(group.id, msg.id, rehydrated);
+      if (onEditMessage) onEditMessage(msg.id, rehydrated);
       setIsEditing(false);
     } catch {
       toast.error('Failed to edit message');
@@ -1331,6 +1362,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
 
   const load=useCallback(async(p=1)=>{
     if(!group)return;
+    const requestGroupId=Number(group.id);
     if(p===1){
       setLoading(true);
     } else {
@@ -1342,6 +1374,11 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     }
     try{
       const data=await messagesAPI.getMessages(group.id,p);
+
+      // The user may have switched to a different group while this request was
+      // in flight. If so, this response is stale — discard it and leave the
+      // loading state as-is until the request for the current group resolves.
+      if(requestGroupId!==groupIdRef.current)return;
       if(p===1){
         const msgs=data.messages||[];
         setMessages(msgs);
@@ -1373,12 +1410,22 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
         setMessages(prev=>[...(data.messages||[]),...prev]);
       }
       setHasMore(data.hasMore);setPage(p);
-    }catch(e){console.error(e);}
-    if(p===1){
-      setLoading(false);
-    } else {
-      olderLoadingRef.current=false;
-      setLoadingOlder(false);
+      if(p===1){
+        setLoading(false);
+      } else {
+        olderLoadingRef.current=false;
+        setLoadingOlder(false);
+      }
+    }catch(e){
+      console.error(e);
+      if(requestGroupId===groupIdRef.current){
+        if(p===1){
+          setLoading(false);
+        } else {
+          olderLoadingRef.current=false;
+          setLoadingOlder(false);
+        }
+      }
     }
   },[group]);// eslint-disable-line
 
@@ -1405,6 +1452,9 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     setMessages([]);setPage(1);setFirstUnreadId(null);setAccessRevoked(false);
     setReplyTo(null);
     setRemoteMatches([]);setSearchCursor(null);setSearchHasMore(false);setSearching(false);
+    // Abandon any older-page fetch that was in flight for the group we're leaving,
+    // so its re-entrancy guard doesn't stay stuck "true" and block pagination forever.
+    olderLoadingRef.current=false;setLoadingOlder(false);
     load(1);joinGroup(group.id);
   },[group?.id]);// eslint-disable-line
 

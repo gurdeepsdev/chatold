@@ -821,6 +821,33 @@ const MENTION_COLORS = ['#4f7dff','#a855f7','#22c55e','#f59e0b','#ef4444','#06b6
 function ac(n=''){let h=0;for(const c of n)h=c.charCodeAt(0)+((h<<5)-h);return MENTION_COLORS[Math.abs(h)%MENTION_COLORS.length];}
 function ini(n=''){return n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);}
 
+// Pulls {name, uid} pairs out of any "@[Name](uid:123)" tokens already present in a string
+// (e.g. a draft saved before this fix) and returns the display-safe text alongside them.
+function extractMentions(text) {
+  const mentions = [];
+  const stripped = (text || '').replace(/@\[([^\]]+)\]\(uid:(\d+)\)/g, (_, name, uid) => {
+    mentions.push({ name, uid });
+    return `@${name}`;
+  });
+  return { stripped, mentions };
+}
+
+// Reverses extractMentions: restores the uid token for any mention name still present
+// (in order) in the given text, so the id is only ever added back right before sending.
+function rehydrateMentions(text, mentions) {
+  let result = text;
+  let searchFrom = 0;
+  for (const { name, uid } of (mentions || [])) {
+    const plain = `@${name}`;
+    const idx = result.indexOf(plain, searchFrom);
+    if (idx === -1) continue; // user deleted this mention while typing
+    const token = `@[${name}](uid:${uid})`;
+    result = result.slice(0, idx) + token + result.slice(idx + plain.length);
+    searchFrom = idx + token.length;
+  }
+  return result;
+}
+
 const MessageSender = ({
   groupId,
   onMessageSent,
@@ -869,6 +896,10 @@ const MessageSender = ({
   contentRef.current     = content;
   selectedIdsRef.current = selectedIds;
 
+  // {name, uid} pairs for mentions currently typed into `content` (which itself only
+  // ever holds display-safe "@Name" text — the uid is rehydrated right before sending).
+  const mentionsRef = useRef([]);
+
   const prevGroupIdRef = useRef(null);
   // True once the restoration effect has run for the current group.
   // Prevents the save effect from clobbering localStorage before we've read it.
@@ -905,7 +936,7 @@ const MessageSender = ({
     if (!groupId || !user?.id || !hasRestoredRef.current) return;
     const key = `chat_draft_${user.id}_${groupId}`;
     if (content.trim() || selectedIds.length > 0) {
-      localStorage.setItem(key, JSON.stringify({ content, selectedIds }));
+      localStorage.setItem(key, JSON.stringify({ content, selectedIds, mentions: mentionsRef.current }));
     } else {
       localStorage.removeItem(key);
     }
@@ -921,7 +952,7 @@ const MessageSender = ({
       // draft cleanup. Deleting here would wipe a valid draft when restoration
       // hasn't run yet (e.g. auth delayed, content still '').
       if (contentRef.current.trim() || selectedIdsRef.current.length > 0) {
-        localStorage.setItem(prevKey, JSON.stringify({ content: contentRef.current, selectedIds: selectedIdsRef.current }));
+        localStorage.setItem(prevKey, JSON.stringify({ content: contentRef.current, selectedIds: selectedIdsRef.current, mentions: mentionsRef.current }));
       }
       window.dispatchEvent(new CustomEvent('chat-draft-changed', { detail: { groupId: prevGroupIdRef.current } }));
     }
@@ -948,16 +979,23 @@ const MessageSender = ({
     const raw = localStorage.getItem(key);
     if (raw) {
       try {
-        const { content: c, selectedIds: ids } = JSON.parse(raw);
-        setContent(c || '');
+        const { content: c, selectedIds: ids, mentions: m } = JSON.parse(raw);
+        // Drafts saved before this fix still have the raw "@[Name](uid:1)" token baked
+        // into `content` with no separate `mentions` field — extract it on the way in
+        // so an old draft never displays a uid, and its mention isn't lost on send.
+        const { stripped, mentions: legacyMentions } = extractMentions(c || '');
+        setContent(stripped);
         setSelectedIds(Array.isArray(ids) ? ids : []);
+        mentionsRef.current = Array.isArray(m) ? m : legacyMentions;
       } catch {
         setContent('');
         setSelectedIds([]);
+        mentionsRef.current = [];
       }
     } else {
       setContent('');
       setSelectedIds([]);
+      mentionsRef.current = [];
     }
     hasRestoredRef.current = true;
     return () => { hasRestoredRef.current = false; };
@@ -973,6 +1011,7 @@ const MessageSender = ({
         localStorage.setItem(key, JSON.stringify({
           content: contentRef.current,
           selectedIds: selectedIdsRef.current,
+          mentions: mentionsRef.current,
         }));
       }
     };
@@ -1084,9 +1123,8 @@ const MessageSender = ({
     const atIndex = uptoCursor.lastIndexOf('@');
     if (atIndex !== -1) {
       const between = uptoCursor.slice(atIndex + 1);
-      // Bail if it's whitespace-broken or looks like it's inside an already-inserted
-      // @[Name](uid:1) token (contains '[') rather than a fresh mention being typed.
-      if (!/\s/.test(between) && !between.includes('[')) {
+      // Bail if it's whitespace-broken (a fresh mention query has no spaces in it yet).
+      if (!/\s/.test(between)) {
         setMentionStart(atIndex);
         setMentionQuery(between);
         setMentionActiveIndex(0);
@@ -1106,9 +1144,10 @@ const MessageSender = ({
     const cursorPos = textareaRef.current?.selectionStart ?? content.length;
     const before = content.slice(0, mentionStart);
     const after = content.slice(cursorPos);
-    const token = `@[${member.full_name}](uid:${member.user_id}) `;
+    const token = `@${member.full_name} `;
     const newContent = before + token + after;
     setContent(newContent);
+    mentionsRef.current = [...mentionsRef.current, { name: member.full_name, uid: member.user_id }];
     setMentionStart(-1);
     setMentionQuery(null);
     // @mentioning someone is interchangeable with checking them in the "To" list —
@@ -1305,7 +1344,7 @@ const MessageSender = ({
 
       if (hasText) {
         const messageData = {
-          content: content.trim(),
+          content: rehydrateMentions(content.trim(), mentionsRef.current),
           recipient_ids: selectedIds,
           is_broadcast: allSelected,
           secondary_recipient_id: (selectedIds.length === 1 && secondaryRecipientId)
@@ -1324,6 +1363,7 @@ const MessageSender = ({
       }
 
       setContent('');
+      mentionsRef.current = [];
       setSelectedIds([]);
       setSelectedFiles([]);
       setSecondaryRecipientId('');
