@@ -440,7 +440,8 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
 });
 
 // ── Last 30 days of pause history for a PID, grouped campaign-wise ──────────
-router.get('/pause-history/:pid', auth, async (req, res) => {
+// No auth — consumed by an external system that can't do JWT login.
+router.get('/pause-history/:pid', async (req, res) => {
   const { pid } = req.params;
   const days = Number(req.query.days) > 0 ? Number(req.query.days) : 30;
 
