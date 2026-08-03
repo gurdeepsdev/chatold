@@ -1305,6 +1305,8 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   const messagesAreaRef=useRef(null);
   const groupIdRef=useRef(null);
   const msRef=useRef(markSeen);
+  const pendingSeenRef=useRef({});
+  const notifiedSeenRef=useRef(new Set());
 
   // ── Infinite-scroll (load older on scroll-to-top) bookkeeping ──
   const olderLoadingRef=useRef(false);   // synchronous re-entrancy guard against double-fetching a page
@@ -1360,6 +1362,17 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     setSearching(false);
   },[searchQuery,group?.id,searchCursor]);
 
+  const markSeenBatch=useCallback((msgs)=>{
+    const uid=user?.id;
+    if(uid==null)return;
+    msgs.forEach(m=>{
+      if(m.sender_id===uid)return;
+      if(notifiedSeenRef.current.has(m.id))return;
+      notifiedSeenRef.current.add(m.id);
+      msRef.current?.(m.id,m.group_id);
+    });
+  },[user?.id]);
+
   const load=useCallback(async(p=1)=>{
     if(!group)return;
     const requestGroupId=Number(group.id);
@@ -1382,6 +1395,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
       if(p===1){
         const msgs=data.messages||[];
         setMessages(msgs);
+        markSeenBatch(msgs);
         // Find the first message newer than the last one the user saw,
         // sent by someone else. Works across any group switch.
         const lastSeen=getLastSeen(group.id);
@@ -1408,6 +1422,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
       } else {
         restoreScrollRef.current=true;
         setMessages(prev=>[...(data.messages||[]),...prev]);
+        markSeenBatch(data.messages||[]);
       }
       setHasMore(data.hasMore);setPage(p);
       if(p===1){
@@ -1427,7 +1442,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
         }
       }
     }
-  },[group]);// eslint-disable-line
+  },[group,markSeenBatch]);// eslint-disable-line
 
   // After older messages are prepended, the browser keeps scrollTop fixed in pixels —
   // since a chunk of new (taller) content just appeared above the viewport, that visually
@@ -1471,6 +1486,19 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
     setMessages(prev=>prev.filter(msg=>msg.id!==messageId));
   },[]);
 
+  const applyPendingSeen=useCallback((msg)=>{
+    const pending=pendingSeenRef.current[msg.id];
+    if(!pending||!pending.length)return msg;
+    delete pendingSeenRef.current[msg.id];
+    const existing=msg.read_by||[];
+    const merged=[...existing];
+    pending.forEach(p=>{
+      if(p.user_id===msg.sender_id)return;
+      if(!merged.some(r=>r.user_id===p.user_id))merged.push(p);
+    });
+    return {...msg,read_by:merged};
+  },[]);
+
   const handleNewMsg=useCallback((msg)=>{
     if(Number(msg.group_id)!==groupIdRef.current)return;
     
@@ -1499,16 +1527,17 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
       if (prev.some(m => m.id === msg.id)) {
         return prev; // Prevent duplicates even from others
       }
-      return [...prev, msg];
+      return [...prev, applyPendingSeen(msg)];
     });
     // Keep "last seen" marker current so switching away + back doesn't
     // re-show the divider for messages already visible in this session.
     if(msg.sent_at) saveLastSeen(groupIdRef.current, msg.sent_at);
+    notifiedSeenRef.current.add(msg.id);
     msRef.current?.(msg.id,msg.group_id);
     if(isNearBottom()){
       setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:'smooth'}),60);
     }
-  },[user?.id,isNearBottom]);
+  },[user?.id,isNearBottom,applyPendingSeen]);
 
   const handleReactionUpdate=useCallback((data)=>{
     if(Number(data.group_id)!==groupIdRef.current)return;
@@ -1517,12 +1546,23 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
 
   const handleSeenUpdate=useCallback((data)=>{
     if(Number(data.group_id)!==groupIdRef.current)return;
-    setMessages(prev=>prev.map(msg=>{
-      if(msg.id!==data.message_id||msg.sender_id===data.user_id)return msg;
+    setMessages(prev=>{
+      const idx=prev.findIndex(msg=>msg.id===data.message_id);
+      if(idx===-1){
+        const list=pendingSeenRef.current[data.message_id]||[];
+        if(!list.some(r=>r.user_id===data.user_id)){
+          pendingSeenRef.current[data.message_id]=[...list,{user_id:data.user_id,user_name:data.user_name,timestamp:data.timestamp}];
+        }
+        return prev;
+      }
+      const msg=prev[idx];
+      if(msg.sender_id===data.user_id)return prev;
       const existing=msg.read_by||[];
-      if(existing.some(r=>r.user_id===data.user_id))return msg;
-      return {...msg,read_by:[...existing,{user_id:data.user_id,user_name:data.user_name,timestamp:data.timestamp}]};
-    }));
+      if(existing.some(r=>r.user_id===data.user_id))return prev;
+      const next=[...prev];
+      next[idx]={...msg,read_by:[...existing,{user_id:data.user_id,user_name:data.user_name,timestamp:data.timestamp}]};
+      return next;
+    });
   },[]);
 
   const handleTyping=useCallback((data)=>{
@@ -1862,7 +1902,7 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
         <MessageSender
           groupId={group?.id}
           onMessageSent={(newMessage) => {
-            setMessages(prev => [...prev, newMessage]);
+            setMessages(prev => [...prev, applyPendingSeen(newMessage)]);
             setReplyTo(null);
             if(newMessage?.sent_at) saveLastSeen(group?.id, newMessage.sent_at);
             bottomRef.current?.scrollIntoView({behavior:'smooth'});

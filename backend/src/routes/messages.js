@@ -3474,10 +3474,9 @@ router.post('/:groupId',auth,checkMember,async(req,res)=>{
     const io = req.app.get('io');
     if(io) io.to(`group_${groupId}`).emit('new_message', message);
 
-    // ── Push notifications ONLY to intended recipients ─────────
-    await pushToUserList(io, groupId, req.user.id, recipientList, message, grp?.group_name || '');
-
     res.status(201).json({message});
+    pushToUserList(io, groupId, req.user.id, recipientList, message, grp?.group_name || '')
+      .catch(e => console.error('pushToUserList err:', e.message));
   }catch(e){console.error(e);res.status(500).json({error:'Failed to send'});}
 });
 
@@ -3592,10 +3591,9 @@ router.post('/:groupId/upload',auth,checkMember,upload.single('file'),async(req,
     const io=req.app.get('io');
     if(io) io.to(`group_${groupId}`).emit('new_message',message);
 
-    // Notify only intended recipients
-    await pushToUserList(io, groupId, req.user.id, recipientList, message, grp?.group_name||'');
-
     res.status(201).json({message});
+    pushToUserList(io, groupId, req.user.id, recipientList, message, grp?.group_name||'')
+      .catch(e => console.error('pushToUserList err:', e.message));
   }catch(e){
     console.error('❌ File upload error:', e);
     res.status(500).json({error:'Failed to upload file: '+e.message});

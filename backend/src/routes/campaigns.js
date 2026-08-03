@@ -439,6 +439,61 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
   }
 });
 
+// ── Last 30 days of pause history for a PID, grouped campaign-wise ──────────
+router.get('/pause-history/:pid', auth, async (req, res) => {
+  const { pid } = req.params;
+  const days = Number(req.query.days) > 0 ? Number(req.query.days) : 30;
+
+  if (!pid) {
+    return res.status(400).json({ error: 'pid is required' });
+  }
+
+  try {
+    const [rows] = await db.query(
+      `SELECT
+         t.pid AS pausepid,
+         t.pause_reason AS reason,
+         t.created_at AS date,
+         JSON_UNQUOTE(JSON_EXTRACT(g.crm_campaign_data, '$.id')) AS campaignid,
+         JSON_UNQUOTE(JSON_EXTRACT(g.crm_campaign_data, '$.campaign_name')) AS campaign_name,
+         JSON_UNQUOTE(JSON_EXTRACT(g.crm_campaign_data, '$.os')) AS os,
+         JSON_UNQUOTE(JSON_EXTRACT(g.crm_campaign_data, '$.Vertical')) AS vertical
+       FROM tasks t
+       JOIN chat_groups g ON g.id = t.group_id
+       WHERE t.task_type = 'pause_pid'
+         AND t.pid = ?
+         AND t.created_at >= NOW() - INTERVAL ? DAY
+       ORDER BY campaignid, t.created_at DESC`,
+      [pid, days]
+    );
+
+    // Group campaign-wise
+    const campaignsMap = new Map();
+    for (const row of rows) {
+      const key = row.campaignid || row.campaign_name || 'unknown';
+      if (!campaignsMap.has(key)) {
+        campaignsMap.set(key, {
+          campaignid: row.campaignid,
+          campaign_name: row.campaign_name,
+          os: row.os,
+          vertical: row.vertical,
+          entries: []
+        });
+      }
+      campaignsMap.get(key).entries.push({
+        reason: row.reason,
+        date: row.date,
+        pausepid: row.pausepid
+      });
+    }
+
+    res.json({ pid, days, campaigns: Array.from(campaignsMap.values()) });
+  } catch (error) {
+    console.error('Error fetching pause history:', error);
+    res.status(500).json({ error: 'Failed to fetch pause history' });
+  }
+});
+
 // ── Debug: Find PID messages across all groups ─────────────────────────────
 router.get('/debug/find-pid-messages', auth, async (req, res) => {
   try {
