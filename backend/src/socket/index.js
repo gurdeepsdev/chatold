@@ -196,11 +196,16 @@ socket.join(`user_${userId}`);
     // Handle joining a group room
     socket.on('join_group', async (groupId) => {
       try {
+        if (socket.user.role === 'admin') {
+          socket.join(`group_${groupId}`);
+          socket.emit('joined_group', { groupId });
+          return;
+        }
         const [membership] = await db.query(
           'SELECT id FROM group_members WHERE group_id = ? AND user_id = ?',
           [groupId, userId]
         );
-        if (membership.length || socket.user.role === 'admin') {
+        if (membership.length) {
           socket.join(`group_${groupId}`);
           socket.emit('joined_group', { groupId });
         }

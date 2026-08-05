@@ -877,12 +877,11 @@ export default function Sidebar({ selectedGroupId, onSelectGroup,onUnreadCountsC
       setGroups(data.groups || []);
       setThreads(data.threads || []);
 
-      if (data.groups && data.groups.length > 0) {
-        data.groups.forEach(group => {
-          if (group.id) joinGroup(group.id);
-        });
-      }
-
+      // Note: Backend connection handler automatically queries the DB and joins
+      // the socket to all rooms of the user's groups on connection startup.
+      // Emitting individual join_group socket events for every group is redundant
+      // and causes a database connection queue exhaust.
+      
       loadUnreadCounts();
     } catch (error) {
       toast.error('Failed to load groups');

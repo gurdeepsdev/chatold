@@ -468,24 +468,42 @@ router.get('/pause-history/:pid', async (req, res) => {
       [pid, days]
     );
 
-    // Group campaign-wise
+    // Group campaign-wise by campaign_name to ensure unique campaign entries
     const campaignsMap = new Map();
     for (const row of rows) {
-      const key = row.campaignid || row.campaign_name || 'unknown';
+      const key = row.campaign_name || 'unknown';
       if (!campaignsMap.has(key)) {
         campaignsMap.set(key, {
           campaignid: row.campaignid,
           campaign_name: row.campaign_name,
           os: row.os,
           vertical: row.vertical,
-          entries: []
+          reason: row.reason,
+          date: row.date
         });
+      } else {
+        // Merge metadata if the campaign name is the same but spans multiple entities/platforms
+        const existing = campaignsMap.get(key);
+        
+        // If this row has a newer date, update the reason and date to be the latest
+        if (new Date(row.date) > new Date(existing.date)) {
+          existing.reason = row.reason;
+          existing.date = row.date;
+        }
+
+        if (row.campaignid && existing.campaignid !== row.campaignid) {
+          existing.campaignid = existing.campaignid 
+            ? `${existing.campaignid}, ${row.campaignid}` 
+            : row.campaignid;
+        }
+        if (row.os && existing.os !== row.os) {
+          const osSet = new Set([
+            ...(existing.os ? existing.os.split(',').map(s => s.trim()) : []),
+            ...(row.os ? row.os.split(',').map(s => s.trim()) : [])
+          ]);
+          existing.os = Array.from(osSet).filter(Boolean).join(', ');
+        }
       }
-      campaignsMap.get(key).entries.push({
-        reason: row.reason,
-        date: row.date,
-        pausepid: row.pausepid
-      });
     }
 
     res.json({ pid, days, campaigns: Array.from(campaignsMap.values()) });
