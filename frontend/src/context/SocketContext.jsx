@@ -158,7 +158,8 @@ export const SocketProvider = ({ children, token }) => {
   }, []);
 
   const rejoin = useCallback((socket) => {
-    activeGroups.current.forEach(gid => socket.emit('join_group', gid));
+     // Note: The backend automatically queries and joins the socket to all the user's groups on connection startup.
+    // We only need to emit join_group for new groups joined during disconnection.
     pendingJoins.current.forEach(gid => {
       socket.emit('join_group', gid);
       activeGroups.current.add(gid);
