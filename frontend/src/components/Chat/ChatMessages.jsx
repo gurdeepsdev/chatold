@@ -568,6 +568,14 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
     return () => document.removeEventListener('click', closeIt);
   }, [seenPopup]);
 
+  // Close the options menu on any click outside it
+  useEffect(() => {
+    if (!showOptions) return;
+    const closeIt = () => setShowOptions(false);
+    document.addEventListener('click', closeIt);
+    return () => document.removeEventListener('click', closeIt);
+  }, [showOptions]);
+
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -780,11 +788,14 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
         )}
         {/* </div> */}
         <div
-          ref={messageRef}
-          className={`message-bubble ${isOwn ? 'own' : 'received'} ${msg.message_type}`}
+          className="bubble-container"
           onMouseEnter={() => setShowEmojiPicker(true)}
-          onMouseLeave={() => setShowEmojiPicker(false)}
+          onMouseLeave={() => { if(!showExtendedPicker) setShowEmojiPicker(false); }}
         >
+          <div
+            ref={messageRef}
+            className={`message-bubble ${isOwn ? 'own' : 'received'} ${msg.message_type}`}
+          >
 
   {hasAdditional && !msg.is_deleted ? (
     <>
@@ -1037,7 +1048,74 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
     )}
   </div>
 
-</div>
+          </div>
+
+          {/* Emoji Picker on Hover */}
+          {!msg.is_deleted && (
+            <div
+              className={`emoji-picker-trigger ${(showEmojiPicker || showOptions || showExtendedPicker) ? 'visible' : ''}`}
+            >
+              {showEmojiPicker && (
+                <div className="emoji-picker">
+                  {['❤️', '👍', '😂', '🎉', '🔥', '💯', '😢', '😡', '👎', '😍'].map((emoji) => (
+                    <button key={emoji} className="emoji-btn" onClick={() => handleReaction(emoji)}>{emoji}</button>
+                  ))}
+                  <button
+                    ref={plusBtnRef}
+                    className="emoji-btn"
+                    style={{fontWeight:700,fontSize:14,color:'var(--text-primary)'}}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = plusBtnRef.current?.getBoundingClientRect();
+                      if(rect) setExtendedPickerPos(rect);
+                      setShowExtendedPicker(v => !v);
+                    }}
+                  >＋</button>
+                </div>
+              )}
+              <div
+                className="message-actions"
+                onClick={(e) => { e.stopPropagation(); setShowOptions(!showOptions); }}
+              >⋮</div>
+
+              {/* Message Options Dropdown */}
+              {showOptions && (
+                <div
+                  className="message-options"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button className="option-btn" onClick={(e) => { e.stopPropagation(); handleCopy(); }}>
+                    <span className="option-icon">{copied ? '✅' : '📋'}</span>
+                    <span className="option-text">{copied ? 'Copied!' : 'Copy'}</span>
+                  </button>
+                  {isPinned ? (
+                    <button className="option-btn" onClick={handleUnpin}>
+                      <span className="option-icon">📌</span>
+                      <span className="option-text">Unpin</span>
+                    </button>
+                  ) : (
+                    <button className="option-btn" onClick={handlePin}>
+                      <span className="option-icon">📌</span>
+                      <span className="option-text">Pin</span>
+                    </button>
+                  )}
+                  {isOwn && (msg.message_type === 'text' || msg.message_type === 'image' || msg.message_type === 'file') && (
+                    <button className="option-btn" onClick={(e) => { e.stopPropagation(); handleEditStart(); }}>
+                      <span className="option-icon">✏️</span>
+                      <span className="option-text">Edit</span>
+                    </button>
+                  )}
+                  {isOwn && (
+                    <button className="option-btn delete-btn" onClick={(e) => { e.stopPropagation(); handleDelete(); }}>
+                      <span className="option-icon">🗑️</span>
+                      <span className="option-text">Delete</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
   {isOwn && seenPopup && (
     <div style={{
@@ -1152,36 +1230,6 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
           </div>
         )}
 
-        {/* Emoji Picker on Hover */}
-        {!msg.is_deleted && <div
-          className="emoji-picker-trigger"
-          onMouseEnter={() => setShowEmojiPicker(true)}
-          onMouseLeave={() => { if(!showExtendedPicker) setShowEmojiPicker(false); }}
-        >
-          {showEmojiPicker && (
-            <div className="emoji-picker">
-              {['❤️', '👍', '😂', '🎉', '🔥', '💯', '😢', '😡', '👎', '😍'].map((emoji) => (
-                <button key={emoji} className="emoji-btn" onClick={() => handleReaction(emoji)}>{emoji}</button>
-              ))}
-              <button
-                ref={plusBtnRef}
-                className="emoji-btn"
-                style={{fontWeight:700,fontSize:14,color:'var(--text-primary)'}}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const rect = plusBtnRef.current?.getBoundingClientRect();
-                  if(rect) setExtendedPickerPos(rect);
-                  setShowExtendedPicker(v => !v);
-                }}
-              >＋</button>
-            </div>
-          )}
-          <div
-            className="message-actions"
-            onClick={(e) => { e.stopPropagation(); setShowOptions(!showOptions); }}
-          >⋮</div>
-        </div>}
-
         {/* Extended emoji picker panel */}
         {showExtendedPicker && extendedPickerPos && (
           <div
@@ -1229,40 +1277,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
           </div>
         )}
 
-        {/* Message Options */}
-        {!msg.is_deleted && showOptions && (
-          <div className=""
-              onClick={(e) => e.stopPropagation()} // prevent closing
->
-            <button className="option-btn" onClick={(e) => { e.stopPropagation(); handleCopy(); }}>
-              <span className="option-icon">{copied ? '✅' : '📋'}</span>
-              <span className="option-text">{copied ? 'Copied!' : 'Copy'}</span>
-            </button>
-            {isPinned ? (
-              <button className="option-btn" onClick={handleUnpin}>
-                <span className="option-icon">📌</span>
-                <span className="option-text">Unpin</span>
-              </button>
-            ) : (
-              <button className="option-btn" onClick={handlePin}>
-                <span className="option-icon">📌</span>
-                <span className="option-text">Pin</span>
-              </button>
-            )}
-            {isOwn && (msg.message_type === 'text' || msg.message_type === 'image' || msg.message_type === 'file') && (
-              <button className="option-btn" onClick={(e) => { e.stopPropagation(); handleEditStart(); }}>
-                <span className="option-icon">✏️</span>
-                <span className="option-text">Edit</span>
-              </button>
-            )}
-            {isOwn && (
-              <button className="option-btn delete-btn" onClick={(e) => { e.stopPropagation(); handleDelete(); }}>
-                <span className="option-icon">🗑️</span>
-                <span className="option-text">Delete</span>
-              </button>
-            )}
-          </div>
-        )}
+
         {isPinned && (
           <div style={{
             display:'flex', alignItems:'center', gap:4,
