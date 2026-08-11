@@ -710,6 +710,12 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
 
   const fileUrl = msg.file_url ? (msg.file_url.startsWith('http') ? msg.file_url : `${process.env.REACT_APP_API_URL}${msg.file_url}`) : null;
 
+  const hasAdditional = msg.additional_files && msg.additional_files.length > 0;
+  const additionalImages = msg.additional_files ? msg.additional_files.filter(f => f.mime_type?.startsWith('image/')) : [];
+  const additionalAudios = msg.additional_files ? msg.additional_files.filter(f => f.mime_type?.startsWith('audio/')) : [];
+  const additionalVideos = msg.additional_files ? msg.additional_files.filter(f => f.mime_type?.startsWith('video/')) : [];
+  const additionalOthers = msg.additional_files ? msg.additional_files.filter(f => !f.mime_type?.startsWith('image/') && !f.mime_type?.startsWith('audio/') && !f.mime_type?.startsWith('video/')) : [];
+
   return(
     <div className={`message-row ${isOwn?'own':''}`}>
       {!isOwn&&(
@@ -780,64 +786,181 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
           onMouseLeave={() => setShowEmojiPicker(false)}
         >
 
-  {/* Image */}
-  {msg.message_type === 'image' && fileUrl && !msg.is_deleted && (
-    <div className="media-content">
-      <img
-        src={fileUrl}
-        alt="Shared image"
-        loading="lazy"
-        style={{cursor:'zoom-in'}}
-        onClick={(e) => {
-          e.stopPropagation();
+  {hasAdditional && !msg.is_deleted ? (
+    <>
+      {/* Multiple Images Grid */}
+      {additionalImages.length > 0 && (
+        <div className="additional-images-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: additionalImages.length === 1 ? '1fr' : additionalImages.length === 2 ? '1fr 1fr' : 'repeat(auto-fit, minmax(120px, 1fr))',
+          gap: '8px',
+          marginBottom: '8px',
+          maxWidth: '360px'
+        }}>
+          {additionalImages.map((file, idx) => {
+            const fUrl = file.file_url.startsWith('http') ? file.file_url : `${process.env.REACT_APP_API_URL}${file.file_url}`;
+            const storedFilename = (file.file_url || '').split('/').pop();
+            const nameParam = encodeURIComponent(file.file_name || storedFilename);
+            const downloadUrl = `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
+            return (
+              <div key={idx} className="media-content" style={{ margin: 0, borderRadius: '8px', overflow: 'hidden' }}>
+                <img
+                  src={fUrl}
+                  alt={file.file_name || "Shared image"}
+                  loading="lazy"
+                  style={{
+                    cursor: 'zoom-in',
+                    width: '100%',
+                    height: additionalImages.length > 1 ? '120px' : 'auto',
+                    objectFit: 'cover',
+                    borderRadius: '8px'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onImageClick?.({
+                      url: fUrl,
+                      name: file.file_name || storedFilename,
+                      downloadUrl,
+                      images: additionalImages.map(img => {
+                        const imgUrl = img.file_url.startsWith('http') ? img.file_url : `${process.env.REACT_APP_API_URL}${img.file_url}`;
+                        const stored = (img.file_url || '').split('/').pop();
+                        const nParam = encodeURIComponent(img.file_name || stored);
+                        const dlUrl = `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(stored)}?name=${nParam}`;
+                        return { url: imgUrl, name: img.file_name || stored, downloadUrl: dlUrl };
+                      }),
+                      currentIndex: idx
+                    });
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Audios */}
+      {additionalAudios.map((file, idx) => {
+        const fUrl = file.file_url.startsWith('http') ? file.file_url : `${process.env.REACT_APP_API_URL}${file.file_url}`;
+        return (
+          <div key={idx} className="media-content">
+            <audio controls>
+              <source src={fUrl} type={file.mime_type || 'audio/mpeg'} />
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        );
+      })}
+
+      {/* Videos */}
+      {additionalVideos.map((file, idx) => {
+        const fUrl = file.file_url.startsWith('http') ? file.file_url : `${process.env.REACT_APP_API_URL}${file.file_url}`;
+        return (
+          <div key={idx} className="media-content">
+            <video controls width="300" height="200">
+              <source src={fUrl} type={file.mime_type || 'video/mp4'} />
+              Your browser does not support the video element.
+            </video>
+          </div>
+        );
+      })}
+
+      {/* Generic Files */}
+      {additionalOthers.map((file, idx) => {
+        const fUrl = file.file_url.startsWith('http') ? file.file_url : `${process.env.REACT_APP_API_URL}${file.file_url}`;
+        const storedFilename = (file.file_url || '').split('/').pop();
+        const nameParam = encodeURIComponent(file.file_name || storedFilename);
+        const downloadUrl = `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
+        let fileIcon = '📄';
+        if(file.mime_type?.includes('pdf')) fileIcon = '📕';
+        else if(file.mime_type?.includes('word')||file.mime_type?.includes('document')) fileIcon = '📝';
+        else if(file.mime_type?.includes('sheet')||file.mime_type?.includes('excel')) fileIcon = '📊';
+        else if(file.mime_type?.includes('zip')||file.mime_type?.includes('compressed')) fileIcon = '🗜️';
+        return (
+          <div key={idx} className="file-content" style={{ marginBottom: '8px' }} onClick={() => {
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = file.file_name || 'file';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }}>
+            <div className="file-icon">{fileIcon}</div>
+            <div className="file-info">
+              <div className="file-name">{file.file_name}</div>
+              <div className="file-size">{fs(file.file_size)}</div>
+            </div>
+          </div>
+        );
+      })}
+    </>
+  ) : (
+    <>
+      {/* Image */}
+      {msg.message_type === 'image' && fileUrl && !msg.is_deleted && (
+        <div className="media-content">
+          <img
+            src={fileUrl}
+            alt="Shared image"
+            loading="lazy"
+            style={{cursor:'zoom-in'}}
+            onClick={(e) => {
+              e.stopPropagation();
+              const storedFilename = (msg.file_url || '').split('/').pop();
+              const nameParam = encodeURIComponent(msg.file_name || storedFilename);
+              const downloadUrl = `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
+              onImageClick?.({
+                url: fileUrl,
+                name: msg.file_name || storedFilename,
+                downloadUrl,
+                images: [{ url: fileUrl, name: msg.file_name || storedFilename, downloadUrl }],
+                currentIndex: 0
+              });
+            }}
+          />
+        </div>
+      )}
+
+      {/* Audio */}
+      {msg.message_type === 'audio' && fileUrl && !msg.is_deleted && (
+        <div className="media-content">
+          <audio controls>
+            <source src={fileUrl} type={msg.mime_type || 'audio/mpeg'} />
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      )}
+
+      {/* Video */}
+      {msg.message_type === 'video' && fileUrl && !msg.is_deleted && (
+        <div className="media-content">
+          <video controls width="300" height="200">
+            <source src={fileUrl} type={msg.mime_type || 'video/mp4'} />
+            Your browser does not support the video element.
+          </video>
+        </div>
+      )}
+
+      {/* File */}
+      {msg.message_type === 'file' && fileUrl && !msg.is_deleted && (
+        <div className="file-content" onClick={() => {
           const storedFilename = (msg.file_url || '').split('/').pop();
           const nameParam = encodeURIComponent(msg.file_name || storedFilename);
           const downloadUrl = `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
-          onImageClick?.({ url: fileUrl, name: msg.file_name || storedFilename, downloadUrl });
-        }}
-      />
-    </div>
-  )}
-
-  {/* Audio */}
-  {msg.message_type === 'audio' && fileUrl && !msg.is_deleted && (
-    <div className="media-content">
-      <audio controls>
-        <source src={fileUrl} type={msg.mime_type || 'audio/mpeg'} />
-        Your browser does not support the audio element.
-      </audio>
-    </div>
-  )}
-
-  {/* Video */}
-  {msg.message_type === 'video' && fileUrl && !msg.is_deleted && (
-    <div className="media-content">
-      <video controls width="300" height="200">
-        <source src={fileUrl} type={msg.mime_type || 'video/mp4'} />
-        Your browser does not support the video element.
-      </video>
-    </div>
-  )}
-
-  {/* File */}
-  {msg.message_type === 'file' && fileUrl && !msg.is_deleted && (
-    <div className="file-content" onClick={() => {
-      const storedFilename = (msg.file_url || '').split('/').pop();
-      const nameParam = encodeURIComponent(msg.file_name || storedFilename);
-      const downloadUrl = `${process.env.REACT_APP_API_URL}/api/download/${encodeURIComponent(storedFilename)}?name=${nameParam}`;
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = msg.file_name || 'file';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }}>
-      <div className="file-icon">{msg.file_icon || '📄'}</div>
-      <div className="file-info">
-        <div className="file-name">{msg.file_name}</div>
-        <div className="file-size">{fs(msg.file_size)}</div>
-      </div>
-    </div>
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = msg.file_name || 'file';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }}>
+          <div className="file-icon">{msg.file_icon || '📄'}</div>
+          <div className="file-info">
+            <div className="file-name">{msg.file_name}</div>
+            <div className="file-size">{fs(msg.file_size)}</div>
+          </div>
+        </div>
+      )}
+    </>
   )}
 
   {/* Text Content */}
@@ -1126,7 +1249,7 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
                 <span className="option-text">Pin</span>
               </button>
             )}
-            {isOwn && msg.message_type === 'text' && (
+            {isOwn && (msg.message_type === 'text' || msg.message_type === 'image' || msg.message_type === 'file') && (
               <button className="option-btn" onClick={(e) => { e.stopPropagation(); handleEditStart(); }}>
                 <span className="option-icon">✏️</span>
                 <span className="option-text">Edit</span>
@@ -1295,10 +1418,66 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
   const searchDebounceRef=useRef(null);
   useEffect(()=>{
     if(!previewImage)return;
-    const onKey=(e)=>{if(e.key==='Escape')setPreviewImage(null);};
+    const onKey=(e)=>{
+      if(e.key==='Escape')setPreviewImage(null);
+      else if(e.key==='ArrowLeft') {
+        if (previewImage.images && previewImage.images.length > 1) {
+          const newIdx = (previewImage.currentIndex - 1 + previewImage.images.length) % previewImage.images.length;
+          const nextImg = previewImage.images[newIdx];
+          setPreviewImage(prev => ({
+            ...prev,
+            currentIndex: newIdx,
+            url: nextImg.url,
+            name: nextImg.name,
+            downloadUrl: nextImg.downloadUrl
+          }));
+        }
+      }
+      else if(e.key==='ArrowRight') {
+        if (previewImage.images && previewImage.images.length > 1) {
+          const newIdx = (previewImage.currentIndex + 1) % previewImage.images.length;
+          const nextImg = previewImage.images[newIdx];
+          setPreviewImage(prev => ({
+            ...prev,
+            currentIndex: newIdx,
+            url: nextImg.url,
+            name: nextImg.name,
+            downloadUrl: nextImg.downloadUrl
+          }));
+        }
+      }
+    };
     document.addEventListener('keydown',onKey);
     return()=>document.removeEventListener('keydown',onKey);
   },[previewImage]);
+
+  const handlePrevImage = (e) => {
+    e.stopPropagation();
+    if (!previewImage || !previewImage.images || previewImage.images.length <= 1) return;
+    const newIdx = (previewImage.currentIndex - 1 + previewImage.images.length) % previewImage.images.length;
+    const nextImg = previewImage.images[newIdx];
+    setPreviewImage({
+      ...previewImage,
+      currentIndex: newIdx,
+      url: nextImg.url,
+      name: nextImg.name,
+      downloadUrl: nextImg.downloadUrl
+    });
+  };
+
+  const handleNextImage = (e) => {
+    e.stopPropagation();
+    if (!previewImage || !previewImage.images || previewImage.images.length <= 1) return;
+    const newIdx = (previewImage.currentIndex + 1) % previewImage.images.length;
+    const nextImg = previewImage.images[newIdx];
+    setPreviewImage({
+      ...previewImage,
+      currentIndex: newIdx,
+      url: nextImg.url,
+      name: nextImg.name,
+      downloadUrl: nextImg.downloadUrl
+    });
+  };
   const dragCounterRef=useRef(0);
 
   const bottomRef=useRef(null);
@@ -1736,6 +1915,76 @@ export default function ChatMessages({group,onTaskClick,searchQuery=''}){
           onClick={()=>setPreviewImage(null)}
           className="image-preview-overlay"
         >
+          {previewImage.images && previewImage.images.length > 1 && (
+            <>
+              <button
+                onClick={handlePrevImage}
+                style={{
+                  position: 'absolute',
+                  left: '24px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(0,0,0,0.5)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '48px',
+                  height: '48px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10000,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(0,0,0,0.8)';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(0,0,0,0.5)';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                }}
+              >
+                ◀
+              </button>
+              <button
+                onClick={handleNextImage}
+                style={{
+                  position: 'absolute',
+                  right: '24px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(0,0,0,0.5)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '48px',
+                  height: '48px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10000,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(0,0,0,0.8)';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(0,0,0,0.5)';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                }}
+              >
+                ▶
+              </button>
+            </>
+          )}
           <img
             src={previewImage.url}
             alt={previewImage.name}

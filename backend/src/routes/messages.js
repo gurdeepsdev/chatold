@@ -3136,6 +3136,7 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
              m.file_url,m.file_name,m.file_size,m.mime_type,
              m.reply_to_id,m.is_deleted,m.sent_at,m.task_ref_id,
              m.recipient_ids, m.is_broadcast, m.is_edited, m.edited_at,
+             m.additional_files,
              u.id AS sender_id,u.full_name AS sender_name,u.username,u.role AS sender_role,
              rm.encrypted_content AS reply_encrypted,rm.iv AS reply_iv,
              ru.full_name AS reply_sender_name,
@@ -3210,6 +3211,15 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       recipient_ids: (() => {
         try { return msg.recipient_ids ? JSON.parse(msg.recipient_ids) : []; }
         catch(_){ return []; }
+      })(),
+      additional_files: (() => {
+        try {
+          const files = msg.additional_files ? (typeof msg.additional_files === 'string' ? JSON.parse(msg.additional_files) : msg.additional_files) : [];
+          return files.map(file => ({
+            ...file,
+            file_url: absUrl(req, file.file_url)
+          }));
+        } catch(_){ return []; }
       })(),
       task_ref:msg.task_ref_id?{task_id:msg.task_ref_id,task_title:msg.task_title,task_type:msg.task_type_ref}:null,
       reactions: reactions.filter(r => r.message_id === msg.id).map(r => ({
@@ -3513,11 +3523,11 @@ router.get('/:groupId/assignment/:recipientId', auth, checkMember, async (req, r
 /* ═══════════════════════════════════════════════════════════════
    POST /:groupId/upload  — upload file message
    ═══════════════════════════════════════════════════════════════ */
-router.post('/:groupId/upload',auth,checkMember,upload.single('file'),async(req,res)=>{
+router.post('/:groupId/upload',auth,checkMember,upload.any(),async(req,res)=>{
   try{
     const{groupId}=req.params;
-    const file=req.file;
-    if(!file)return res.status(400).json({error:'No file uploaded'});
+    const files=req.files || [];
+    if(!files || files.length === 0)return res.status(400).json({error:'No files uploaded'});
 
     // ── Normalise recipient list (same logic as text route) ────
     let recipientList = [];
@@ -3536,22 +3546,52 @@ router.post('/:groupId/upload',auth,checkMember,upload.single('file'),async(req,
       if (req.body.secondary_recipient_id) recipientList.push(Number(req.body.secondary_recipient_id));
     }
 
-    // Enhanced file type detection (unchanged from original)
-    const relPath=`/uploads/${file.filename}`;
-    let msgType='file';
-    let fileIcon='📄';
-    if(file.mimetype.startsWith('image/')){ msgType='image'; fileIcon='🖼️'; }
-    else if(file.mimetype.startsWith('audio/')){ msgType='audio'; fileIcon='🎵'; }
-    else if(file.mimetype.startsWith('video/')){ msgType='video'; fileIcon='🎬'; }
-    else if(file.mimetype.includes('pdf')){ fileIcon='📕'; }
-    else if(file.mimetype.includes('word')||file.mimetype.includes('document')){ fileIcon='📝'; }
-    else if(file.mimetype.includes('sheet')||file.mimetype.includes('excel')){ fileIcon='📊'; }
-    else if(file.mimetype.includes('zip')||file.mimetype.includes('compressed')){ fileIcon='🗜️'; }
-    else if(file.mimetype.includes('presentation')||file.mimetype.includes('powerpoint')){ fileIcon='📽️'; }
-    else if(file.mimetype.includes('text')){ fileIcon='📄'; }
+    // Process all files
+    const additionalFiles = [];
+    let msgType = 'file';
+    let hasImage = false;
+    let hasAudio = false;
+    let hasVideo = false;
 
-    const caption = req.body.caption || file.originalname;
-    const{encrypted,iv}=encrypt(caption);
+    for (const file of files) {
+      const relPath = `/uploads/${file.filename}`;
+      if (file.mimetype.startsWith('image/')) { hasImage = true; }
+      else if (file.mimetype.startsWith('audio/')) { hasAudio = true; }
+      else if (file.mimetype.startsWith('video/')) { hasVideo = true; }
+      
+      additionalFiles.push({
+        file_url: relPath,
+        file_name: file.originalname,
+        file_size: file.size,
+        mime_type: file.mimetype
+      });
+    }
+
+    // Set message_type based on priority of files
+    if (hasImage) msgType = 'image';
+    else if (hasVideo) msgType = 'video';
+    else if (hasAudio) msgType = 'audio';
+
+    // Set legacy fields for the first file to maintain compatibility
+    const firstFile = files[0];
+    const relPath = `/uploads/${firstFile.filename}`;
+    let fileIcon = '📄';
+    if (firstFile.mimetype.startsWith('image/')) { fileIcon = '🖼️'; }
+    else if (firstFile.mimetype.startsWith('audio/')) { fileIcon = '🎵'; }
+    else if (firstFile.mimetype.startsWith('video/')) { fileIcon = '🎬'; }
+    else if (firstFile.mimetype.includes('pdf')) { fileIcon = '📕'; }
+    else if (firstFile.mimetype.includes('word')||firstFile.mimetype.includes('document')) { fileIcon = '📝'; }
+    else if (firstFile.mimetype.includes('sheet')||firstFile.mimetype.includes('excel')) { fileIcon = '📊'; }
+    else if (firstFile.mimetype.includes('zip')||firstFile.mimetype.includes('compressed')) { fileIcon = '🗜️'; }
+    else if (firstFile.mimetype.includes('presentation')||firstFile.mimetype.includes('powerpoint')) { fileIcon = '📽️'; }
+    else if (firstFile.mimetype.includes('text')) { fileIcon = '📄'; }
+
+    // Content/Caption: If there is content in req.body.content, we encrypt and use that!
+    // If not, we fall back to req.body.caption, then to the first file's name.
+    const caption = req.body.content || req.body.caption || firstFile.originalname;
+    const { encrypted, iv } = encrypt(caption);
+
+    const reply_to_id = req.body.reply_to_id ? parseInt(req.body.reply_to_id) : null;
 
     const[r]=await db.query(
       `INSERT INTO messages
@@ -3559,8 +3599,9 @@ router.post('/:groupId/upload',auth,checkMember,upload.single('file'),async(req,
           recipient_id, secondary_recipient_id,
           recipient_ids, is_broadcast,
           message_type, encrypted_content, iv,
-          file_url, file_name, file_size, mime_type)
-       VALUES(?,?, ?,?, ?,?, ?,?,?, ?,?,?,?)`,
+          file_url, file_name, file_size, mime_type,
+          additional_files, reply_to_id)
+       VALUES(?,?, ?,?, ?,?, ?,?,?, ?,?,?,?, ?,?)`,
       [
         groupId, req.user.id,
         recipientList[0] || null,
@@ -3568,11 +3609,29 @@ router.post('/:groupId/upload',auth,checkMember,upload.single('file'),async(req,
         recipientList.length ? JSON.stringify(recipientList) : null,
         broadcast ? 1 : 0,
         msgType, encrypted, iv,
-        relPath, file.originalname, file.size, file.mimetype,
+        relPath, firstFile.originalname, firstFile.size, firstFile.mimetype,
+        JSON.stringify(additionalFiles),
+        reply_to_id
       ]
     );
 
     const[[grp]]=await db.query('SELECT group_name FROM chat_groups WHERE id=?',[groupId]).catch(()=>[[{}]]);
+
+    // Fetch reply data if applicable
+    let replyData = null;
+    if(reply_to_id) {
+      const [[replyMsg]] = await db.query(`
+        SELECT m.encrypted_content, m.iv, u.full_name as sender_name
+        FROM messages m JOIN users u ON u.id=m.sender_id
+        WHERE m.id=? AND m.is_deleted=false
+      `,[reply_to_id]);
+      if(replyMsg){
+        replyData = {
+          reply_content:     decrypt(replyMsg.encrypted_content, replyMsg.iv),
+          reply_sender_name: replyMsg.sender_name,
+        };
+      }
+    }
 
     const message={
       id:r.insertId, group_id:Number(groupId),
@@ -3581,10 +3640,17 @@ router.post('/:groupId/upload',auth,checkMember,upload.single('file'),async(req,
       message_type:msgType,
       content:caption,
       file_url:absUrl(req,relPath),
-      file_name:file.originalname, file_size:file.size, mime_type:file.mimetype,
+      file_name:firstFile.originalname, file_size:firstFile.size, mime_type:firstFile.mimetype,
       file_icon:fileIcon,
       is_broadcast:  broadcast,
       recipient_ids: recipientList,
+      additional_files: additionalFiles.map(file => ({
+        ...file,
+        file_url: absUrl(req, file.file_url)
+      })),
+      reply_to_id,
+      ...replyData,
+      is_deleted: false,
       sent_at:formatISTForMySQL(),
     };
 
@@ -3638,7 +3704,9 @@ router.patch('/:groupId/:messageId', auth, async (req, res) => {
     );
     if (!rows.length) return res.status(403).json({ error: 'Cannot edit' });
     if (rows[0].is_deleted) return res.status(400).json({ error: 'Cannot edit deleted message' });
-    if (rows[0].message_type !== 'text') return res.status(400).json({ error: 'Only text messages can be edited' });
+    if (rows[0].message_type !== 'text' && rows[0].message_type !== 'image' && rows[0].message_type !== 'file') {
+      return res.status(400).json({ error: 'This message type cannot be edited' });
+    }
 
     const { encrypted, iv } = encrypt(content.trim());
     await db.query(

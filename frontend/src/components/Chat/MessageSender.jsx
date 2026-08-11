@@ -1330,19 +1330,24 @@ const MessageSender = ({
     setLoading(true);
 
     try {
-      for (const file of selectedFiles) {
+      if (hasFiles) {
         const formData = new FormData();
-        formData.append('file', file);
+        for (const file of selectedFiles) {
+          formData.append('files', file);
+        }
         formData.append('recipient_ids', JSON.stringify(selectedIds));
         formData.append('is_broadcast', allSelected ? 'true' : 'false');
         formData.append('recipient_id', selectedIds[0]);
         formData.append('secondary_recipient_id', secondaryRecipientId || '');
-        formData.append('caption', file.name);
+        if (hasText) {
+          formData.append('content', rehydrateMentions(content.trim(), mentionsRef.current));
+        }
+        if (replyTo?.id) {
+          formData.append('reply_to_id', replyTo.id);
+        }
         const resp = await messagesAPI.uploadFile(groupId, formData);
         if (onMessageSent) onMessageSent(resp.message);
-      }
-
-      if (hasText) {
+      } else if (hasText) {
         const messageData = {
           content: rehydrateMentions(content.trim(), mentionsRef.current),
           recipient_ids: selectedIds,
