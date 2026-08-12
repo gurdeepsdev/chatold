@@ -79,6 +79,23 @@
   text-transform: capitalize;
 }
 
+/* 📦 Bubble Container (holds bubble and side action triggers) */
+.bubble-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  position: relative;
+}
+
+.message-row:not(.own) .bubble-container {
+  flex-direction: row;
+}
+
+.message-row.own .bubble-container {
+  flex-direction: row-reverse;
+}
+
 /* 💬 Message Bubbles */
 .message-bubble {
   position: relative;
@@ -279,14 +296,26 @@
 /* 😊 Emoji Picker */
 .emoji-picker-trigger {
   position: relative;
-  display: inline-block;
-  margin-top: 8px;
-  padding: 4px 8px;
-  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
   border: 1px solid var(--border-color);
-  background: transparent;
+  background: var(--bg-primary);
   cursor: pointer;
   transition: all 0.2s ease;
+  width: 32px;
+  height: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Show trigger on hover of bubble-container, or if it is forced visible (picker/menu is open) */
+.bubble-container:hover .emoji-picker-trigger,
+.emoji-picker-trigger.visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .emoji-picker-trigger:hover {
@@ -295,26 +324,15 @@
   transform: scale(1.05);
 }
 
-.emoji-picker-hint {
-  font-size: 16px;
-  opacity: 0.6;
-  transition: opacity 0.2s ease;
-}
-
-.emoji-picker-trigger:hover .emoji-picker-hint {
-  opacity: 1;
-}
-
 .message-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: bold;
   color: var(--text-muted);
   transition: background 0.15s ease, color 0.15s ease;
@@ -322,14 +340,12 @@
 }
 
 .message-actions:hover {
-  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .emoji-picker {
   position: absolute;
   bottom: 100%;
-  right: 0;  /* Changed from left: 0 to right: 0 */
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
@@ -338,10 +354,21 @@
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  max-width: 200px;
+  width: 200px;
+  box-sizing: border-box;
   z-index: 1000;
   animation: fadeIn 0.2s ease;
   margin-bottom: 8px;
+}
+
+/* Received (left-aligned) messages: align picker to left edge of trigger (extends to right) */
+.message-row:not(.own) .emoji-picker {
+  left: 0;
+}
+
+/* Own (right-aligned) messages: align picker to right edge of trigger (extends to left) */
+.message-row.own .emoji-picker {
+  right: 0;
 }
 
 .emoji-btn {
@@ -363,24 +390,84 @@
 }
 
 /* ⚙️ Message Options */
+/* ⚙️ Message Options - horizontal bar below message */
 .message-options {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 6px);
   right: 0;
+
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 8px;
-  margin-top: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  padding: 4px 6px;
+
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   z-index: 1000;
-  min-width: 120px;
+
+  min-width: max-content;
+  white-space: nowrap;
+
   animation: dropIn 0.2s ease;
 }
 
+/* Received messages → menu starts from left */
 .message-row:not(.own) .message-options {
-  right: auto;
   left: 0;
+  right: auto;
+}
+
+/* Own messages → menu stays aligned to right */
+.message-row.own .message-options {
+  right: 0;
+  left: auto;
+}
+
+/* Individual menu buttons */
+.option-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  width: auto;
+  padding: 7px 10px;
+
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+
+  border-radius: 7px;
+  cursor: pointer;
+
+  font-size: 13px;
+  transition: background 0.15s ease, color 0.15s ease;
+
+  white-space: nowrap;
+}
+
+.option-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.option-btn.delete-btn:hover {
+  background: var(--error);
+  color: white;
+}
+
+.option-icon {
+  font-size: 14px;
+  width: auto;
+  text-align: center;
+}
+
+.option-text {
+  font-weight: 500;
+  flex: none;
 }
 
 .option-btn {
