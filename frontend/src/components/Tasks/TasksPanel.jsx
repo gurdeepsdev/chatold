@@ -373,7 +373,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
       case 'pause_pid':
         if (['pub_executive', 'publisher', 'publisher_manager'].includes(user?.role)) {
           return members.filter(member =>
-            (member.role === 'optimization' || member.role === 'operations' || member.role === 'operation_manager') &&
+            (member.role === 'optimization' || member.role === 'operations' || member.role === 'operation_manager' || member.role === 'advertiser' || member.role === 'advertiser_manager' || member.role === 'adv_executive') &&
             member.id !== user?.id
           );
         }

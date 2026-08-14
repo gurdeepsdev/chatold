@@ -485,7 +485,13 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                     </button>
                     {openAssigneeKey===`pp-${index}`&&(
                       <div onMouseDown={e=>e.stopPropagation()} style={{position:'fixed',top:dropdownPos.top,left:dropdownPos.left,minWidth:Math.max(dropdownPos.width,160),zIndex:9999,background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:6,padding:4,maxHeight:180,overflowY:'auto',boxShadow:'0 4px 16px rgba(0,0,0,0.15)'}}>
-                        {users.filter(u=>['publisher','publisher_manager','pub_executive','optimization','operations','operation_manager'].includes(u.role)).map(u=>(
+                        {users.filter(u => {
+                          const isPublisherCreator = ['pub_executive', 'publisher', 'publisher_manager'].includes(user?.role);
+                          const allowedRoles = isPublisherCreator 
+                            ? ['optimization', 'operations', 'operation_manager', 'advertiser', 'advertiser_manager', 'adv_executive']
+                            : ['publisher', 'publisher_manager', 'pub_executive', 'optimization', 'operations', 'operation_manager'];
+                          return allowedRoles.includes(u.role);
+                        }).map(u=>(
                           <label key={u.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 6px',cursor:'pointer',borderRadius:4,fontSize:11,color:'var(--text-primary)'}}>
                             <input type="checkbox" checked={(entry.assigned_to||[]).includes(Number(u.id))}
                               onChange={()=>updatePauseEntry(index,'assigned_to',toggleAssignee(entry.assigned_to||[],u.id))}/>
