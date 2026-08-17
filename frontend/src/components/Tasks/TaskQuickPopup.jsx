@@ -9,7 +9,8 @@ const TASK_TYPES = {
   raise_request: { label: 'Raise Request', icon: '📋', color: '#22c55e' },
   optimise:      { label: 'Optimise',      icon: '⚡', color: '#06b6d4' },
 };
-const PAUSE_SCENARIOS = ['Low Quality Traffic','Fraud Detected','Budget Exhausted','Geo Mismatch','KPI Not Met','Technical Issue','Advertiser Request','Other',, 'Not Live'];
+const PAUSE_SCENARIOS = ['Low Quality Traffic','Fraud Detected','Budget Exhausted','Geo Mismatch','KPI Not Met','Technical Issue','Advertiser Request','Other', 'Not Live', 'Not Doable',
+  'Not Converting', 'Link Not Correct', 'Link Not Working', 'Link Not as Requested', 'Need RT Budget','Need UA Budget'];
 const OPTIMISE_SCENARIOS = ['Increase Budget','Decrease Budget','Expand GEO','Restrict GEO','Update KPI Target','Change Payout','Pause Sub-publisher','Whitelist Publisher','Blacklist Publisher','Other'];
 const REQUEST_TYPES = ['geo','payout','link','budget'];
 
