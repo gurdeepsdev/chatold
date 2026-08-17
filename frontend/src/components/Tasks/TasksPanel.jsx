@@ -20,7 +20,8 @@ export const TASK_TYPES={
 
 export const PAUSE_SCENARIOS=[
   'Low Quality Traffic','Fraud Detected','Budget Exhausted',
-  'Geo Mismatch','KPI Not Met','Technical Issue','Advertiser Request','Other', 'Not Live'
+  'Geo Mismatch','KPI Not Met','Technical Issue','Advertiser Request','Other', 'Not Live', 'Not Doable',
+  'Not Converting', 'Link Not Correct', 'Link Not Working', 'Link Not as Requested', 'Need RT Budget','Need UA Budget'
 ];
 
 export const REQUEST_TYPES=['geo','budget','creative','technical','other'];
@@ -373,7 +374,7 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
       case 'pause_pid':
         if (['pub_executive', 'publisher', 'publisher_manager'].includes(user?.role)) {
           return members.filter(member =>
-            (member.role === 'optimization' || member.role === 'operations' || member.role === 'operation_manager') &&
+            (member.role === 'optimization' || member.role === 'operations' || member.role === 'operation_manager' || member.role === 'advertiser' || member.role === 'advertiser_manager' || member.role === 'adv_executive') &&
             member.id !== user?.id
           );
         }

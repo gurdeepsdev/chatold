@@ -6,7 +6,8 @@ import toast from 'react-hot-toast';
 
 const PAUSE_SCENARIOS = [
   'Low Quality Traffic', 'Fraud Detected', 'Budget Exhausted',
-  'Geo Mismatch', 'KPI Not Met', 'Technical Issue', 'Advertiser Request', 'Other', 'Not Live'
+  'Geo Mismatch', 'KPI Not Met', 'Technical Issue', 'Advertiser Request', 'Other', 'Not Live', 'Not Doable',
+  'Not Converting', 'Link Not Correct', 'Link Not Working', 'Link Not as Requested', 'Need RT Budget','Need UA Budget'
 ];
 
 export default function PreviewPanel({ group, searchQuery='' }) {

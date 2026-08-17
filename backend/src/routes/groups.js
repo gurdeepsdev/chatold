@@ -1134,32 +1134,50 @@ for (const row of crmCampaigns) {
 for (const groupKey in groupedByOS) {
 
   const groupData = groupedByOS[groupKey];
-  const baseRow = groupData.base;
   const platform = groupData.platform;
   const adv_d = groupData.adv_d;
 
   const geo = Array.from(groupData.geos).filter(Boolean).join(',');
   const payouts = Array.from(groupData.payouts).filter(Boolean).join(',');
 
-  let groupName = `${baseRow.campaign_name}_${adv_name}_${platform}_${adv_d}`;
+  const uniqueCampaignNames = [...new Set(groupData.rows.map(r => r.campaign_name).filter(Boolean))];
 
-        const [existing] = await conn.query(
-          'SELECT id FROM chat_groups WHERE group_name = ?',
-          [groupName]
-        );
+  for (const campaignName of uniqueCampaignNames) {
+    const baseRow = groupData.rows.find(r => r.campaign_name === campaignName) || groupData.base;
+    let groupName = `${campaignName}_${adv_name}_${platform}_${adv_d}`;
 
-        if (existing.length) {
-          groupName = `${baseRow.campaign_name}_${adv_name}_${baseRow.id}_${platform}_${adv_d}`;
+    const [alreadyCreated] = await conn.query(
+      'SELECT id FROM chat_groups WHERE sub_id = ? AND platform = ? AND adv_name = ? AND (group_name = ? OR group_name = ?)',
+      [
+        baseRow.sub_campaign_id,
+        platform,
+        adv_name,
+        groupName,
+        `${campaignName}_${adv_name}_${baseRow.id}_${platform}_${adv_d}`
+      ]
+    );
 
-          const [existing2] = await conn.query(
-            'SELECT id FROM chat_groups WHERE group_name = ?',
-            [groupName]
-          );
+    if (alreadyCreated.length) {
+      continue; // Skip creating this group again
+    }
 
-          if (existing2.length) {
-            continue; 
-          }
-        }
+    const [existing] = await conn.query(
+      'SELECT id FROM chat_groups WHERE group_name = ?',
+      [groupName]
+    );
+
+    if (existing.length) {
+      groupName = `${campaignName}_${adv_name}_${baseRow.id}_${platform}_${adv_d}`;
+
+      const [existing2] = await conn.query(
+        'SELECT id FROM chat_groups WHERE group_name = ?',
+        [groupName]
+      );
+
+      if (existing2.length) {
+        continue; 
+      }
+    }
 
         // Prepare CRM campaign data JSON with extracted package_id
         // const crmCampaignData = {
@@ -1361,10 +1379,8 @@ console.log("DEFAULT USERS:", defaultUsers);
 campaign_name: baseRow.campaign_name,
 campaign_subid: baseRow.sub_campaign_id
         });
-        
-      
-        // closes advdData loop
-      }// closes platform loop
+      }
+    }
 
     await conn.commit();
 
