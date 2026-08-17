@@ -439,11 +439,11 @@ router.get('/shared-pids/group/:groupId', auth, async (req, res) => {
   }
 });
 
-// ── Last 30 days of pause history for a PID, grouped campaign-wise ──────────
+// ── Last 60 days of pause history for a PID, grouped campaign-wise ──────────
 // No auth — consumed by an external system that can't do JWT login.
 router.get('/pause-history/:pid', async (req, res) => {
   const { pid } = req.params;
-  const days = Number(req.query.days) > 0 ? Number(req.query.days) : 30;
+  const days = Number(req.query.days) > 0 ? Number(req.query.days) : 60;
 
   if (!pid) {
     return res.status(400).json({ error: 'pid is required' });
