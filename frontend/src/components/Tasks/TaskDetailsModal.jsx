@@ -274,7 +274,7 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                       )}
 
                       {task.task_type === 'pause_pid' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
                           <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PubID</div>
                             <div style={{ color: 'var(--text-primary)' }}>{subTask.pub_id || '-'}</div>
@@ -290,6 +290,10 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                           <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Reason</div>
                             <div style={{ color: 'var(--text-primary)' }}>{subTask.pause_reason || '-'}</div>
+                          </div>
+                          <div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Tag</div>
+                            <div style={{ color: 'var(--text-primary)' }}>{subTask.tagged_name || subTask.tag || '-'}</div>
                           </div>
                           {subTask.note && (
                             <div style={{ gridColumn: '1 / -1' }}>
@@ -459,7 +463,7 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                   )}
 
                   {task.task_type === 'pause_pid' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '8px', fontSize: '12px' }}>
                       <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>PubID</div>
                         <div style={{ color: 'var(--text-primary)' }}>{task.pub_id || '-'}</div>
@@ -475,6 +479,10 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
                       <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Reason</div>
                         <div style={{ color: 'var(--text-primary)' }}>{task.pause_reason || '-'}</div>
+                      </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Tag</div>
+                        <div style={{ color: 'var(--text-primary)' }}>{task.tagged_name || task.tag || '-'}</div>
                       </div>
                       {task.note && (
                         <div style={{ gridColumn: '1 / -1' }}>

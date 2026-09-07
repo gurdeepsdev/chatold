@@ -67,7 +67,7 @@ const isDirtyForm = (form) => {
   if (form.description?.trim()) return true;
   if (form.request_details?.trim()) return true;
   if ((form.entries || []).some(e => e.pub_id || e.pid || e.link || e.assigned_to?.length)) return true;
-  if ((form.pause_entries || []).some(e => e.pub_id || e.pid || e.pause_reason || e.assigned_to?.length)) return true;
+  if ((form.pause_entries || []).some(e => e.pub_id || e.pid || e.pause_reason || e.tag || e.assigned_to?.length)) return true;
   if ((form.optimise_entries || []).some(e => e.pub_id || e.pid || e.fp || e.fa || e.optimise_scenario || e.assigned_to?.length)) return true;
   return false;
 };
@@ -82,7 +82,7 @@ const emptyForm=(userRole, type=null)=>{
   return({
     task_type:type, description:'',
     entries: [{ pub_id:'', pid:'', link:'', assigned_to:[], note:'' , geo:''}],
-    pause_entries: [{ pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'', note:'' }],
+    pause_entries: [{ pub_id:'', pid:'', assigned_to:[], tag:'', pause_reason:'', geo:'', note:'' }],
     optimise_entries: [{
       assigned_to:[], pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:''
     }],  pause_reason:'', request_type:'geo', request_details:'', cap_management:'',
@@ -464,9 +464,10 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
     const newEntry = lastEntry
       ? {
           ...lastEntry,
-          pause_reason: '' // reset only this (optional)
+          pause_reason: '',
+          tag: ''
         }
-      : { pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'', note:'' };
+      : { pub_id:'', pid:'', assigned_to:[], tag:'', pause_reason:'', geo:'', note:'' };
 
     return {
       ...p,
@@ -1157,10 +1158,10 @@ setTasks(prev => {
     // Validate pause_pid entries
     if (form.task_type === 'pause_pid') {
       const validPauseEntries = form.pause_entries.filter(entry => 
-        entry.pub_id.trim() || entry.pid.trim() || entry.pause_reason.trim()
+        entry.pub_id.trim() || entry.pid.trim() || entry.pause_reason.trim() || (entry.tag && String(entry.tag).trim())
       );
       if (validPauseEntries.length === 0) {
-        return toast.error('Please fill in at least one entry (PubID, PID, or Pause Reason)');
+        return toast.error('Please fill in at least one entry (PubID, PID, Pause Reason, or Tag)');
       }
        // 🔥 NEW VALIDATION (IMPORTANT)
 const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to || entry.assigned_to.length === 0);
@@ -1669,8 +1670,9 @@ onClick={(e) => openEditor(entry, index, e)}/>
               {/* Unified scroll: header + entries scroll together */}
               <div style={{overflowX:'auto',overflowY:'auto',maxHeight:220,WebkitOverflowScrolling:'touch'}}>
               {/* Table Header — sticky */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:4,fontSize:10,fontWeight:600,minWidth:520,position:'sticky',top:0,background:'rgba(245,158,11,0.18)',zIndex:1,padding:'4px 2px',borderRadius:4}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:4,fontSize:10,fontWeight:600,minWidth:600,position:'sticky',top:0,background:'rgba(245,158,11,0.18)',zIndex:1,padding:'4px 2px',borderRadius:4}}>
                 <div>Assign To</div>
+                <div>Tag</div>
                 <div>PubID</div>
                 <div>PID</div>
                 <div>GEO</div>
@@ -1680,7 +1682,7 @@ onClick={(e) => openEditor(entry, index, e)}/>
               </div>
 
                 {form.pause_entries.map((entry, index) => (
-                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,minWidth:520}}>
+                  <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,minWidth:600}}>
                     {/* <select 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
@@ -1711,6 +1713,17 @@ onClick={(e) => openEditor(entry, index, e)}/>
                         </div>
                       )}
                     </div>
+                    <select
+                      className="form-control"
+                      style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}}
+                      value={entry.tag || ''}
+                      onChange={e => updatePauseEntry(index, 'tag', e.target.value)}
+                    >
+                      <option value="">Select Tag…</option>
+                      {members.filter(m => ['publisher', 'publisher_manager', 'pub_executive'].includes(m.role)).map(member => (
+                        <option key={member.id} value={member.id}>{member.full_name}</option>
+                      ))}
+                    </select>
                     <input 
                       className="form-control" 
                       style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)'}} 
