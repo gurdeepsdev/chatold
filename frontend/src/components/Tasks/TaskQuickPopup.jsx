@@ -17,7 +17,7 @@ const REQUEST_TYPES = ['geo','payout','link','budget'];
 const empty = (type='share_link') => ({
   task_type:type, description:'', assigned_to:'',
   entries: [{ pub_id:'', pid:'', link:'', assigned_to:[], note:'', geo:'' }],
-  pause_entries: [{ pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'', note:'' }],
+  pause_entries: [{ pub_id:'', pid:'', assigned_to:[], tag:'', pause_reason:'', geo:'', note:'' }],
   optimise_entries: [{ assigned_to:[], pub_id:'', pid:'', fp:'', fa:'', f1:'', f2:'', optimise_scenario:'', attachment:null, note:'' }],
   pause_reason:'', request_type:'geo', request_details:'', cap_management:'',
   f1:'', f2:'', f3:'', f4:'', optimise_scenario:'', attachment:null,
@@ -106,7 +106,7 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
   const addPauseEntry = () => {
     setForm(p => ({
       ...p,
-      pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:[], pause_reason:'', geo:'', note:'' }]
+      pause_entries: [...p.pause_entries, { pub_id:'', pid:'', assigned_to:[], tag:'', pause_reason:'', geo:'', note:'' }]
     }));
   };
 
@@ -190,10 +190,10 @@ export default function TaskQuickPopup({ group, onClose, initialType }) {
     // For pause_pid, validate pause entries
     if (form.task_type === 'pause_pid') {
       const validPauseEntries = form.pause_entries.filter(entry => 
-        entry.pub_id.trim() || entry.pid.trim() || entry.pause_reason.trim()
+        entry.pub_id.trim() || entry.pid.trim() || entry.pause_reason.trim() || (entry.tag && String(entry.tag).trim())
       );
       if (validPauseEntries.length === 0) {
-        return toast.error('Please fill in at least one entry (PubID, PID, or Pause Reason)');
+        return toast.error('Please fill in at least one entry (PubID, PID, Pause Reason, or Tag)');
       }
             // 🔥 NEW VALIDATION (IMPORTANT)
 const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
@@ -464,8 +464,9 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             <div style={{fontSize:10,color:'rgba(255,255,255,0.9)',fontWeight:600,marginBottom:6}}>⏸️ Pause Details</div>
             
             {/* Table Header */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6,fontSize:10,color:'rgba(255,255,255,0.7)',fontWeight:500}}>
               <div>Assign To</div>
+              <div>Tag</div>
               <div>PubID</div>
               <div>PID</div>
               <div>GEO</div>
@@ -477,7 +478,7 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
             {/* Table Entries */}
             <div style={{maxHeight:'200px',overflowY:'auto'}}>
               {form.pause_entries.map((entry, index) => (
-                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
+                <div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr 1fr auto',gap:4,marginBottom:6}}>
                   <div style={{position:'relative'}}>
                     <button type="button"
                       onClick={e=>openAssignee(e,`pp-${index}`)}
@@ -502,6 +503,17 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to);
                       </div>
                     )}
                   </div>
+                  <select
+                    className="form-control"
+                    style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}
+                    value={entry.tag || ''}
+                    onChange={e => updatePauseEntry(index, 'tag', e.target.value)}
+                  >
+                    <option value="">Select Tag…</option>
+                    {users.filter(u => ['publisher', 'publisher_manager', 'pub_executive'].includes(u.role)).map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name}</option>
+                    ))}
+                  </select>
                   <input 
                     className="form-control" 
                     style={{fontSize:11,padding:4,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}} 

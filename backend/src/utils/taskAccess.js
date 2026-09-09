@@ -329,6 +329,9 @@ where += `
     params.push(userId);
   }
 }
+  where = `(${where}) OR (t.task_type = 'pause_pid' AND (t.tag = ? OR CAST(t.tag AS UNSIGNED) = ?))`;
+  params.push(String(userId), userId);
+
   return {
     where,
     params

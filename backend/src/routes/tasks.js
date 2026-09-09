@@ -429,7 +429,7 @@ if (task_type === 'pause_pid') {
   let subTaskIds = [];
 
   for (const entry of parsedPauseEntries) {
-    if (entry.pub_id || entry.pid || entry.pause_reason) {
+    if (entry.pub_id || entry.pid || entry.pause_reason || entry.tag) {
       for (const assigneeId of toAssigneeList(entry.assigned_to)) {
         const [subR] = await db.query(
           `INSERT INTO tasks (
@@ -445,9 +445,10 @@ if (task_type === 'pause_pid') {
             pause_reason,
             note,
             attachment_url,
-            attachment_name
+            attachment_name,
+            tag
           )
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             group_id,
             campaign_id || null,
@@ -461,7 +462,8 @@ if (task_type === 'pause_pid') {
             entry.pause_reason || null,
             entry.note || null,
             attachment_url,
-            attachment_name
+            attachment_name,
+            entry.tag || null
           ]
         );
         subTaskIds.push(subR.insertId);
@@ -497,22 +499,9 @@ if (assignees.length > 0) {
 
   // Post task-notification message in chat
   const taskLabel = '⏸️ Pause PID';
-  const entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason).length;
+  const entryCount = parsedPauseEntries.filter(e => e.pub_id || e.pid || e.pause_reason || e.tag).length;
   const chatContent = `📌 Task created: [${taskLabel}]${entryCount > 1 ? ` (${entryCount} entries)` : ''}\n👤 Created by: ${req.user.full_name}${assigneeText}`;
   const {encrypted, iv} = encrypt(chatContent);
-
-  // const [mRes] = await db.query(
-  //   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id)
-  //    VALUES(?,?,'task_notification',?,?,?)`,
-  //   [group_id, req.user.id, encrypted, iv, taskId]
-  // );
-
-  // REPLACE with (for multi-assignee blocks: share_link, pause_pid, optimise):
-// const taskAssigneeIds = [...new Set(
-//   parsedPauseEntries  // use parsedPauseEntries or parsedOptimiseEntries for those blocks
-//     .filter(e => e.assigned_to && e.assigned_to !== 'null')
-//     .map(e => Number(e.assigned_to))
-// )];
 
 const taskAssigneeIds = [...new Set(
   parsedPauseEntries
@@ -521,21 +510,25 @@ const taskAssigneeIds = [...new Set(
     .filter(id => id !== null)
 )];
 
+const taggedUserIds = [...new Set(
+  parsedPauseEntries
+    .map(e => e.tag)
+    .filter(Boolean)
+    .map(id => Number(id))
+    .filter(id => !isNaN(id))
+)];
+
+const allNotifiedUserIds = [...new Set([...taskAssigneeIds, ...taggedUserIds])];
+
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
 
 const [mRes] = await db.query(
   `INSERT INTO messages
    (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids)
    VALUES(?,?,'task_notification',?,?,?,?)`,
-  [group_id, req.user.id, encrypted, iv, taskRefId, taskAssigneeIds.length > 0 ? JSON.stringify(taskAssigneeIds) : null]
+  [group_id, req.user.id, encrypted, iv, taskRefId, allNotifiedUserIds.length > 0 ? JSON.stringify(allNotifiedUserIds) : null]
 );
 const messageIds = [{ messageId: mRes.insertId }];
-
-// const [mRes] = await db.query(
-//   `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-//    VALUES(?,?,'task_notification',?,?,?,?)`,
-//   [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
-// );
 
   await db.query(
     'INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
@@ -544,26 +537,6 @@ const messageIds = [{ messageId: mRes.insertId }];
 
   // Emit real-time message to group
   const io = req.app.get('io');
-
-//   allAssignees.forEach(assigneeId => {
-//   io.to(`user_${assigneeId}`).emit('new_message', {
-//     id: mRes.insertId,
-//     group_id: Number(group_id),
-//     sender_id: req.user.id,
-//     sender_name: req.user.full_name,
-//     sender_role: req.user.role,
-//     message_type: 'task_notification',
-//     content: chatContent,
-//     recipient_id: Number(assigneeId), // ✅ IMPORTANT
-//     sent_at: formatISTForMySQL(),
-//   });
-// });
-// Replace the broken allAssignees.forEach at bottom of pause_pid block with:
-// const allAssigneesPause = [...new Set(parsedPauseEntries
-//   .filter(e => e.assigned_to && e.assigned_to !== 'null')
-//   .map(e => Number(e.assigned_to))
-// )];
-// const io = req.app.get('io');
 
 const firstMessageId = messageIds[0]?.messageId;
 
@@ -586,7 +559,7 @@ if (io && firstMessageId) {
     is_task: true
   });
 
-  // ✅ USER EVENTS
+  // ✅ USER EVENTS FOR ASSIGNEES
   taskAssigneeIds.forEach(assigneeId => {
     io.to(`user_${assigneeId}`).emit('task_assigned', {
       group_id: Number(group_id),
@@ -594,6 +567,32 @@ if (io && firstMessageId) {
       recipient_id: assigneeId
     });
   });
+}
+
+// ✅ NOTIFY TAGGED USERS
+for (const taggedId of taggedUserIds) {
+  await db.query(
+    'INSERT INTO notifications (user_id,group_id,task_id,type,title,body) VALUES(?,?,?,?,?,?)',
+    [taggedId, group_id, taskRefId, 'task', '⏸️ Tagged in Pause PID Task', `You were tagged by ${req.user.full_name} in a Pause PID task.`]
+  ).catch(err => console.error('Failed to insert tag notification:', err.message));
+
+  if (io) {
+    io.to(`user_${taggedId}`).emit('task_assigned', {
+      group_id: Number(group_id),
+      assigned_to: taggedId,
+      recipient_id: taggedId
+    });
+    io.to(`user_${taggedId}`).emit('push_notification', {
+      title: '⏸️ Tagged in Pause PID Task',
+      body: `You were tagged by ${req.user.full_name} in a Pause PID task.`,
+      group_id: Number(group_id)
+    });
+    db.query('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=FALSE', [taggedId])
+      .then(([[{ count }]]) => {
+        io.to(`user_${taggedId}`).emit('notification_count', { count });
+      })
+      .catch(() => {});
+  }
 }
 
 // if (io) {
@@ -1149,11 +1148,13 @@ router.get('/:taskId', auth, async (req, res) => {
       SELECT t.*, 
         u1.full_name AS assigned_to_name,
         u2.full_name AS assigned_by_name,
+        u3.full_name AS tagged_name,
         c.campaign_name,
         parent.task_type AS parent_task_type
       FROM tasks t
       LEFT JOIN users u1 ON u1.id = t.assigned_to
       LEFT JOIN users u2 ON u2.id = t.assigned_by
+      LEFT JOIN users u3 ON u3.id = CAST(t.tag AS UNSIGNED)
       LEFT JOIN campaigns c ON c.id = t.campaign_id
       LEFT JOIN tasks parent ON parent.id = t.parent_task_id
       WHERE t.id = ?
@@ -1163,19 +1164,20 @@ router.get('/:taskId', auth, async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    // Strict permission check: only assigned user or task creator can view details
-    if (task.assigned_to !== req.user.id && task.assigned_by !== req.user.id) {
-      return res.status(403).json({ error: 'Access Denied: Only assigned user can view task details' });
+    // Permission check: assigned user, task creator, or tagged user can view details
+    if (task.assigned_to !== req.user.id && task.assigned_by !== req.user.id && Number(task.tag) !== req.user.id) {
+      return res.status(403).json({ error: 'Access Denied: Only assigned or tagged user can view task details' });
     }
 
     // Get sub-tasks if any
     let subTasks = [];
     if (task.parent_task_id === null) {
       const [subRows] = await db.query(`
-        SELECT t.*, u1.full_name AS assigned_to_name, u2.full_name AS assigned_by_name
+        SELECT t.*, u1.full_name AS assigned_to_name, u2.full_name AS assigned_by_name, u3.full_name AS tagged_name
         FROM tasks t 
         LEFT JOIN users u1 ON u1.id = t.assigned_to 
         LEFT JOIN users u2 ON u2.id = t.assigned_by
+        LEFT JOIN users u3 ON u3.id = CAST(t.tag AS UNSIGNED)
         WHERE t.parent_task_id = ?
       `, [req.params.taskId]);
       subTasks = subRows;

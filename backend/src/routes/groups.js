@@ -1308,9 +1308,9 @@ console.log("DEFAULT USERS:", defaultUsers);
           console.log('No additional_members to process');
         }
 
-        // Auto-add creator's hierarchy for advertiser roles
+        // Auto-add creator's hierarchy for advertiser/publisher roles
         let creatorHierarchy = [];
-        if (req.user.role === 'advertiser' || req.user.role === 'adv_executive') {
+        if (['advertiser_manager', 'advertiser', 'adv_executive'].includes(req.user.role)) {
 
           // Get creator's user object from CRM database
           const [creatorUser] = await crmPool.query(

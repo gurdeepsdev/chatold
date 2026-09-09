@@ -152,18 +152,18 @@ export default function ChatView({group, onBack}){
 
         {/* content */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          {activeTab==='chat'&&<ChatMessages group={group} onTaskClick={handleTaskClick} searchQuery={searchQuery}/>}
-          {activeTab==='tasks'&&<TasksPanel group={group} taskTarget={taskTarget} searchQuery={searchQuery}/>}
-          {activeTab==='preview'&&<PreviewPanel group={group} searchQuery={searchQuery}/>}
-          {activeTab==='followups'&&<FollowUpsPanel group={group}/>}
-          {activeTab==='summary'&&<SummaryPanel group={group}/>}
+          {activeTab==='chat'&&<ChatMessages key={group.id} group={group} onTaskClick={handleTaskClick} searchQuery={searchQuery}/>}
+          {activeTab==='tasks'&&<TasksPanel key={group.id} group={group} taskTarget={taskTarget} searchQuery={searchQuery}/>}
+          {activeTab==='preview'&&<PreviewPanel key={group.id} group={group} searchQuery={searchQuery}/>}
+          {activeTab==='followups'&&<FollowUpsPanel key={group.id} group={group}/>}
+          {activeTab==='summary'&&<SummaryPanel key={group.id} group={group}/>}
         </div>
       </div>
 
       {rightPanel==='cd'&&!isMobile&&(
         <div className="right-panel">
           <div className="panel-header">{group.group_type==='campaign'?'Campaign Details':'Group Details'}</div>
-          <div className="panel-content"><CampaignDetails group={group}/></div>
+          <div className="panel-content"><CampaignDetails key={group.id} group={group}/></div>
         </div>
       )}
 
@@ -192,7 +192,7 @@ export default function ChatView({group, onBack}){
               </button>
             </div>
             <div style={{overflowY:'auto',flex:1}}>
-              <CampaignDetails group={group}/>
+              <CampaignDetails key={group.id} group={group}/>
             </div>
           </div>
         </>
