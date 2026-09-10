@@ -55,11 +55,15 @@ const auth = async (req, res, next) => {
     // take twice as long. The pool's own reconnect logic handles transient errors
     // correctly without help from application code.
     const [rows] = await db.query(
-      'SELECT id, username, full_name, email, role FROM users WHERE id = ?',
+      'SELECT id, username, full_name, email, role, is_active FROM users WHERE id = ?',
       [decoded.userId]
     );
 
     if (!rows.length) return res.status(401).json({ error: 'User not found' });
+
+    if (!rows[0].is_active) {
+      return res.status(403).json({ error: 'Account is deactivated. Please contact admin.' });
+    }
 
     req.user = rows[0];
     next();

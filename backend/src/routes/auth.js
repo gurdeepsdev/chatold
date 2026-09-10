@@ -25,6 +25,11 @@ router.post('/login', async (req, res) => {
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
 
+    if (!user.is_active) {
+      console.warn(`[auth] login denied for deactivated account: user_id=${user.id}`);
+      return res.status(403).json({ error: 'Account is deactivated. Please contact admin.' });
+    }
+
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       process.env.JWT_SECRET || 'secret',
