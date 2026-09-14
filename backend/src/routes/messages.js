@@ -3417,6 +3417,7 @@ router.post('/:groupId',auth,checkMember,async(req,res)=>{
     const prefix      = buildMentionPrefix(broadcast, recipientNames);
     const fullContent = `${prefix}${content.trim()}`;
     const {encrypted, iv} = encrypt(fullContent);
+    const sentAt = formatISTForMySQL();
 
     // ── Insert ONE message row ─────────────────────────────────
     const [r] = await db.query(
@@ -3424,8 +3425,8 @@ router.post('/:groupId',auth,checkMember,async(req,res)=>{
          (group_id, sender_id,
           recipient_id, secondary_recipient_id,
           recipient_ids, is_broadcast,
-          message_type, encrypted_content, iv, reply_to_id)
-       VALUES (?,?, ?,?, ?,?, ?,?,?,?)`,
+          message_type, encrypted_content, iv, reply_to_id, sent_at)
+       VALUES (?,?, ?,?, ?,?, ?,?,?,?,?)`,
       [
         groupId,      req.user.id,
         recipientList[0],                              // legacy column — first recipient
@@ -3435,6 +3436,7 @@ router.post('/:groupId',auth,checkMember,async(req,res)=>{
         message_type,
         encrypted, iv,
         reply_to_id || null,
+        sentAt,
       ]
     );
 
@@ -3477,7 +3479,7 @@ router.post('/:groupId',auth,checkMember,async(req,res)=>{
       reply_to_id: reply_to_id || null,
       ...replyData,
       is_deleted: false,
-      sent_at:    formatISTForMySQL(),
+      sent_at:    sentAt,
     };
 
     // ── Emit ONE socket event to the whole group room ──────────
@@ -3592,6 +3594,7 @@ router.post('/:groupId/upload',auth,checkMember,upload.any(),async(req,res)=>{
     const { encrypted, iv } = encrypt(caption);
 
     const reply_to_id = req.body.reply_to_id ? parseInt(req.body.reply_to_id) : null;
+    const sentAt = formatISTForMySQL();
 
     const[r]=await db.query(
       `INSERT INTO messages
@@ -3600,8 +3603,8 @@ router.post('/:groupId/upload',auth,checkMember,upload.any(),async(req,res)=>{
           recipient_ids, is_broadcast,
           message_type, encrypted_content, iv,
           file_url, file_name, file_size, mime_type,
-          additional_files, reply_to_id)
-       VALUES(?,?, ?,?, ?,?, ?,?,?, ?,?,?,?, ?,?)`,
+          additional_files, reply_to_id, sent_at)
+       VALUES(?,?, ?,?, ?,?, ?,?,?, ?,?,?,?, ?,?,?)`,
       [
         groupId, req.user.id,
         recipientList[0] || null,
@@ -3611,7 +3614,7 @@ router.post('/:groupId/upload',auth,checkMember,upload.any(),async(req,res)=>{
         msgType, encrypted, iv,
         relPath, firstFile.originalname, firstFile.size, firstFile.mimetype,
         JSON.stringify(additionalFiles),
-        reply_to_id
+        reply_to_id, sentAt
       ]
     );
 
@@ -3651,7 +3654,7 @@ router.post('/:groupId/upload',auth,checkMember,upload.any(),async(req,res)=>{
       reply_to_id,
       ...replyData,
       is_deleted: false,
-      sent_at:formatISTForMySQL(),
+      sent_at: sentAt,
     };
 
     const io=req.app.get('io');

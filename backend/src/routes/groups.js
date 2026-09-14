@@ -890,13 +890,13 @@ router.get('/', auth, async (req, res) => {
          AND (m.recipient_id = ? OR m.secondary_recipient_id = ?)) as message_count,
         (SELECT COUNT(*) FROM tasks t WHERE t.group_id = g.id AND t.status = 'pending') as pending_tasks,
         (SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id = g.id) as member_count,
-        (SELECT m2.sent_at FROM messages m2 WHERE m2.group_id = g.id ORDER BY m2.sent_at DESC LIMIT 1) as last_message_at
+        (SELECT m2.sent_at FROM messages m2 WHERE m2.group_id = g.id AND m2.is_deleted = FALSE ORDER BY m2.sent_at DESC LIMIT 1) as last_message_at
       FROM chat_groups g
       INNER JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ?
       LEFT JOIN campaigns c ON c.id = g.campaign_id
       LEFT JOIN users u ON u.id = g.created_by
       WHERE g.is_archived = FALSE AND (g.group_type = 'custom' OR (c.status IS NULL OR c.status = 'Live'))
-      ORDER BY g.created_at DESC, last_message_at DESC
+      ORDER BY last_message_at DESC, g.created_at DESC
     `, [req.user.id, req.user.id, req.user.id]);
       // ORDER BY last_message_at DESC, g.created_at DESC
 

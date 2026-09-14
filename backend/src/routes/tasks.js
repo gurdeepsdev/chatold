@@ -331,12 +331,13 @@ const taskAssigneeIds = [...new Set(
 )];
 
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
+const sentAt = formatISTForMySQL();
 
 const [mRes] = await db.query(
   `INSERT INTO messages
-   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids)
-   VALUES(?,?,'task_notification',?,?,?,?)`,
-  [group_id, req.user.id, encrypted, iv, taskRefId, taskAssigneeIds.length > 0 ? JSON.stringify(taskAssigneeIds) : null]
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids,sent_at)
+   VALUES(?,?,'task_notification',?,?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskRefId, taskAssigneeIds.length > 0 ? JSON.stringify(taskAssigneeIds) : null, sentAt]
 );
 const messageIds = [{ messageId: mRes.insertId }];
 
@@ -403,7 +404,7 @@ if (io && firstMessageId) {
       task_type: 'share_link',
       task_title: taskLabel
     },
-    sent_at: formatISTForMySQL(),
+    sent_at: sentAt,
     is_task: true
   });
 
@@ -521,12 +522,13 @@ const taggedUserIds = [...new Set(
 const allNotifiedUserIds = [...new Set([...taskAssigneeIds, ...taggedUserIds])];
 
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
+const sentAt = formatISTForMySQL();
 
 const [mRes] = await db.query(
   `INSERT INTO messages
-   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids)
-   VALUES(?,?,'task_notification',?,?,?,?)`,
-  [group_id, req.user.id, encrypted, iv, taskRefId, allNotifiedUserIds.length > 0 ? JSON.stringify(allNotifiedUserIds) : null]
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids,sent_at)
+   VALUES(?,?,'task_notification',?,?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskRefId, allNotifiedUserIds.length > 0 ? JSON.stringify(allNotifiedUserIds) : null, sentAt]
 );
 const messageIds = [{ messageId: mRes.insertId }];
 
@@ -555,7 +557,7 @@ if (io && firstMessageId) {
       task_type: 'pause_pid',
       task_title: taskLabel
     },
-    sent_at: formatISTForMySQL(),
+    sent_at: sentAt,
     is_task: true
   });
 
@@ -822,12 +824,13 @@ const taskAssigneeIds = [...new Set(
 )];
 
 const taskRefId = subTaskIds.length > 0 ? subTaskIds[0] : null;
+const sentAt = formatISTForMySQL();
 
 const [mRes] = await db.query(
   `INSERT INTO messages
-   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids)
-   VALUES(?,?,'task_notification',?,?,?,?)`,
-  [group_id, req.user.id, encrypted, iv, taskRefId, taskAssigneeIds.length > 0 ? JSON.stringify(taskAssigneeIds) : null]
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids,sent_at)
+   VALUES(?,?,'task_notification',?,?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskRefId, taskAssigneeIds.length > 0 ? JSON.stringify(taskAssigneeIds) : null, sentAt]
 );
 const messageIds = [{ messageId: mRes.insertId }];
 
@@ -892,7 +895,7 @@ if (io && firstMessageId) {
       task_type: 'optimise',
       task_title: taskLabel
     },
-    sent_at: formatISTForMySQL(),
+    sent_at: sentAt,
     is_task: true
   });
 
@@ -984,11 +987,12 @@ else {
 
   recipientIdForMsg = taskAssigneeIds.length === 1 ? taskAssigneeIds[0] : null;
 }
+const sentAt = formatISTForMySQL();
 const [mRes] = await db.query(
-  `INSERT INTO messages 
-   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id)
-   VALUES(?,?,'task_notification',?,?,?,?)`,
-  [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg]
+  `INSERT INTO messages
+   (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_id,sent_at)
+   VALUES(?,?,'task_notification',?,?,?,?,?)`,
+  [group_id, req.user.id, encrypted, iv, taskId, recipientIdForMsg, sentAt]
 );
 
 
@@ -1109,7 +1113,7 @@ io.to(`group_${group_id}`).emit('new_message', {
   sender_id: req.user.id, sender_name: req.user.full_name, sender_role: req.user.role,
   message_type: 'task_notification', content: chatContent,
   task_ref: {task_id: taskId, task_title: taskLabel, task_type},
-  sent_at: formatISTForMySQL(),
+  sent_at: sentAt,
   is_task: true  // ✅ ADD THIS
 });
 
@@ -1267,11 +1271,12 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
           const noteText = comment ? ` — Note: ${comment}` : '';
           const notifContent = `⚠️ Pause PID task rejected by ${rejectorName}${noteText}`;
           const { encrypted, iv } = encrypt(notifContent);
+          const sentAt = formatISTForMySQL();
 
           const [mRes] = await db.query(
-            `INSERT INTO messages (group_id, sender_id, message_type, encrypted_content, iv, task_ref_id, recipient_ids, is_private)
-             VALUES (?, ?, 'task_notification', ?, ?, ?, ?, 1)`,
-            [task.group_id, req.user.id, encrypted, iv, taskId, JSON.stringify(opsUserIds)]
+            `INSERT INTO messages (group_id, sender_id, message_type, encrypted_content, iv, task_ref_id, recipient_ids, is_private, sent_at)
+             VALUES (?, ?, 'task_notification', ?, ?, ?, ?, 1, ?)`,
+            [task.group_id, req.user.id, encrypted, iv, taskId, JSON.stringify(opsUserIds), sentAt]
           );
 
           if (io) {
@@ -1285,7 +1290,7 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
               content: notifContent,
               recipient_ids: opsUserIds,
               task_ref: { task_id: Number(taskId), task_type: 'pause_pid', task_title: 'Pause PID' },
-              sent_at: new Date().toISOString(),
+              sent_at: sentAt,
             });
 
             // Personal ping to each operations user
@@ -1345,10 +1350,11 @@ router.post('/followup',auth,async(req,res)=>{
     const chatContent=`↩ Follow-up: ${message.trim()}`;
     const{encrypted,iv}=encrypt(chatContent);
     const recipientIds=recipientId?[recipientId]:[];
+    const sentAt=formatISTForMySQL();
     const[mRes]=await db.query(
-      `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids)
-       VALUES(?,?,'task_notification',?,?,?,?)`,
-      [group_id,senderId,encrypted,iv,task_id,recipientIds.length?JSON.stringify(recipientIds):null]
+      `INSERT INTO messages (group_id,sender_id,message_type,encrypted_content,iv,task_ref_id,recipient_ids,sent_at)
+       VALUES(?,?,'task_notification',?,?,?,?,?)`,
+      [group_id,senderId,encrypted,iv,task_id,recipientIds.length?JSON.stringify(recipientIds):null,sentAt]
     );
 
     const io=req.app.get('io');
@@ -1364,7 +1370,7 @@ router.post('/followup',auth,async(req,res)=>{
         content:chatContent,
         recipient_ids:recipientIds,
         task_ref:{task_id:Number(task_id),task_type:'followup',task_title:'Follow-up'},
-        sent_at:new Date().toISOString(),
+        sent_at:sentAt,
         is_task:true,
       });
       if(recipientId){
