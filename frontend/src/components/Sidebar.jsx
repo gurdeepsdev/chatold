@@ -874,7 +874,18 @@ export default function Sidebar({ selectedGroupId, onSelectGroup,onUnreadCountsC
   const loadGroups = useCallback(async () => {
     try {
       const data = await groupsAPI.getAll();
-      setGroups(data.groups || []);
+      setGroups(prev => {
+        const prevById = new Map(prev.map(g => [g.id, g]));
+        return (data.groups || []).map(serverGroup => {
+          const localGroup = prevById.get(serverGroup.id);
+          if (!localGroup) return serverGroup;
+          const serverTime = new Date(serverGroup.last_message_at || serverGroup.created_at || 0).getTime();
+          const localTime = new Date(localGroup.last_message_at || localGroup.created_at || 0).getTime();
+          return localTime > serverTime
+            ? { ...serverGroup, last_message_at: localGroup.last_message_at }
+            : serverGroup;
+        });
+      });
       setThreads(data.threads || []);
 
       // Note: Backend connection handler automatically queries the DB and joins

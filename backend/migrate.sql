@@ -44,8 +44,12 @@ ALTER TABLE users MODIFY COLUMN role ENUM(
 ) NOT NULL DEFAULT 'am';
 
 -- Add password_hash column for bcrypt authentication
-ALTER TABLE users 
+ALTER TABLE users
   ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) NULL AFTER email;
+
+-- Add is_active column to allow admins to disable a user's login access
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER is_online;
 
 -- notifications: message_id column
 ALTER TABLE notifications
