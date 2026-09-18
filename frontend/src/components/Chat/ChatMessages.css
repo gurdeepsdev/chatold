@@ -50,6 +50,7 @@
   display: flex;
   flex-direction: column;
   max-width: 70%;
+  min-width: 0;
 }
 
 .message-row.own .message-wrapper {
@@ -141,12 +142,16 @@
   padding: 8px 12px;
   margin-bottom: 8px;
   font-size: 12px;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .reply-content {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .reply-label {
@@ -158,6 +163,13 @@
 .reply-text {
   color: var(--text-secondary);
   font-style: italic;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* 📎 Media Content */
