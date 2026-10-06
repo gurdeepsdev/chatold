@@ -1394,25 +1394,13 @@ const MessageSender = ({
 
   const canSend = selectedIds.length > 0 && (content.trim().length > 0 || selectedFiles.length > 0) && !loading;
 
-  const replyPreview = (() => {
-    const text = (replyTo?.content || '').replace(/@\[([^\]]+)\]\(uid:\d+\)/g, '@$1');
-    if (!replyTo || text.startsWith('📤')) return text;
-    if (replyTo.is_broadcast) return `📤 @all: ${text}`;
-    const ids = (replyTo.recipient_ids || []).map(Number);
-    const names = ids
-      .map(id => recipients.find(r => Number(r.user_id) === id)?.full_name)
-      .filter(Boolean)
-      .map(n => `@${n.split(' ')[0]}`);
-    return names.length ? `📤 ${names.join(' ')}: ${text}` : text;
-  })();
-
   return (
     <div className="message-sender">
       {replyTo && (
         <div className="reply-to-indicator">
           <div className="reply-info">
             <span className="reply-label">Replying to</span>
-            <span className="reply-content">{replyPreview}</span>
+            <span className="reply-content">{replyTo.content?.replace(/@\[([^\]]+)\]\(uid:\d+\)/g, '@$1')}</span>
             <span className="reply-author">- {replyTo.sender_name}</span>
           </div>
           <button type="button" className="reply-cancel" onClick={handleReplyCancel}>

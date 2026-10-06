@@ -2972,41 +2972,6 @@ function buildMentionPrefix(isBroadcast, recipientNames) {
   const mentions = recipientNames.map(n => `@${n.split(' ')[0]}`).join(' ');
   return `📤 ${mentions}: `;
 }
-function parseRecipientIds(raw) {
-  if (!raw) return [];
-  try {
-    const ids = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    return Array.isArray(ids) ? ids.map(Number).filter(Boolean) : [];
-  } catch (_) { return []; }
-}
-
-async function fetchUserNames(ids) {
-  const unique = [...new Set(ids)];
-  if (!unique.length) return new Map();
-  const [rows] = await db.query(
-    `SELECT id, full_name FROM users WHERE id IN (${unique.map(() => '?').join(',')})`,
-    unique
-  );
-  return new Map(rows.map(r => [Number(r.id), r.full_name]));
-}
-
-function buildRecipientTag(messageType, recipientIdsRaw, isBroadcast, nameById) {
-  if (messageType === 'text') return null;
-  if (isBroadcast) return buildMentionPrefix(true, []).replace(/:\s*$/, '');
-  const names = parseRecipientIds(recipientIdsRaw)
-    .map(id => nameById.get(id))
-    .filter(Boolean);
-  return names.length ? buildMentionPrefix(false, names).replace(/:\s*$/, '') : null;
-}
-
-function withReplyRecipients(content, recipientIdsRaw, isBroadcast, nameById) {
-  if (!content || content.startsWith('📤')) return content;
-  if (isBroadcast) return buildMentionPrefix(true, []) + content;
-  const names = parseRecipientIds(recipientIdsRaw)
-    .map(id => nameById.get(id))
-    .filter(Boolean);
-  return names.length ? buildMentionPrefix(false, names) + content : content;
-}
 
 // ── NEW HELPER: push notifications to a specific user list ────
 // Replaces the old pushToMembers which notified ALL group members.
@@ -3174,7 +3139,6 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
              m.additional_files,
              u.id AS sender_id,u.full_name AS sender_name,u.username,u.role AS sender_role,
              rm.encrypted_content AS reply_encrypted,rm.iv AS reply_iv,
-             rm.recipient_ids AS reply_recipient_ids,rm.is_broadcast AS reply_is_broadcast,
              ru.full_name AS reply_sender_name,
              t.title AS task_title,t.task_type AS task_type_ref
       FROM messages m
@@ -3222,11 +3186,6 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       readBy = readByRows;
     }
 
-    const recipientNames = await fetchUserNames([
-      ...rows.filter(m => m.reply_encrypted).flatMap(m => parseRecipientIds(m.reply_recipient_ids)),
-      ...rows.filter(m => m.message_type !== 'text').flatMap(m => parseRecipientIds(m.recipient_ids)),
-    ]);
-
     const messages=rows.reverse().map(msg=>({
       id:msg.id,
       group_id:Number(msg.group_id),
@@ -3237,9 +3196,7 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       file_size:msg.file_size,
       mime_type:msg.mime_type,
       reply_to_id:msg.reply_to_id,
-      reply_content:msg.reply_encrypted
-        ? withReplyRecipients(decrypt(msg.reply_encrypted,msg.reply_iv), msg.reply_recipient_ids, msg.reply_is_broadcast, recipientNames)
-        : null,
+      reply_content:msg.reply_encrypted?decrypt(msg.reply_encrypted,msg.reply_iv):null,
       reply_sender_name:msg.reply_sender_name,
       is_deleted:msg.is_deleted,
       sent_at:msg.sent_at,
@@ -3249,7 +3206,6 @@ router.get('/:groupId',auth,checkMember,async(req,res)=>{
       sender_role:msg.sender_role,
       // NEW fields (safe to add — front-end ignores unknown props on old messages)
       is_broadcast:  !!msg.is_broadcast,
-      recipient_tag: buildRecipientTag(msg.message_type, msg.recipient_ids, msg.is_broadcast, recipientNames),
       is_edited:     !!msg.is_edited,
       edited_at:     msg.edited_at || null,
       recipient_ids: (() => {
@@ -3492,17 +3448,13 @@ router.post('/:groupId',auth,checkMember,async(req,res)=>{
     let replyData = null;
     if(reply_to_id) {
       const [[replyMsg]] = await db.query(`
-        SELECT m.encrypted_content, m.iv, m.recipient_ids, m.is_broadcast, u.full_name as sender_name
+        SELECT m.encrypted_content, m.iv, u.full_name as sender_name
         FROM messages m JOIN users u ON u.id=m.sender_id
         WHERE m.id=? AND m.is_deleted=false
       `,[reply_to_id]);
       if(replyMsg){
-        const replyNames = await fetchUserNames(parseRecipientIds(replyMsg.recipient_ids));
         replyData = {
-          reply_content:     withReplyRecipients(
-            decrypt(replyMsg.encrypted_content, replyMsg.iv),
-            replyMsg.recipient_ids, replyMsg.is_broadcast, replyNames
-          ),
+          reply_content:     decrypt(replyMsg.encrypted_content, replyMsg.iv),
           reply_sender_name: replyMsg.sender_name,
         };
       }
@@ -3672,17 +3624,13 @@ router.post('/:groupId/upload',auth,checkMember,upload.any(),async(req,res)=>{
     let replyData = null;
     if(reply_to_id) {
       const [[replyMsg]] = await db.query(`
-        SELECT m.encrypted_content, m.iv, m.recipient_ids, m.is_broadcast, u.full_name as sender_name
+        SELECT m.encrypted_content, m.iv, u.full_name as sender_name
         FROM messages m JOIN users u ON u.id=m.sender_id
         WHERE m.id=? AND m.is_deleted=false
       `,[reply_to_id]);
       if(replyMsg){
-        const replyNames = await fetchUserNames(parseRecipientIds(replyMsg.recipient_ids));
         replyData = {
-          reply_content:     withReplyRecipients(
-            decrypt(replyMsg.encrypted_content, replyMsg.iv),
-            replyMsg.recipient_ids, replyMsg.is_broadcast, replyNames
-          ),
+          reply_content:     decrypt(replyMsg.encrypted_content, replyMsg.iv),
           reply_sender_name: replyMsg.sender_name,
         };
       }
@@ -3699,7 +3647,6 @@ router.post('/:groupId/upload',auth,checkMember,upload.any(),async(req,res)=>{
       file_icon:fileIcon,
       is_broadcast:  broadcast,
       recipient_ids: recipientList,
-      recipient_tag: buildRecipientTag(msgType, recipientList, broadcast, await fetchUserNames(recipientList)),
       additional_files: additionalFiles.map(file => ({
         ...file,
         file_url: absUrl(req, file.file_url)
