@@ -1026,7 +1026,8 @@ function Bubble({msg,isOwn,showAvatar,onTaskClick,group,onDeleteMessage,onEditMe
       </div>
     ) : (
       (() => {
-        const { prefix, text } = parseMsgContent(msg.content);
+        const { prefix: contentPrefix, text } = parseMsgContent(msg.content);
+        const prefix = contentPrefix || (!msg.is_deleted && msg.recipient_tag) || null;
         return (
           <>
             {prefix && (
