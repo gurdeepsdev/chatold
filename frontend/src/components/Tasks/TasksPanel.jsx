@@ -117,11 +117,26 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick,follow
     setFollowupBusy(false);
   };
 
-  const doStatus=async(status)=>{
+  // null | 'reject' (needs a reason) | 'complete' (optimise tasks need feedback)
+  const [noteMode,setNoteMode]=useState(null);
+  const [feedback,setFeedback]=useState({action_taken:'',outcome:'',further_scope:''});
+  const needsCompletionFeedback = task.task_type==='optimise';
+
+  const resetNotes=()=>{
+    setComment('');setExpanded(false);setNoteMode(null);
+    setFeedback({action_taken:'',outcome:'',further_scope:''});
+  };
+
+  const doStatus=async(status,feedbackPayload)=>{
     setBusy(true);
-    try{await onStatusUpdate(task.id,status,comment);toast.success(`Task ${status}`);setComment('');setExpanded(false);}
-    catch{toast.error('Failed to update');}
+    try{await onStatusUpdate(task.id,status,comment,feedbackPayload);toast.success(`Task ${status}`);resetNotes();}
+    catch{/* toast handled in parent */}
     setBusy(false);
+  };
+
+  const startComplete=()=>{
+    if(needsCompletionFeedback){setNoteMode('complete');setExpanded(false);}
+    else doStatus('completed');
   };
 
   const handleTaskClick = () => {
@@ -189,21 +204,67 @@ function TaskItem({task,currentUser,onStatusUpdate,onFollowup,onTaskClick,follow
               {task.rejection_note && <div><span style={{color:'#ef4444',fontWeight:600}}>Note: </span><span style={{color:'var(--text-secondary)'}}>{task.rejection_note}</span></div>}
             </div>
           )}
+          {/* completion feedback */}
+          {task.status === 'completed' && task.completion_note && (
+            <div style={{background:'#22c55e15',border:'1px solid #22c55e30',borderRadius:8,padding:'7px 10px',marginBottom:8,fontSize:12}}>
+              {task.completed_by_name && <div style={{marginBottom:2}}><span style={{color:'#22c55e',fontWeight:600}}>Completed by: </span><span style={{color:'var(--text-primary)'}}>{task.completed_by_name}</span></div>}
+              <div style={{whiteSpace:'pre-wrap',color:'var(--text-secondary)'}}>{task.completion_note}</div>
+            </div>
+          )}
           {/* actions - Only show for assigned users */}
-          {isAssignedUser && task.status==='pending'&&(
+          {isAssignedUser && task.status==='pending'&&!noteMode&&(
             <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
               <button className="btn btn-xs btn-success" onClick={()=>doStatus('accepted')} disabled={busy}>✓ Accept</button>
-              <button className="btn btn-xs btn-danger"  onClick={()=>doStatus('rejected')} disabled={busy}>✗ Reject</button>
-              <button className="btn btn-xs btn-primary" onClick={()=>doStatus('completed')} disabled={busy}>✔ Complete</button>
+              <button className="btn btn-xs btn-danger"  onClick={()=>{setNoteMode('reject');setExpanded(false);}} disabled={busy}>✗ Reject</button>
+              <button className="btn btn-xs btn-primary" onClick={startComplete} disabled={busy}>✔ Complete</button>
               <button className="btn-icon" style={{padding:'3px 8px',fontSize:11,border:'1px solid var(--border)',borderRadius:6}} onClick={()=>setExpanded(x=>!x)}>
                 {expanded?'▲':'+ Note'}
               </button>
             </div>
           )}
-          {isAssignedUser && task.status==='accepted'&&(
-            <button className="btn btn-xs btn-success" style={{marginTop:6}} onClick={()=>doStatus('completed')} disabled={busy}>✔ Mark Complete</button>
+          {isAssignedUser && task.status==='accepted'&&!noteMode&&(
+            <button className="btn btn-xs btn-success" style={{marginTop:6}} onClick={startComplete} disabled={busy}>✔ Mark Complete</button>
           )}
-          {isAssignedUser && expanded&&<textarea className="form-control" style={{minHeight:56,fontSize:12,marginTop:8}} placeholder="Comment…" value={comment} onChange={e=>setComment(e.target.value)}/>}
+          {isAssignedUser && expanded&&!noteMode&&<textarea className="form-control" style={{minHeight:56,fontSize:12,marginTop:8}} placeholder="Comment…" value={comment} onChange={e=>setComment(e.target.value)}/>}
+          {/* mandatory rejection reason */}
+          {isAssignedUser && noteMode==='reject' && (
+            <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+              <label style={{fontSize:11,fontWeight:600,color:'#ef4444'}}>Reason for rejection *</label>
+              <textarea className="form-control" style={{minHeight:56,fontSize:12}} maxLength={2000} autoFocus
+                placeholder="Explain why this task is being rejected…" value={comment} onChange={e=>setComment(e.target.value)}/>
+              <div style={{display:'flex',gap:6}}>
+                <button className="btn btn-xs btn-secondary" onClick={resetNotes} disabled={busy}>Cancel</button>
+                <button className="btn btn-xs btn-danger" onClick={()=>doStatus('rejected')} disabled={busy||!comment.trim()}>
+                  {busy?'Rejecting…':'✗ Confirm Reject'}
+                </button>
+              </div>
+            </div>
+          )}
+          {/* mandatory feedback when completing an optimise task */}
+          {isAssignedUser && noteMode==='complete' && (
+            <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#22c55e'}}>Optimisation feedback (required to complete)</div>
+              {[
+                {key:'action_taken', label:'Action taken *', placeholder:'What was done?'},
+                {key:'outcome', label:'Outcome *', placeholder:'What was the result?'},
+                {key:'further_scope', label:'Further scope for improvement', placeholder:'Any further optimisation possible? (optional)'},
+              ].map(f=>(
+                <div key={f.key}>
+                  <label style={{fontSize:11,color:'var(--text-muted)'}}>{f.label}</label>
+                  <textarea className="form-control" style={{minHeight:44,fontSize:12}} maxLength={1000}
+                    autoFocus={f.key==='action_taken'} placeholder={f.placeholder} value={feedback[f.key]}
+                    onChange={e=>{const v=e.target.value;setFeedback(prev=>({...prev,[f.key]:v}));}}/>
+                </div>
+              ))}
+              <div style={{display:'flex',gap:6}}>
+                <button className="btn btn-xs btn-secondary" onClick={resetNotes} disabled={busy}>Cancel</button>
+                <button className="btn btn-xs btn-success" onClick={()=>doStatus('completed',feedback)}
+                  disabled={busy||!feedback.action_taken.trim()||!feedback.outcome.trim()}>
+                  {busy?'Completing…':'✔ Confirm Complete'}
+                </button>
+              </div>
+            </div>
+          )}
           {!isAssignedUser && isTaskCreator && (
             <div style={{fontSize:11,color:'var(--text-muted)',marginTop:6,fontStyle:'italic'}}>
               You can only view this task. Actions are available to the assigned user.
@@ -900,6 +961,8 @@ export default function TasksPanel({group, taskTarget, searchQuery=''}){
             if (t.id !== task_id) return t;
             const extra = status === 'rejected' && response
               ? { rejection_note: response.comment || null, rejected_by_name: response.user_name || null }
+              : status === 'completed' && response
+              ? { completion_note: response.comment || null, completed_by_name: response.user_name || null }
               : {};
             return { ...t, status, ...extra };
           });
@@ -1243,13 +1306,25 @@ const invalidAssign = form.pause_entries.some(entry => !entry.assigned_to || ent
     setCreating(false);
   };
 
-  const handleStatusUpdate=async(taskId,status,comment)=>{
+  const handleStatusUpdate=async(taskId,status,comment,feedback)=>{
     try {
-      await tasksAPI.updateStatus(taskId,status,comment);
-      setTasks(prev=>prev.map(t=>t.id===taskId?{...t,status}:t));
+      const data = await tasksAPI.updateStatus(taskId,status,comment,feedback);
+      const updated = data?.task || {};
+      setTasks(prev=>prev.map(t=>t.id===taskId?{
+        ...t,
+        status,
+        rejection_note: updated.rejection_note ?? t.rejection_note,
+        rejected_by_name: updated.rejected_by_name ?? t.rejected_by_name,
+        completion_note: updated.completion_note ?? t.completion_note,
+        completed_by_name: updated.completed_by_name ?? t.completed_by_name,
+      }:t));
+      window.dispatchEvent(new CustomEvent('task-status-changed', { detail: { groupId: group.id } }));
     } catch (error) {
       if (error.error === 'Access Denied: Only assigned user can update task status') {
         toast.error('Access Denied: Only assigned users can update task status');
+      } else if (error.error && error.error !== 'Server error') {
+        // Validation messages (e.g. missing rejection reason / feedback) are safe to show
+        toast.error(error.error);
       } else {
         toast.error('Failed to update task status');
       }

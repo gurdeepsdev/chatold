@@ -18,6 +18,11 @@ const toAssigneeList = (val) => {
   return ids.length ? ids : [null];
 };
 
+const TASK_LABELS = {
+  initial_setup: '🚀 Initial Setup', share_link: '🔗 Share Link', pause_pid: '⏸️ Pause PID',
+  raise_request: '📋 Raise Request', optimise: '⚡ Optimise',
+};
+
 // Multer for task attachments — same UPLOAD_DIR as messages
 const storage = multer.diskStorage({
   destination:(req,file,cb)=>cb(null,req.app.get('UPLOAD_DIR')||path.resolve('uploads')),
@@ -55,7 +60,9 @@ router.get("/group/:groupId", auth, async (req, res) => {
         c.campaign_name,
         parent.task_type AS parent_task_type,
         tr_reject.comment AS rejection_note,
-        u_reject.full_name AS rejected_by_name
+        u_reject.full_name AS rejected_by_name,
+        tr_complete.comment AS completion_note,
+        u_complete.full_name AS completed_by_name
       FROM tasks t
 
       LEFT JOIN users u1
@@ -82,6 +89,19 @@ router.get("/group/:groupId", auth, async (req, res) => {
 
       LEFT JOIN users u_reject
         ON u_reject.id = tr_reject.user_id
+
+      LEFT JOIN task_responses tr_complete
+        ON tr_complete.id = (
+          SELECT tr3.id
+          FROM task_responses tr3
+          WHERE tr3.task_id = t.id
+            AND tr3.action = 'completed'
+          ORDER BY tr3.responded_at DESC, tr3.id DESC
+          LIMIT 1
+        )
+
+      LEFT JOIN users u_complete
+        ON u_complete.id = tr_complete.user_id
 
       WHERE t.group_id = ?
         AND (${where})
@@ -1145,6 +1165,28 @@ allAssignees.forEach(assigneeId => {
 //   res.status(500).json({ error: e.message });
 // }
 
+/* GET open (pending or accepted) task counts assigned to the current user, per group.
+   Unlike unread counts, these stay until each task is completed or rejected. */
+router.get('/pending-counts', auth, async (req, res) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    const [rows] = await db.query(
+      `SELECT t.group_id, COUNT(*) AS pending_count
+       FROM tasks t
+       INNER JOIN group_members gm ON gm.group_id = t.group_id AND gm.user_id = ?
+       WHERE t.assigned_to = ? AND t.status IN ('pending', 'accepted')
+       GROUP BY t.group_id`,
+      [req.user.id, req.user.id]
+    );
+    const pendingCounts = {};
+    rows.forEach(r => { pendingCounts[r.group_id] = Number(r.pending_count); });
+    res.json({ pendingCounts });
+  } catch (e) {
+    console.error('[GET /api/tasks/pending-counts]', { userId: req.user?.id, error: e.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 /* GET single task with permission check */
 router.get('/:taskId', auth, async (req, res) => {
   try {
@@ -1154,13 +1196,25 @@ router.get('/:taskId', auth, async (req, res) => {
         u2.full_name AS assigned_by_name,
         u3.full_name AS tagged_name,
         c.campaign_name,
-        parent.task_type AS parent_task_type
+        parent.task_type AS parent_task_type,
+        tr_reject.comment AS rejection_note,
+        u_reject.full_name AS rejected_by_name,
+        tr_complete.comment AS completion_note,
+        u_complete.full_name AS completed_by_name
       FROM tasks t
       LEFT JOIN users u1 ON u1.id = t.assigned_to
       LEFT JOIN users u2 ON u2.id = t.assigned_by
       LEFT JOIN users u3 ON u3.id = CAST(t.tag AS UNSIGNED)
       LEFT JOIN campaigns c ON c.id = t.campaign_id
       LEFT JOIN tasks parent ON parent.id = t.parent_task_id
+      LEFT JOIN task_responses tr_reject ON tr_reject.id = (
+        SELECT id FROM task_responses WHERE task_id = t.id AND action = 'rejected' ORDER BY responded_at DESC, id DESC LIMIT 1
+      )
+      LEFT JOIN users u_reject ON u_reject.id = tr_reject.user_id
+      LEFT JOIN task_responses tr_complete ON tr_complete.id = (
+        SELECT id FROM task_responses WHERE task_id = t.id AND action = 'completed' ORDER BY responded_at DESC, id DESC LIMIT 1
+      )
+      LEFT JOIN users u_complete ON u_complete.id = tr_complete.user_id
       WHERE t.id = ?
     `, [req.params.taskId]);
 
@@ -1193,24 +1247,101 @@ router.get('/:taskId', auth, async (req, res) => {
   }
 });
 
+const NOTE_MAX_LEN = 2000;
+const FEEDBACK_FIELD_MAX_LEN = 1000;
+
+// Trim a user-supplied note; returns '' for non-strings
+const cleanNote = (val) => (typeof val === 'string' ? val.trim() : '');
+
+// Notify the task creator about a status change: bell notification, private
+// chat message, and a live push. Non-fatal — the status update already committed.
+const notifyTaskCreator = async (io, task, actor, title, body) => {
+  const creatorId = task.assigned_by;
+  if (!creatorId || creatorId === actor.id) return;
+
+  try {
+    await db.query(
+      'INSERT INTO notifications (user_id,group_id,task_id,type,title,body) VALUES(?,?,?,?,?,?)',
+      [creatorId, task.group_id, task.id, 'task', title, body]
+    );
+
+    const chatContent = `${title}\n${body}`;
+    const { encrypted, iv } = encrypt(chatContent);
+    const sentAt = formatISTForMySQL();
+    const [mRes] = await db.query(
+      `INSERT INTO messages (group_id, sender_id, message_type, encrypted_content, iv, task_ref_id, recipient_ids, is_private, sent_at)
+       VALUES (?, ?, 'task_notification', ?, ?, ?, ?, 1, ?)`,
+      [task.group_id, actor.id, encrypted, iv, task.id, JSON.stringify([creatorId]), sentAt]
+    );
+
+    if (!io) return;
+    io.to(`group_${task.group_id}`).emit('new_message', {
+      id: mRes.insertId,
+      group_id: Number(task.group_id),
+      sender_id: actor.id,
+      sender_name: actor.full_name,
+      sender_role: actor.role,
+      message_type: 'task_notification',
+      content: chatContent,
+      recipient_ids: [creatorId],
+      task_ref: { task_id: Number(task.id), task_type: task.task_type, task_title: title },
+      sent_at: sentAt,
+    });
+    io.to(`user_${creatorId}`).emit('push_notification', {
+      type: 'task',
+      title,
+      body,
+      group_id: Number(task.group_id),
+    });
+    const [[{ count }]] = await db.query(
+      'SELECT COUNT(*) AS count FROM notifications WHERE user_id=? AND is_read=FALSE',
+      [creatorId]
+    );
+    io.to(`user_${creatorId}`).emit('notification_count', { count });
+  } catch (err) {
+    console.error('Failed to notify task creator:', { taskId: task.id, creatorId, error: err.message });
+  }
+};
+
 /* PATCH update status */
 router.patch('/:taskId/status',auth,async(req,res)=>{
+  const{taskId}=req.params;const{status,feedback}=req.body;
+  const valid=['pending','accepted','rejected','completed'];
+  if(!valid.includes(status))return res.status(400).json({error:'Invalid status'});
+
+  let comment=cleanNote(req.body.comment);
+  if(comment.length>NOTE_MAX_LEN)return res.status(400).json({error:`Note must be ${NOTE_MAX_LEN} characters or fewer`});
+
+  // Rejections must always carry a reason
+  if(status==='rejected'&&!comment){
+    return res.status(400).json({error:'A rejection reason is required'});
+  }
+
+  const[[task]]=await db.query('SELECT * FROM tasks WHERE id=?',[taskId]);
+  if(!task)return res.status(404).json({error:'Task not found'});
+
+  // Only assigned user can update task status
+  if(task.assigned_to !== req.user.id) {
+    return res.status(403).json({error:'Access Denied: Only assigned user can update task status'});
+  }
+
+  // Completing an optimise task requires structured feedback for the creator
+  if(status==='completed'&&task.task_type==='optimise'){
+    const actionTaken=cleanNote(feedback?.action_taken);
+    const outcome=cleanNote(feedback?.outcome);
+    const furtherScope=cleanNote(feedback?.further_scope);
+    if(!actionTaken||!outcome){
+      return res.status(400).json({error:'Feedback (action taken and outcome) is required to complete an optimisation task'});
+    }
+    if([actionTaken,outcome,furtherScope].some(v=>v.length>FEEDBACK_FIELD_MAX_LEN)){
+      return res.status(400).json({error:`Each feedback field must be ${FEEDBACK_FIELD_MAX_LEN} characters or fewer`});
+    }
+    comment=`Action taken: ${actionTaken}\nOutcome: ${outcome}\nFurther scope: ${furtherScope||'None'}`;
+  }
+
   const conn=await db.getConnection();
   try{
     await conn.beginTransaction();
-    const{taskId}=req.params;const{status,comment}=req.body;
-    const valid=['pending','accepted','rejected','completed'];
-    if(!valid.includes(status))return res.status(400).json({error:'Invalid status'});
-    
-    // Get task and validate user permissions
-    const[[task]]=await conn.query('SELECT * FROM tasks WHERE id=?',[taskId]);
-    if(!task)return res.status(404).json({error:'Task not found'});
-    
-    // Only assigned user can update task status
-    if(task.assigned_to !== req.user.id) {
-      return res.status(403).json({error:'Access Denied: Only assigned user can update task status'});
-    }
-    
     await conn.query('UPDATE tasks SET status=?,updated_at=NOW() WHERE id=?',[status,taskId]);
     await conn.query('INSERT INTO task_responses (task_id,user_id,action,comment) VALUES(?,?,?,?)',[taskId,req.user.id,status,comment||null]);
     await conn.query('INSERT INTO workflow_summary (group_id,event_type,event_data,triggered_by) VALUES(?,?,?,?)',
@@ -1223,7 +1354,9 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
         u1.full_name AS assigned_to_name,
         u2.full_name AS assigned_by_name,
         tr_reject.comment AS rejection_note,
-        u_reject.full_name AS rejected_by_name
+        u_reject.full_name AS rejected_by_name,
+        tr_complete.comment AS completion_note,
+        u_complete.full_name AS completed_by_name
       FROM tasks t
       LEFT JOIN users u1 ON u1.id=t.assigned_to
       LEFT JOIN users u2 ON u2.id=t.assigned_by
@@ -1231,6 +1364,10 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
         SELECT id FROM task_responses WHERE task_id = t.id AND action = 'rejected' ORDER BY responded_at DESC LIMIT 1
       )
       LEFT JOIN users u_reject ON u_reject.id = tr_reject.user_id
+      LEFT JOIN task_responses tr_complete ON tr_complete.id = (
+        SELECT id FROM task_responses WHERE task_id = t.id AND action = 'completed' ORDER BY responded_at DESC, id DESC LIMIT 1
+      )
+      LEFT JOIN users u_complete ON u_complete.id = tr_complete.user_id
       WHERE t.id=?`,[taskId]);
     
     // Get the latest response/comment
@@ -1309,8 +1446,24 @@ router.patch('/:taskId/status',auth,async(req,res)=>{
       }
     }
 
+    // Tell the task creator about rejections (with reason) and optimise completions (with feedback)
+    const typeLabel=(TASK_LABELS[task.task_type]||task.task_type);
+    if(status==='rejected'){
+      await notifyTaskCreator(io,task,req.user,
+        `❌ ${typeLabel} task rejected by ${req.user.full_name}`,
+        `Reason: ${comment}`);
+    }else if(status==='completed'&&task.task_type==='optimise'){
+      await notifyTaskCreator(io,task,req.user,
+        `✅ ${typeLabel} task completed by ${req.user.full_name}`,
+        comment);
+    }
+
     res.json({message:'Updated',status,task:updatedTask,response:latestResponse});
-  }catch(e){await conn.rollback();res.status(500).json({error:'Server error'});}
+  }catch(e){
+    await conn.rollback().catch(()=>{});
+    console.error('[PATCH /api/tasks/:taskId/status]',{taskId,userId:req.user?.id,error:e.message});
+    res.status(500).json({error:'Server error'});
+  }
   finally{conn.release();}
 });
 

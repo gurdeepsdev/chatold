@@ -93,7 +93,8 @@ export const tasksAPI = {
     }
     return api.post('/tasks', data);
   },
-  updateStatus: (taskId, status, comment) => api.patch(`/tasks/${taskId}/status`, { status, comment }),
+  updateStatus: (taskId, status, comment, feedback) => api.patch(`/tasks/${taskId}/status`, { status, comment, feedback }),
+  getPendingCounts: () => api.get('/tasks/pending-counts'),
   getResponses: (taskId) => api.get(`/tasks/${taskId}/responses`),
   createFollowup: (data) => api.post('/tasks/followup', data),
   getFollowups: (groupId) => api.get(`/tasks/followups/group/${groupId}`),

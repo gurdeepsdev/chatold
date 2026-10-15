@@ -751,7 +751,7 @@
 
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { groupsAPI, campaignsAPI, messagesAPI } from '../utils/api';
+import { groupsAPI, campaignsAPI, messagesAPI, tasksAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useTheme } from '../context/ThemeContext';
@@ -790,6 +790,9 @@ export default function Sidebar({ selectedGroupId, onSelectGroup,onUnreadCountsC
   const [loading, setLoading] = useState(true);
   const [pinnedGroups, setPinnedGroups] = useState([]);
   const [unreadCounts, setUnreadCounts] = useState({});
+  // Open tasks assigned to me per group — NOT cleared when the group is opened,
+  // only drops when the task is completed or rejected.
+  const [pendingTaskCounts, setPendingTaskCounts] = useState({});
   const [groupLastUnreadTime, setGroupLastUnreadTime] = useState({});
 
   // Draft indicator: track which groups have a saved chat draft
@@ -955,6 +958,23 @@ const isInitialUnreadLoad = useRef(true);
       console.error('Failed to load unread counts:', error);
     }
   }, []);
+  const loadPendingTaskCounts = useCallback(async () => {
+    try {
+      const data = await tasksAPI.getPendingCounts();
+      setPendingTaskCounts(data.pendingCounts || {});
+    } catch (error) {
+      console.error('Failed to load pending task counts:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    loadPendingTaskCounts();
+    const onStatusChanged = () => loadPendingTaskCounts();
+    window.addEventListener('task-status-changed', onStatusChanged);
+    return () => window.removeEventListener('task-status-changed', onStatusChanged);
+  }, [user?.id, loadPendingTaskCounts]);
+
   useEffect(() => {
   if (onUnreadCountsChange) {
     onUnreadCountsChange(unreadCounts);
@@ -1342,6 +1362,7 @@ useEffect(() => {
 
   const unsubTaskAssigned = on('task_assigned', (data) => {
     console.log('[SOCKET task_assigned RECEIVED]', data);
+    loadPendingTaskCounts();
 
     const { group_id, assigned_to } = data;
 
@@ -1376,6 +1397,7 @@ useEffect(() => {
 
   const unsubTaskUpdate = on('task_update', (data) => {
     console.log('[SOCKET task_update RECEIVED]', data);
+    loadPendingTaskCounts();
 
     const { group_id, updated_by } = data;
 
@@ -1481,15 +1503,16 @@ const unsubGroupCreated = on('group_created', (data) => {
     unsubTaskUpdate();
   };
 
-}, [on, user?.id, loadGroups, loadUnreadCounts, joinGroup, leaveGroup]);
+}, [on, user?.id, loadGroups, loadUnreadCounts, loadPendingTaskCounts, joinGroup, leaveGroup]);
 
 // Refresh unread counts on socket reconnect so missed task_assigned / new_message
 // events (while disconnected) are recovered from the DB.
 useEffect(() => {
   if (connected) {
     loadUnreadCounts();
+    loadPendingTaskCounts();
   }
-}, [connected, loadUnreadCounts]);
+}, [connected, loadUnreadCounts, loadPendingTaskCounts]);
 
   const toggleThread = (key) => {
     setExpandedThreads(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1600,6 +1623,9 @@ const pinnedGroupItems = pinnedGroups
         const totalUnreadCount = threadGroups.reduce((sum, group) =>
           sum + (unreadCounts[group.id] || 0), 0
         );
+        const totalPendingTasks = threadGroups.reduce((sum, group) =>
+          sum + (pendingTaskCounts[group.id] || 0), 0
+        );
         const latestMessageAt = threadGroups.reduce((latest, group) => {
           const groupTime = new Date(group.last_message_at || 0);
           return groupTime > latest ? groupTime : latest;
@@ -1614,6 +1640,7 @@ const pinnedGroupItems = pinnedGroups
           item: thread,
           priority: 0,  // Same priority as groups — no bias
           unreadCount: totalUnreadCount,
+          pendingTaskCount: totalPendingTasks,
           lastMessageAt: latestMessageAt,
           stableSortTime: threadStableTime,
           isPinned: false,
@@ -1686,10 +1713,10 @@ const unpinnedGroupItems = groups
       // 3. stableSortTime — position freezes on read, moves only on new message
       return b.stableSortTime - a.stableSortTime;
     });
-  }, [search, groupsToRender, groups, threads, pinnedGroups, unreadCounts, threadGroupIds, isGroupPinned]);
+  }, [search, groupsToRender, groups, threads, pinnedGroups, unreadCounts, pendingTaskCounts, threadGroupIds, isGroupPinned]);
 
   const renderUnifiedItem = (itemData) => {
-    const { type, item, unreadCount } = itemData;
+    const { type, item, unreadCount, pendingTaskCount = 0 } = itemData;
 
     if (type === 'thread') {
       const threadName = (() => {
@@ -1732,6 +1759,11 @@ const unpinnedGroupItems = groups
               {unreadCount > 0 && (
                 <span className="group-badge" style={{ background: 'var(--accent)' }}>
                   {unreadCount}
+                </span>
+              )}
+              {pendingTaskCount > 0 && (
+                <span className="group-badge" title="Open tasks assigned to you" style={{ background: '#f59e0b' }}>
+                  📋 {pendingTaskCount}
                 </span>
               )}
               <span style={{ fontSize: 12 }}>
@@ -1786,6 +1818,11 @@ const unpinnedGroupItems = groups
         {(unreadCounts[group.id] || 0) > 0 && (
           <span className="group-badge" style={{ background: 'var(--accent)' }}>
             {unreadCounts[group.id]}
+          </span>
+        )}
+        {(pendingTaskCounts[group.id] || 0) > 0 && (
+          <span className="group-badge" title="Open tasks assigned to you" style={{ background: '#f59e0b' }}>
+            📋 {pendingTaskCounts[group.id]}
           </span>
         )}
         <button

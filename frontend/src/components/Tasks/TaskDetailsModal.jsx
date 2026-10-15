@@ -155,6 +155,19 @@ export default function TaskDetailsModal({ task, onClose, currentUser, onUpdate 
               </div>
             )}
 
+            {/* Completion feedback */}
+            {task.status === 'completed' && task.completion_note && (
+              <div style={{ background: '#22c55e15', border: '1px solid #22c55e30', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>
+                {task.completed_by_name && (
+                  <div style={{ marginBottom: 4 }}>
+                    <span style={{ color: '#22c55e', fontWeight: 600 }}>Completed by: </span>
+                    <span style={{ color: 'var(--text-primary)' }}>{task.completed_by_name}</span>
+                  </div>
+                )}
+                <div style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{task.completion_note}</div>
+              </div>
+            )}
+
             {/* Task Description */}
             {task.description && (
               <div style={{ marginBottom: '20px' }}>
